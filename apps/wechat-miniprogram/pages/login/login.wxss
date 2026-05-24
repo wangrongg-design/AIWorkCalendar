@@ -1,0 +1,95 @@
+.login-page {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 24rpx;
+  padding-top: 48rpx;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(211, 227, 253, 0.95), transparent 35%),
+    radial-gradient(circle at 84% 76%, rgba(204, 251, 241, 0.8), transparent 28%),
+    #f8fafd;
+}
+
+.login-hero {
+  padding: 0 4rpx 10rpx;
+}
+
+.brand-logo-wrap {
+  display: flex;
+  width: 132rpx;
+  height: 48rpx;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.brand-logo {
+  width: 132rpx;
+  height: 48rpx;
+  opacity: 0.78;
+}
+
+.brand-title {
+  margin-top: 22rpx;
+  color: #202124;
+  font-size: 44rpx;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.brand-subtitle {
+  margin-top: 12rpx;
+  color: #202124;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.brand-desc {
+  margin-top: 8rpx;
+  color: #5f6368;
+  font-size: 26rpx;
+  line-height: 1.45;
+}
+
+.login-card {
+  padding: 34rpx;
+}
+
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 8rpx;
+}
+
+.card-head > view:first-child {
+  min-width: 0;
+}
+
+.card-head .chip {
+  flex-shrink: 0;
+}
+
+.login-button {
+  margin-top: 34rpx;
+}
+
+.notice-card {
+  padding: 24rpx;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.notice-title {
+  color: #202124;
+  font-size: 25rpx;
+  font-weight: 800;
+}
+
+.notice {
+  margin-top: 8rpx;
+  color: #5f6368;
+  font-size: 23rpx;
+  line-height: 1.55;
+}

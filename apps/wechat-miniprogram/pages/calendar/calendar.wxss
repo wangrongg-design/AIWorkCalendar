@@ -1,0 +1,182 @@
+.scope-picker {
+  flex-shrink: 0;
+  min-width: 132rpx;
+  max-width: 220rpx;
+  height: 64rpx;
+  overflow: hidden;
+  border-radius: 32rpx;
+  background: #e8f0fe;
+  padding: 0 22rpx;
+  color: #0b57d0;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 64rpx;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.month-toolbar {
+  display: grid;
+  grid-template-columns: 84rpx 1fr 84rpx;
+  align-items: center;
+  padding: 14rpx;
+}
+
+.month-button {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 36rpx;
+  background: #f3f6fb;
+  color: #3c4043;
+  font-size: 42rpx;
+  line-height: 66rpx;
+}
+
+.month-text {
+  color: #202124;
+  font-size: 32rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rpx;
+  margin: 18rpx 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.metric {
+  background: #ffffff;
+  padding: 22rpx 14rpx;
+  text-align: center;
+}
+
+.metric-value {
+  color: #202124;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.metric-value.risk {
+  color: #b3261e;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  color: #5f6368;
+  font-size: 21rpx;
+}
+
+.calendar-card {
+  padding: 14rpx;
+}
+
+.week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 4rpx 0 14rpx;
+  color: #5f6368;
+  font-size: 22rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6rpx;
+}
+
+.calendar-cell {
+  min-height: 132rpx;
+  border-radius: 18rpx;
+  padding: 10rpx 6rpx;
+  overflow: hidden;
+}
+
+.calendar-cell.blank {
+  background: transparent;
+}
+
+.calendar-cell.empty {
+  background: #f3f6fb;
+  color: #8a929d;
+}
+
+.calendar-cell.normal {
+  background: #e8f0fe;
+}
+
+.calendar-cell.good {
+  background: #e6f4ea;
+}
+
+.calendar-cell.risk {
+  background: #fce8e6;
+}
+
+.calendar-cell.today {
+  background: #0b57d0;
+  color: #ffffff;
+  box-shadow: 0 10rpx 24rpx rgba(11, 87, 208, 0.24);
+}
+
+.day-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 4rpx;
+}
+
+.day {
+  font-size: 26rpx;
+  font-weight: 800;
+}
+
+.today-dot {
+  max-width: 44rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4rpx 6rpx;
+  font-size: 18rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rate {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.counts,
+.risk-text {
+  margin-top: 6rpx;
+  overflow: hidden;
+  font-size: 18rpx;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.risk-text {
+  color: #b3261e;
+}
+
+.today .risk-text {
+  color: #fff2f0;
+}
+
+.loading {
+  margin-top: 20rpx;
+  color: #5f6368;
+  font-size: 24rpx;
+  text-align: center;
+}

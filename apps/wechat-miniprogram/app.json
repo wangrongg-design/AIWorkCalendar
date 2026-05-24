@@ -1,0 +1,38 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/report/report",
+    "pages/calendar/calendar",
+    "pages/day-detail/day-detail"
+  ],
+  "window": {
+    "navigationBarTitleText": "Work Calendar AI",
+    "navigationBarBackgroundColor": "#f8fafd",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f8fafd",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#6b7280",
+    "selectedColor": "#0b57d0",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/report/report",
+        "text": "快速填报"
+      },
+      {
+        "pagePath": "pages/calendar/calendar",
+        "text": "日历看板"
+      }
+    ]
+  },
+  "permission": {
+    "scope.record": {
+      "desc": "用于语音识别快速填写工作日报和计划"
+    }
+  },
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+coverage
+.turbo
+.env
+.env.local
+.DS_Store
+*.log
+tmp
+config/deployment.json
+.env.production.generated
+nginx/work-calendar.generated.conf
+apps/wechat-miniprogram/project.private.config.json

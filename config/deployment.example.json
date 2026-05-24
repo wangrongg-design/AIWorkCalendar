@@ -1,0 +1,39 @@
+{
+  "domains": {
+    "webUrl": "https://app.example.com",
+    "apiUrl": "https://api.example.com"
+  },
+  "api": {
+    "port": 3001,
+    "corsOrigin": "https://app.example.com"
+  },
+  "database": {
+    "url": "postgresql://workcalendar:change-me@your-rds-postgresql-internal-host:5432/workcalendar?schema=public"
+  },
+  "redis": {
+    "host": "your-redis-internal-host",
+    "port": 6379,
+    "password": "change-me"
+  },
+  "auth": {
+    "jwtSecret": "replace-with-a-long-random-secret",
+    "jwtExpiresIn": "7d",
+    "requireEmailVerification": false
+  },
+  "ai": {
+    "provider": "deepseek",
+    "deepseekApiKey": "sk-your-deepseek-key",
+    "deepseekBaseUrl": "https://api.deepseek.com",
+    "deepseekModel": "deepseek-v4-flash",
+    "openaiApiKey": "",
+    "openaiModel": "gpt-4.1-mini"
+  },
+  "wechatMiniProgram": {
+    "appid": "touristappid",
+    "apiBaseUrl": "https://api.example.com"
+  },
+  "nginx": {
+    "webServerName": "app.example.com",
+    "apiServerName": "api.example.com"
+  }
+}

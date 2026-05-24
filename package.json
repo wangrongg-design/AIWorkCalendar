@@ -1,0 +1,23 @@
+{
+  "name": "work-calendar-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Work Calendar AI - enterprise AI work reporting SaaS MVP",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:api": "pnpm --filter @work-calendar-ai/api dev",
+    "dev:api:local": "node scripts/local-api.mjs",
+    "dev:web": "pnpm --filter @work-calendar-ai/web dev",
+    "demo:start": "bash scripts/demo-start.sh",
+    "demo:stop": "bash scripts/demo-stop.sh",
+    "demo:status": "bash scripts/demo-status.sh",
+    "config:apply": "node scripts/apply-deployment-config.mjs",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test:smoke": "node scripts/smoke-api.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,164 @@
+.logout {
+  flex-shrink: 0;
+  width: 112rpx;
+}
+
+.ai-card,
+.draft-card {
+  padding: 28rpx;
+}
+
+.draft-card {
+  margin-top: 22rpx;
+}
+
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.card-top > view:first-child {
+  min-width: 0;
+}
+
+.chat-list {
+  display: flex;
+  max-height: 360rpx;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-top: 24rpx;
+  overflow: auto;
+}
+
+.chat-message {
+  max-width: 88%;
+  border-radius: 20rpx;
+  padding: 18rpx 22rpx;
+  font-size: 25rpx;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.chat-message.assistant {
+  align-self: flex-start;
+  background: #f3f6fb;
+  color: #3c4043;
+}
+
+.chat-message.user {
+  align-self: flex-end;
+  background: #0b57d0;
+  color: #ffffff;
+}
+
+.chat-input {
+  width: 100%;
+  min-height: 148rpx;
+  margin-top: 20rpx;
+  border-radius: 22rpx;
+  background: #f3f6fb;
+  padding: 22rpx;
+  color: #202124;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.chat-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.send-ai-button {
+  flex: 1 1 0;
+  height: 82rpx;
+  line-height: 82rpx;
+}
+
+.voice-button {
+  flex: 0 0 196rpx;
+  max-width: 42%;
+  min-width: 0;
+  height: 82rpx;
+  border-radius: 41rpx;
+  background: #e6f4ea;
+  color: #137333;
+  font-size: 27rpx;
+  line-height: 82rpx;
+  overflow: hidden;
+  padding: 0 18rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-button.recording {
+  background: #fce8e6;
+  color: #b3261e;
+}
+
+.voice-error {
+  margin-top: 16rpx;
+  border-radius: 18rpx;
+  background: #fce8e6;
+  padding: 16rpx 18rpx;
+  color: #b3261e;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.quick-grid {
+  display: flex;
+  gap: 18rpx;
+}
+
+.quick-grid .field {
+  min-width: 0;
+}
+
+.quick-grid .field:first-child {
+  flex: 1 1 0;
+}
+
+.quick-grid .field:last-child {
+  flex: 0 0 190rpx;
+}
+
+.picker-value {
+  display: flex;
+  height: 88rpx;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 20rpx;
+  background: #f3f6fb;
+  padding: 0 24rpx;
+  color: #202124;
+  font-size: 28rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-actions {
+  position: sticky;
+  bottom: calc(18rpx + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 16rpx;
+  margin-top: 28rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10rpx;
+  box-shadow: 0 12rpx 34rpx rgba(60, 64, 67, 0.14);
+}
+
+.bottom-actions button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.submit-button {
+  flex: 1.45 1 0;
+  box-shadow: 0 8rpx 20rpx rgba(11, 87, 208, 0.18);
+}

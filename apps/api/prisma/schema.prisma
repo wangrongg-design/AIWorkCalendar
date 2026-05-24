@@ -1,0 +1,537 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  DEPARTMENT_MANAGER
+  EMPLOYEE
+}
+
+enum WorkLogStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum AiTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AiTaskType {
+  WORK_LOG_ANALYSIS
+  REPORT_GENERATION
+}
+
+enum ReportType {
+  PERSONAL_DAILY
+  PERSONAL_WEEKLY
+  DEPARTMENT_DAILY
+  DEPARTMENT_WEEKLY
+}
+
+enum ReportStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  WORK_LOG_REMINDER
+  AI_ANALYSIS_DONE
+  REPORT_DONE
+}
+
+enum SubscriptionPlan {
+  TRIAL
+  TEAM
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  EXPIRED
+  CANCELED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum BillingOrderStatus {
+  PENDING
+  PAID
+  CANCELED
+  EXPIRED
+}
+
+enum PaymentProvider {
+  MANUAL
+  ALIPAY
+  WECHAT
+  STRIPE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum DataDeletionScope {
+  SELF
+  TENANT
+}
+
+enum DataDeletionStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  CANCELED
+}
+
+model Tenant {
+  id                      String                   @id @default(cuid())
+  name                    String
+  code                    String                   @unique
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  deletedAt               DateTime?                @map("deleted_at")
+  departments             Department[]
+  users                   User[]
+  roles                   Role[]
+  projects                Project[]
+  workLogs                WorkLog[]
+  aiAnalyses              AiAnalysis[]
+  reports                 Report[]
+  notifications           Notification[]
+  aiTasks                 AiTask[]
+  subscription            Subscription?
+  billingOrders           BillingOrder[]
+  payments                PaymentRecord[]
+  auditLogs               AuditLog[]
+  aiUsageLogs             AiUsageLog[]
+  dataDeletionRequests    DataDeletionRequest[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+
+  @@map("tenants")
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  tenantId               String             @unique @map("tenant_id")
+  plan                   SubscriptionPlan   @default(TRIAL)
+  status                 SubscriptionStatus @default(TRIALING)
+  seatLimit              Int                @default(3) @map("seat_limit")
+  currentPeriodStart     DateTime?          @map("current_period_start") @db.Date
+  currentPeriodEnd       DateTime?          @map("current_period_end") @db.Date
+  trialEndsAt            DateTime?          @map("trial_ends_at") @db.Date
+  canceledAt             DateTime?          @map("canceled_at")
+  provider               String?            @map("provider")
+  externalCustomerId     String?            @map("external_customer_id")
+  externalSubscriptionId String?            @map("external_subscription_id")
+  metadata               Json?
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  deletedAt              DateTime?          @map("deleted_at")
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id])
+
+  @@index([status, currentPeriodEnd])
+  @@index([plan, status])
+  @@map("subscriptions")
+}
+
+model Department {
+  id        String       @id @default(cuid())
+  tenantId  String       @map("tenant_id")
+  name      String
+  parentId  String?      @map("parent_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  deletedAt DateTime?    @map("deleted_at")
+  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+  parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
+  children  Department[] @relation("DepartmentTree")
+  users     User[]
+  reports   Report[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, name])
+  @@map("departments")
+}
+
+model User {
+  id                      String                   @id @default(cuid())
+  tenantId                String                   @map("tenant_id")
+  departmentId            String?                  @map("department_id")
+  email                   String
+  name                    String
+  passwordHash            String                   @map("password_hash")
+  isActive                Boolean                  @default(true) @map("is_active")
+  emailVerifiedAt         DateTime?                @map("email_verified_at")
+  lastLoginAt             DateTime?                @map("last_login_at")
+  lastPasswordChangedAt   DateTime?                @map("last_password_changed_at")
+  failedLoginCount        Int                      @default(0) @map("failed_login_count")
+  lockedUntil             DateTime?                @map("locked_until")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  deletedAt               DateTime?                @map("deleted_at")
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
+  department              Department?              @relation(fields: [departmentId], references: [id])
+  roles                   UserRole[]
+  ownedProjects           Project[]                @relation("ProjectOwner")
+  workLogs                WorkLog[]
+  reports                 Report[]                 @relation("ReportRequester")
+  notifications           Notification[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  billingOrders           BillingOrder[]
+  auditLogs               AuditLog[]
+  aiUsageLogs             AiUsageLog[]
+  dataDeletionRequests    DataDeletionRequest[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, departmentId, deletedAt])
+  @@index([tenantId, isActive, deletedAt])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tenantId  String    @map("tenant_id")
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  tenantId  String    @map("tenant_id")
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId, expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model Role {
+  id        String     @id @default(cuid())
+  tenantId  String     @map("tenant_id")
+  code      RoleCode
+  name      String
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  deletedAt DateTime?  @map("deleted_at")
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  users     UserRole[]
+
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+model UserRole {
+  id        String    @id @default(cuid())
+  tenantId  String    @map("tenant_id")
+  userId    String    @map("user_id")
+  roleId    String    @map("role_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  role      Role      @relation(fields: [roleId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([userId, roleId])
+  @@index([tenantId, userId])
+  @@map("user_roles")
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  tenantId    String        @map("tenant_id")
+  ownerUserId String?       @map("owner_user_id")
+  code        String?
+  name        String
+  description String?       @db.Text
+  status      ProjectStatus @default(ACTIVE)
+  startDate   DateTime?     @map("start_date") @db.Date
+  endDate     DateTime?     @map("end_date") @db.Date
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  deletedAt   DateTime?     @map("deleted_at")
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  owner       User?         @relation("ProjectOwner", fields: [ownerUserId], references: [id])
+  workLogs    WorkLog[]
+
+  @@index([tenantId, status, deletedAt])
+  @@index([tenantId, ownerUserId])
+  @@index([tenantId, code])
+  @@index([tenantId, name])
+  @@map("projects")
+}
+
+model WorkLog {
+  id          String        @id @default(cuid())
+  tenantId    String        @map("tenant_id")
+  userId      String        @map("user_id")
+  projectId   String?       @map("project_id")
+  date        DateTime      @db.Date
+  title       String
+  content     String        @db.Text
+  startTime   DateTime?     @map("start_time")
+  endTime     DateTime?     @map("end_time")
+  hours       Decimal       @db.Decimal(5, 2)
+  status      WorkLogStatus @default(DRAFT)
+  submittedAt DateTime?     @map("submitted_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  deletedAt   DateTime?     @map("deleted_at")
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+  project     Project?      @relation(fields: [projectId], references: [id])
+  aiAnalysis  AiAnalysis?
+  aiTasks     AiTask[]
+
+  @@index([tenantId, date, status])
+  @@index([tenantId, userId, date])
+  @@index([tenantId, projectId, date])
+  @@index([tenantId, deletedAt])
+  @@map("work_logs")
+}
+
+model AiAnalysis {
+  id                 String    @id @default(cuid())
+  tenantId           String    @map("tenant_id")
+  workLogId          String    @unique @map("work_log_id")
+  userId             String    @map("user_id")
+  category           String
+  achievements       Json
+  risks              Json
+  blockers           Json
+  keywords           String[]
+  tags               String[]
+  timeReasonableness String    @map("time_reasonableness")
+  summary            String    @db.Text
+  raw                Json
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  workLog            WorkLog   @relation(fields: [workLogId], references: [id])
+
+  @@index([tenantId, userId])
+  @@map("ai_analyses")
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  tenantId     String       @map("tenant_id")
+  requesterId  String       @map("requester_id")
+  departmentId String?      @map("department_id")
+  type         ReportType
+  status       ReportStatus @default(PENDING)
+  title        String
+  periodStart  DateTime     @map("period_start") @db.Date
+  periodEnd    DateTime     @map("period_end") @db.Date
+  content      Json?
+  error        String?      @db.Text
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deletedAt    DateTime?    @map("deleted_at")
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  requester    User         @relation("ReportRequester", fields: [requesterId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  aiTasks      AiTask[]
+
+  @@index([tenantId, type, periodStart, periodEnd])
+  @@index([tenantId, requesterId, createdAt])
+  @@map("reports")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  tenantId  String           @map("tenant_id")
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String           @db.Text
+  isRead    Boolean          @default(false) @map("is_read")
+  readAt    DateTime?        @map("read_at")
+  data      Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  deletedAt DateTime?        @map("deleted_at")
+  tenant    Tenant           @relation(fields: [tenantId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model AiTask {
+  id          String       @id @default(cuid())
+  tenantId    String       @map("tenant_id")
+  type        AiTaskType
+  status      AiTaskStatus @default(PENDING)
+  attempts    Int          @default(0)
+  maxAttempts Int          @default(3) @map("max_attempts")
+  payload     Json
+  error       String?      @db.Text
+  runAt       DateTime?    @map("run_at")
+  startedAt   DateTime?    @map("started_at")
+  finishedAt  DateTime?    @map("finished_at")
+  workLogId   String?      @map("work_log_id")
+  reportId    String?      @map("report_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  deletedAt   DateTime?    @map("deleted_at")
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  workLog     WorkLog?     @relation(fields: [workLogId], references: [id])
+  report      Report?      @relation(fields: [reportId], references: [id])
+
+  @@index([tenantId, type, status, runAt])
+  @@index([tenantId, workLogId])
+  @@index([tenantId, reportId])
+  @@map("ai_tasks")
+}
+
+model BillingOrder {
+  id          String             @id @default(cuid())
+  tenantId    String             @map("tenant_id")
+  requesterId String             @map("requester_id")
+  plan        SubscriptionPlan
+  interval    BillingInterval
+  seatLimit   Int                @map("seat_limit")
+  amountCents Int                @map("amount_cents")
+  currency    String             @default("CNY")
+  status      BillingOrderStatus @default(PENDING)
+  provider    PaymentProvider    @default(MANUAL)
+  paymentUrl  String?            @map("payment_url")
+  paidAt      DateTime?          @map("paid_at")
+  expiresAt   DateTime?          @map("expires_at")
+  metadata    Json?
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  requester   User               @relation(fields: [requesterId], references: [id])
+  payments    PaymentRecord[]
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, requesterId, createdAt])
+  @@map("billing_orders")
+}
+
+model PaymentRecord {
+  id            String          @id @default(cuid())
+  tenantId      String          @map("tenant_id")
+  orderId       String          @map("order_id")
+  provider      PaymentProvider
+  status        PaymentStatus   @default(PENDING)
+  amountCents   Int             @map("amount_cents")
+  currency      String          @default("CNY")
+  transactionId String?         @map("transaction_id")
+  raw           Json?
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  deletedAt     DateTime?       @map("deleted_at")
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  order         BillingOrder    @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId, orderId])
+  @@index([provider, transactionId])
+  @@map("payment_records")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id")
+  ip          String?
+  userAgent   String?  @map("user_agent")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, actorUserId, createdAt])
+  @@index([tenantId, action, createdAt])
+  @@map("audit_logs")
+}
+
+model AiUsageLog {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  userId           String?  @map("user_id")
+  provider         String
+  model            String
+  operation        String
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  costCents        Int      @default(0) @map("cost_cents")
+  metadata         Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  user             User?    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, operation, createdAt])
+  @@map("ai_usage_logs")
+}
+
+model DataDeletionRequest {
+  id          String             @id @default(cuid())
+  tenantId    String             @map("tenant_id")
+  requesterId String             @map("requester_id")
+  scope       DataDeletionScope
+  status      DataDeletionStatus @default(REQUESTED)
+  reason      String?            @db.Text
+  requestedAt DateTime           @default(now()) @map("requested_at")
+  completedAt DateTime?          @map("completed_at")
+  metadata    Json?
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  requester   User               @relation(fields: [requesterId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, requesterId, createdAt])
+  @@map("data_deletion_requests")
+}

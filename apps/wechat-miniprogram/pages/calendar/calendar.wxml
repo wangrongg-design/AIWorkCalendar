@@ -1,0 +1,59 @@
+<view class="page calendar-page bottom-safe">
+  <view class="page-hero">
+    <view>
+      <view class="page-title">日历看板</view>
+      <view class="page-subtitle">{{month}} · {{scopeLabel}}</view>
+    </view>
+    <picker range="{{scopeOptions}}" range-key="label" value="{{scopeIndex}}" bindchange="onScopeChange">
+      <view class="scope-picker">{{scopeLabel}}</view>
+    </picker>
+  </view>
+
+  <view class="surface month-toolbar">
+    <button class="month-button" bindtap="prevMonth">‹</button>
+    <view class="month-text">{{month}}</view>
+    <button class="month-button" bindtap="nextMonth">›</button>
+  </view>
+
+  <view class="surface metrics">
+    <view class="metric">
+      <view class="metric-value">{{totalEmployees}}</view>
+      <view class="metric-label">可见成员</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value">{{todayData.fillRate || 0}}%</view>
+      <view class="metric-label">今日填报率</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value risk">{{todayData.riskCount || 0}}</view>
+      <view class="metric-label">今日风险</view>
+    </view>
+  </view>
+
+  <view class="surface calendar-card">
+    <view class="week-row">
+      <text wx:for="{{weekdays}}" wx:key="*this">{{item}}</text>
+    </view>
+    <view class="grid">
+      <view
+        wx:for="{{grid}}"
+        wx:key="id"
+        class="calendar-cell {{item.blank ? 'blank' : item.tone}} {{item.isToday ? 'today' : ''}}"
+        data-date="{{item.date}}"
+        bindtap="openDay"
+      >
+        <block wx:if="{{!item.blank}}">
+          <view class="day-line">
+            <text class="day">{{item.day}}</text>
+            <text wx:if="{{item.isToday}}" class="today-dot">今天</text>
+          </view>
+          <view class="rate">{{item.fillRate}}%</view>
+          <view class="counts">{{item.filledCount}} / {{item.totalCount}}</view>
+          <view wx:if="{{item.riskCount > 0}}" class="risk-text">{{item.riskCount}} 风险</view>
+        </block>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+</view>

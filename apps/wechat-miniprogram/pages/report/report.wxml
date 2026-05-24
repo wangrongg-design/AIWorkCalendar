@@ -1,0 +1,80 @@
+<view class="page report-page bottom-safe">
+  <view class="page-hero">
+    <view>
+      <view class="page-title">快速填报</view>
+      <view class="page-subtitle">你好，{{user.name || "同事"}} · {{user.tenantName || ""}}</view>
+    </view>
+    <button class="tertiary-button logout" bindtap="logout">退出</button>
+  </view>
+
+  <view class="surface ai-card">
+    <view class="card-top">
+      <view>
+        <view class="section-title">AI 对话填报</view>
+        <view class="section-desc">输入或语音描述，AI 先生成草稿，你确认后再提交。</view>
+      </view>
+      <view class="chip">草稿</view>
+    </view>
+
+    <view class="chat-list">
+      <view wx:for="{{chatMessages}}" wx:key="index" class="chat-message {{item.role}}">
+        {{item.content}}
+      </view>
+    </view>
+
+    <textarea class="chat-input" value="{{chatInput}}" maxlength="2000" placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。" bindinput="onChatInput" />
+
+    <view class="chat-actions">
+      <button class="primary-button send-ai-button" loading="{{drafting}}" bindtap="sendChatMessage">生成草稿</button>
+      <button class="voice-button {{recording ? 'recording' : ''}}" bindtap="toggleRecord">
+        {{recording ? "结束语音" : "语音输入"}}
+      </button>
+    </view>
+
+    <view wx:if="{{voiceError}}" class="voice-error">{{voiceError}}</view>
+  </view>
+
+  <view class="surface draft-card">
+    <view class="card-top">
+      <view>
+        <view class="section-title">待提交草稿</view>
+        <view class="section-desc">可直接微调日期、标题、工时和内容。</view>
+      </view>
+    </view>
+
+    <view class="quick-grid">
+      <view class="field">
+        <text class="field-label">日期</text>
+        <picker mode="date" value="{{date}}" bindchange="onDateChange">
+          <view class="picker-value">{{date}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="field-label">工时</text>
+        <input class="input" type="digit" value="{{hours}}" bindinput="onHoursInput" />
+      </view>
+    </view>
+
+    <view class="field">
+      <text class="field-label">关联项目</text>
+      <picker value="{{projectIndex}}" range="{{projectOptions}}" range-key="displayName" bindchange="onProjectChange">
+        <view class="picker-value">{{projectOptions[projectIndex].displayName}}</view>
+      </picker>
+    </view>
+
+    <view class="field">
+      <text class="field-label">标题</text>
+      <input class="input" value="{{title}}" placeholder="例如：完成日报月历联调" bindinput="onTitleInput" />
+    </view>
+
+    <view class="field">
+      <text class="field-label">工作内容 / 计划</text>
+      <textarea class="textarea" value="{{content}}" maxlength="3000" placeholder="可以手动输入，也可以用语音识别填入。" bindinput="onContentInput" />
+    </view>
+
+    <view class="bottom-actions">
+      <button class="tertiary-button" bindtap="clearForm">清空</button>
+      <button class="primary-button submit-button" loading="{{submitting}}" bindtap="submit">提交分析</button>
+    </view>
+  </view>
+</view>

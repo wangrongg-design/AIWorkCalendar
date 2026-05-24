@@ -1,0 +1,357 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Avatar, Button, Form, Input, Layout, Modal, Space, Switch, Table, Tag, Typography, message } from "antd";
+import type { ColumnsType } from "antd/es/table";
+import dayjs from "dayjs";
+import { KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
+import { RoleCode, SubscriptionPlan, SubscriptionStatus } from "@/lib/types";
+
+type OpsTenant = {
+  id: string;
+  name: string;
+  code: string;
+  createdAt: string;
+  subscription?: {
+    plan: SubscriptionPlan;
+    status: SubscriptionStatus;
+    seatLimit: number;
+    currentPeriodEnd?: string | null;
+    trialEndsAt?: string | null;
+  } | null;
+  counts: {
+    users: number;
+    departments: number;
+    projects: number;
+    workLogs: number;
+    reports: number;
+  };
+};
+
+type OpsAccount = {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  tenantCode: string;
+  email: string;
+  name: string;
+  departmentName?: string | null;
+  isActive: boolean;
+  roles: RoleCode[];
+  lastLoginAt?: string | null;
+  createdAt: string;
+};
+
+type OpsOverview = {
+  developerCompany: string;
+  totals: {
+    tenants: number;
+    accounts: number;
+    activeAccounts: number;
+    workLogs: number;
+    reports: number;
+  };
+  tenants: OpsTenant[];
+  accounts: OpsAccount[];
+};
+
+type ChangePasswordForm = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
+function dateText(value?: string | null) {
+  return value ? dayjs(value).format("YYYY-MM-DD") : "-";
+}
+
+function subscriptionStatusColor(status?: SubscriptionStatus) {
+  return status === "ACTIVE" || status === "TRIALING" ? "green" : status === "PAST_DUE" ? "orange" : status ? "red" : "default";
+}
+
+export default function OpsPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
+  const clearSession = useAuthStore((state) => state.clearSession);
+  const isOps = Boolean(user?.roles.includes("SUPER_ADMIN"));
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [passwordForm] = Form.useForm<ChangePasswordForm>();
+
+  useEffect(() => {
+    if (!token) {
+      router.replace("/ops/login");
+    }
+  }, [router, token]);
+
+  const overview = useQuery({
+    queryKey: ["ops-overview"],
+    queryFn: () => apiFetch<OpsOverview>("/ops/overview"),
+    enabled: Boolean(token && isOps)
+  });
+
+  const updateAccount = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiFetch<OpsAccount>(`/ops/accounts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive })
+      }),
+    onSuccess: () => {
+      message.success("账号状态已更新");
+      queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "账号更新失败");
+    }
+  });
+
+  const changePassword = useMutation({
+    mutationFn: (values: ChangePasswordForm) =>
+      apiFetch<{ ok: boolean }>("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({
+          currentPassword: values.currentPassword,
+          newPassword: values.newPassword
+        })
+      }),
+    onSuccess: () => {
+      message.success("运维账号密码已更新，请使用新密码重新登录。");
+      passwordForm.resetFields();
+      setPasswordModalOpen(false);
+      clearSession();
+      router.replace("/ops/login");
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "密码更新失败");
+    }
+  });
+
+  const tenantColumns: ColumnsType<OpsTenant> = [
+    {
+      title: "企业",
+      render: (_, record) => (
+        <div>
+          <div className="font-medium text-ink">{record.name}</div>
+          <div className="mt-1 text-xs text-muted">{record.code}</div>
+        </div>
+      )
+    },
+    {
+      title: "订阅",
+      width: 180,
+      render: (_, record) => (
+        <Space direction="vertical" size={4}>
+          <Tag color={subscriptionStatusColor(record.subscription?.status)}>{record.subscription?.status ?? "未开通"}</Tag>
+          <span className="text-xs text-muted">
+            {record.subscription?.plan ?? "-"} · {record.subscription?.seatLimit ?? 0} 席
+          </span>
+        </Space>
+      )
+    },
+    { title: "成员", width: 90, render: (_, record) => record.counts.users },
+    { title: "项目", width: 90, render: (_, record) => record.counts.projects },
+    { title: "填报", width: 90, render: (_, record) => record.counts.workLogs },
+    { title: "报告", width: 90, render: (_, record) => record.counts.reports },
+    { title: "服务到期", width: 120, render: (_, record) => dateText(record.subscription?.currentPeriodEnd) },
+    { title: "创建日期", width: 120, render: (_, record) => dateText(record.createdAt) }
+  ];
+
+  const accountColumns: ColumnsType<OpsAccount> = [
+    {
+      title: "账号",
+      render: (_, record) => (
+        <div>
+          <div className="font-medium text-ink">{record.name}</div>
+          <div className="mt-1 text-xs text-muted">{record.email}</div>
+        </div>
+      )
+    },
+    {
+      title: "企业",
+      width: 180,
+      render: (_, record) => (
+        <div>
+          <div>{record.tenantName}</div>
+          <div className="mt-1 text-xs text-muted">{record.tenantCode}</div>
+        </div>
+      )
+    },
+    {
+      title: "角色",
+      width: 220,
+      render: (_, record) => (
+        <Space wrap size={[4, 4]}>
+          {record.roles.map((role) => (
+            <Tag key={role} color={role === "SUPER_ADMIN" ? "purple" : role === "COMPANY_ADMIN" ? "blue" : "default"}>
+              {role}
+            </Tag>
+          ))}
+        </Space>
+      )
+    },
+    { title: "部门", width: 120, render: (_, record) => record.departmentName ?? "-" },
+    { title: "最近登录", width: 150, render: (_, record) => (record.lastLoginAt ? dayjs(record.lastLoginAt).format("YYYY-MM-DD HH:mm") : "-") },
+    {
+      title: "启用",
+      width: 90,
+      render: (_, record) => (
+        <Switch
+          checked={record.isActive}
+          disabled={record.id === user?.id}
+          loading={updateAccount.isPending}
+          onChange={(checked) => updateAccount.mutate({ id: record.id, isActive: checked })}
+        />
+      )
+    }
+  ];
+
+  if (!token || !user) {
+    return null;
+  }
+
+  if (!isOps) {
+    return (
+      <main className="min-h-screen bg-surface p-6">
+        <Alert type="error" showIcon message="无权访问运维端" description="请使用北京七数智联科技有限公司的超级管理员账号登录。" />
+      </main>
+    );
+  }
+
+  const totals = overview.data?.totals;
+
+  return (
+    <Layout className="min-h-screen bg-surface">
+      <header className="flex items-center justify-between border-b border-line bg-white px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-[142px] items-center rounded-[16px] bg-surface-container-low px-3">
+            <img src="/seven-ai-logo.png" alt="七数AI" className="h-10 w-full object-contain" />
+          </div>
+          <div>
+            <Typography.Title level={4} className="!m-0 !font-medium">
+              运维控制台
+            </Typography.Title>
+            <Typography.Text className="text-muted">{overview.data?.developerCompany ?? "北京七数智联科技有限公司"}</Typography.Text>
+          </div>
+        </div>
+        <Space>
+          <Button icon={<RefreshCw size={16} />} onClick={() => overview.refetch()} loading={overview.isFetching}>
+            刷新
+          </Button>
+          <Button icon={<KeyRound size={16} />} onClick={() => setPasswordModalOpen(true)}>
+            修改密码
+          </Button>
+          <div className="flex items-center gap-2 rounded-full bg-surface-container px-3 py-2">
+            <Avatar size={28} className="bg-primary">
+              {user.name.slice(0, 1)}
+            </Avatar>
+            <span className="text-sm font-medium text-ink">{user.name}</span>
+          </div>
+          <Button
+            icon={<LogOut size={16} />}
+            onClick={() => {
+              clearSession();
+              router.replace("/ops/login");
+            }}
+          />
+        </Space>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-5 p-6">
+        <div className="grid gap-3 md:grid-cols-5">
+          <div className="metric-card">
+            <ShieldCheck size={20} className="mb-3 text-primary" />
+            <div className="metric-label">企业数</div>
+            <div className="metric-value">{totals?.tenants ?? 0}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">账号数</div>
+            <div className="metric-value">{totals?.accounts ?? 0}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">启用账号</div>
+            <div className="metric-value">{totals?.activeAccounts ?? 0}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">工作填报</div>
+            <div className="metric-value">{totals?.workLogs ?? 0}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">AI 报告</div>
+            <div className="metric-value">{totals?.reports ?? 0}</div>
+          </div>
+        </div>
+
+        {overview.error ? <Alert type="error" showIcon message={(overview.error as Error).message} /> : null}
+
+        <section className="surface-panel bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <Typography.Title level={4} className="!m-0 !font-medium">
+              企业监管
+            </Typography.Title>
+            <Tag color="blue">全平台</Tag>
+          </div>
+          <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.tenants ?? []} columns={tenantColumns} pagination={{ pageSize: 8 }} />
+        </section>
+
+        <section className="surface-panel bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <Typography.Title level={4} className="!m-0 !font-medium">
+              账号管理
+            </Typography.Title>
+            <Tag>最近 300 个账号</Tag>
+          </div>
+          <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.accounts ?? []} columns={accountColumns} pagination={{ pageSize: 10 }} />
+        </section>
+      </main>
+
+      <Modal
+        title="修改运维账号密码"
+        open={passwordModalOpen}
+        onCancel={() => setPasswordModalOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Alert
+          className="mb-4"
+          type="info"
+          showIcon
+          message="建议首次进入运维端后立即修改初始化密码。"
+        />
+        <Form form={passwordForm} layout="vertical" onFinish={(values) => changePassword.mutate(values)}>
+          <Form.Item name="currentPassword" label="当前密码" rules={[{ required: true }]}>
+            <Input.Password autoComplete="current-password" />
+          </Form.Item>
+          <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 8 }]}>
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="确认新密码"
+            dependencies={["newPassword"]}
+            rules={[
+              { required: true },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue("newPassword") === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error("两次输入的新密码不一致"));
+                }
+              })
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block loading={changePassword.isPending}>
+            更新密码
+          </Button>
+        </Form>
+      </Modal>
+    </Layout>
+  );
+}

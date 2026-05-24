@@ -1,0 +1,151 @@
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rpx;
+  margin-bottom: 20rpx;
+  overflow: hidden;
+  padding: 0;
+}
+
+.metric {
+  background: #ffffff;
+  padding: 22rpx 10rpx;
+  text-align: center;
+}
+
+.metric-value {
+  color: #202124;
+  font-size: 32rpx;
+  font-weight: 800;
+}
+
+.metric-value.risk {
+  color: #b3261e;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  color: #5f6368;
+  font-size: 21rpx;
+}
+
+.detail-section {
+  margin-top: 20rpx;
+  padding: 28rpx;
+}
+
+.empty {
+  border-radius: 20rpx;
+  background: #f3f6fb;
+  color: #8a929d;
+  font-size: 26rpx;
+  line-height: 96rpx;
+  text-align: center;
+}
+
+.employee {
+  padding: 22rpx 0;
+}
+
+.employee + .employee {
+  border-top: 1rpx solid #edf1f5;
+}
+
+.employee-name {
+  max-width: 100%;
+  font-size: 30rpx;
+  font-weight: 800;
+  word-break: break-all;
+}
+
+.dept {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+}
+
+.log-card {
+  margin-top: 16rpx;
+  border-radius: 22rpx;
+  background: #f8fafd;
+  padding: 22rpx;
+}
+
+.log-title {
+  max-width: 100%;
+  font-size: 28rpx;
+  font-weight: 800;
+  word-break: break-all;
+}
+
+.project-chip {
+  display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 10rpx;
+  border-radius: 999rpx;
+  background: #e8f0fe;
+  padding: 6rpx 14rpx;
+  color: #0b57d0;
+  font-size: 22rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-content {
+  margin-top: 10rpx;
+  color: #3c4043;
+  font-size: 26rpx;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.log-meta {
+  display: inline-flex;
+  margin-top: 14rpx;
+  border-radius: 999rpx;
+  background: #e8f0fe;
+  padding: 6rpx 14rpx;
+  color: #0b57d0;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.analysis {
+  margin-top: 14rpx;
+  border-radius: 18rpx;
+  background: #e8f0fe;
+  padding: 16rpx;
+  color: #0842a0;
+  font-size: 23rpx;
+  line-height: 1.5;
+}
+
+.analysis-risk {
+  margin-top: 8rpx;
+  color: #b3261e;
+}
+
+.missing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.missing-item {
+  display: flex;
+  gap: 18rpx;
+  justify-content: space-between;
+  border-radius: 18rpx;
+  background: #f3f6fb;
+  padding: 18rpx 20rpx;
+  font-size: 26rpx;
+}
+
+.missing-item text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

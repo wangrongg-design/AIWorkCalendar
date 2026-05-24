@@ -1,0 +1,61 @@
+<view class="page detail-page bottom-safe">
+  <view class="page-hero">
+    <view>
+      <view class="page-title">{{date}}</view>
+      <view class="page-subtitle">{{scopeText}} · 日期详情</view>
+    </view>
+  </view>
+
+  <view class="surface metrics">
+    <view class="metric">
+      <view class="metric-value">{{stats.filledCount || 0}}</view>
+      <view class="metric-label">已填</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value">{{stats.missingCount || 0}}</view>
+      <view class="metric-label">未填</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value">{{stats.totalHours || 0}}</view>
+      <view class="metric-label">工时</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value risk">{{stats.riskCount || 0}}</view>
+      <view class="metric-label">风险</view>
+    </view>
+  </view>
+
+  <view class="surface detail-section">
+    <view class="section-title">已填报</view>
+    <view wx:if="{{!hasFilled}}" class="empty">暂无填报</view>
+    <view wx:for="{{filledEmployees}}" wx:key="id" class="employee">
+      <view class="employee-head">
+        <view>
+          <view class="employee-name">{{item.name}}</view>
+          <view class="muted dept">{{item.departmentName || "未分配部门"}}</view>
+        </view>
+      </view>
+      <view wx:for="{{item.logs}}" wx:for-item="log" wx:key="id" class="log-card">
+        <view class="log-title">{{log.title}}</view>
+        <view wx:if="{{log.projectName}}" class="project-chip">{{log.projectName}}</view>
+        <view class="log-content">{{log.content}}</view>
+        <view class="log-meta">{{log.hours}} 小时</view>
+        <view wx:if="{{log.aiSummary || log.riskText}}" class="analysis">
+          <view wx:if="{{log.aiSummary}}" class="analysis-line">总结：{{log.aiSummary}}</view>
+          <view wx:if="{{log.riskText}}" class="analysis-risk">风险：{{log.riskText}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="surface detail-section">
+    <view class="section-title">未填报</view>
+    <view wx:if="{{!hasMissing}}" class="empty">全部已填报</view>
+    <view class="missing-list">
+      <view wx:for="{{missingEmployees}}" wx:key="id" class="missing-item">
+        <text>{{item.name}}</text>
+        <text class="muted">{{item.departmentName || "未分配"}}</text>
+      </view>
+    </view>
+  </view>
+</view>
