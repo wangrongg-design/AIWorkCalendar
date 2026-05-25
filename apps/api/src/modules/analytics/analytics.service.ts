@@ -42,8 +42,11 @@ export class AnalyticsService {
     const { start, end } = monthRange(query.month);
     const scope = this.access.resolveScope(user, query.scope, query.departmentId);
     const users = await this.prisma.user.findMany({
-      where: this.access.userWhere(user, scope.scope, scope.departmentId),
-      select: { id: true, name: true, email: true, departmentId: true }
+      where: {
+        ...this.access.userWhere(user, scope.scope, scope.departmentId),
+        requiresWorkReport: true
+      },
+      select: { id: true, name: true, email: true, phone: true, departmentId: true }
     });
     const userIds = users.map((item) => item.id);
     const logs = await this.prisma.workLog.findMany({
@@ -91,7 +94,10 @@ export class AnalyticsService {
   async calendarDay(user: CurrentUser, query: CalendarDayQueryDto) {
     const scope = this.access.resolveScope(user, query.scope, query.departmentId);
     const users = await this.prisma.user.findMany({
-      where: this.access.userWhere(user, scope.scope, scope.departmentId),
+      where: {
+        ...this.access.userWhere(user, scope.scope, scope.departmentId),
+        requiresWorkReport: true
+      },
       include: { department: true, roles: { where: { deletedAt: null }, include: { role: true } } },
       orderBy: [{ departmentId: "asc" }, { name: "asc" }]
     });
@@ -122,6 +128,7 @@ export class AnalyticsService {
         id: item.id,
         name: item.name,
         email: item.email,
+        phone: item.phone,
         departmentName: item.department?.name ?? null,
         logs: logsByUser.get(item.id) ?? []
       }));
@@ -131,6 +138,7 @@ export class AnalyticsService {
         id: item.id,
         name: item.name,
         email: item.email,
+        phone: item.phone,
         departmentName: item.department?.name ?? null
       }));
     const totalHours = logs.reduce((sum, item) => sum + Number(item.hours), 0);

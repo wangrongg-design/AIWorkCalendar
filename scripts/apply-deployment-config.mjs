@@ -46,7 +46,9 @@ const env = [
   `OPENAI_MODEL=${value(config.ai?.openaiModel ?? "gpt-4.1-mini")}`,
   "",
   `API_PORT=${value(config.api?.port ?? 3001)}`,
-  `NEXT_PUBLIC_API_URL=${value(config.domains?.apiUrl)}`
+  `NEXT_PUBLIC_API_URL=${value(config.domains?.apiUrl)}`,
+  `WEB_PORT_BIND=${value(config.docker?.webPortBind ?? "127.0.0.1:3000")}`,
+  `API_PORT_BIND=${value(config.docker?.apiPortBind ?? "127.0.0.1:3001")}`
 ].join("\n");
 
 writeFileSync(resolve(root, ".env.production.generated"), `${env}\n`);

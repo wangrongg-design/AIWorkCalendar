@@ -18,7 +18,7 @@ export default function OpsLoginPage() {
   const setSession = useAuthStore((state) => state.setSession);
 
   const login = useMutation({
-    mutationFn: async (values: { email: string; password: string; tenantCode?: string }) => {
+    mutationFn: async (values: { account: string; password: string; tenantCode?: string }) => {
       const data = await apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
         body: JSON.stringify(values)
@@ -58,14 +58,14 @@ export default function OpsLoginPage() {
           <Form
             className="mt-6"
             layout="vertical"
-            initialValues={{ tenantCode: "demo", email: "super@example.com", password: "Passw0rd!" }}
+            initialValues={{ tenantCode: "demo", account: "super@example.com", password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
             <Form.Item name="tenantCode" label="运维账号所属企业代码">
               <Input placeholder="demo" />
             </Form.Item>
-            <Form.Item name="email" label="运维账号邮箱" rules={[{ required: true, type: "email" }]}>
-              <Input placeholder="super@example.com" />
+            <Form.Item name="account" label="运维账号邮箱或手机号" rules={[{ required: true }]}>
+              <Input placeholder="super@example.com / 13900000001" />
             </Form.Item>
             <Form.Item name="password" label="密码" rules={[{ required: true }]}>
               <Input.Password placeholder="Passw0rd!" />

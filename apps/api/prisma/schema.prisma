@@ -184,10 +184,12 @@ model User {
   id                      String                   @id @default(cuid())
   tenantId                String                   @map("tenant_id")
   departmentId            String?                  @map("department_id")
-  email                   String
+  email                   String?
+  phone                   String?
   name                    String
   passwordHash            String                   @map("password_hash")
   isActive                Boolean                  @default(true) @map("is_active")
+  requiresWorkReport      Boolean                  @default(true) @map("requires_work_report")
   emailVerifiedAt         DateTime?                @map("email_verified_at")
   lastLoginAt             DateTime?                @map("last_login_at")
   lastPasswordChangedAt   DateTime?                @map("last_password_changed_at")
@@ -211,8 +213,10 @@ model User {
   dataDeletionRequests    DataDeletionRequest[]
 
   @@unique([tenantId, email])
+  @@unique([tenantId, phone])
   @@index([tenantId, departmentId, deletedAt])
   @@index([tenantId, isActive, deletedAt])
+  @@index([tenantId, requiresWorkReport, isActive, deletedAt])
   @@map("users")
 }
 

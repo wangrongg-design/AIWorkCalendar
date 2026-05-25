@@ -81,9 +81,11 @@ export class OpsService {
         tenantName: account.tenant.name,
         tenantCode: account.tenant.code,
         email: account.email,
+        phone: account.phone,
         name: account.name,
         departmentName: account.department?.name ?? null,
         isActive: account.isActive,
+        requiresWorkReport: account.requiresWorkReport,
         roles: account.roles.map((item) => item.role.code),
         lastLoginAt: account.lastLoginAt,
         createdAt: account.createdAt
@@ -97,7 +99,7 @@ export class OpsService {
     }
     const existing = await this.prisma.user.findFirst({
       where: { id: accountId, deletedAt: null },
-      select: { id: true, tenantId: true, name: true, email: true }
+      select: { id: true, tenantId: true, name: true, email: true, phone: true }
     });
     if (!existing) {
       throw new NotFoundException("Account not found");
@@ -123,6 +125,7 @@ export class OpsService {
       metadata: {
         targetTenantId: existing.tenantId,
         email: existing.email,
+        phone: existing.phone,
         isActive: dto.isActive,
         name: dto.name
       }
@@ -133,9 +136,11 @@ export class OpsService {
       tenantName: updated.tenant.name,
       tenantCode: updated.tenant.code,
       email: updated.email,
+      phone: updated.phone,
       name: updated.name,
       departmentName: updated.department?.name ?? null,
       isActive: updated.isActive,
+      requiresWorkReport: updated.requiresWorkReport,
       roles: updated.roles.map((item) => item.role.code),
       lastLoginAt: updated.lastLoginAt,
       createdAt: updated.createdAt

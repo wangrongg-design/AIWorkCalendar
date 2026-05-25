@@ -45,7 +45,7 @@ export default function LoginPage() {
   }, []);
 
   const login = useMutation({
-    mutationFn: (values: { email: string; password: string; tenantCode?: string }) =>
+    mutationFn: (values: { account: string; password: string; tenantCode?: string }) =>
       apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
         body: JSON.stringify(values)
@@ -140,14 +140,14 @@ export default function LoginPage() {
           <Form
             className="mt-6"
             layout="vertical"
-            initialValues={{ tenantCode: "demo", email: "admin@example.com", password: "Passw0rd!" }}
+            initialValues={{ tenantCode: "demo", account: "admin@example.com", password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
             <Form.Item name="tenantCode" label="企业代码">
               <Input placeholder="demo" />
             </Form.Item>
-            <Form.Item name="email" label="邮箱" rules={[{ required: true, type: "email" }]}>
-              <Input placeholder="admin@example.com" />
+            <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
+              <Input placeholder="admin@example.com / 13900000002" />
             </Form.Item>
             <Form.Item name="password" label="密码" rules={[{ required: true }]}>
               <Input.Password placeholder="Passw0rd!" />

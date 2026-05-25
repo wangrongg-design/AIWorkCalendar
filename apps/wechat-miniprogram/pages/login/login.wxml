@@ -28,8 +28,8 @@
     </view>
 
     <view class="field">
-      <text class="field-label">邮箱</text>
-      <input class="input" value="{{email}}" placeholder="admin@example.com" bindinput="onEmailInput" />
+      <text class="field-label">邮箱或手机号</text>
+      <input class="input" value="{{account}}" placeholder="admin@example.com / 13900000002" bindinput="onAccountInput" />
     </view>
 
     <view class="field">

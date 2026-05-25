@@ -73,7 +73,7 @@ export class ExportsService {
       this.prisma.department.findMany({ where: { tenantId, deletedAt: null }, orderBy: [{ name: "asc" }] }),
       this.prisma.project.findMany({
         where: { tenantId, deletedAt: null },
-        include: { owner: { select: { id: true, email: true, name: true, departmentId: true } } },
+        include: { owner: { select: { id: true, email: true, phone: true, name: true, departmentId: true } } },
         orderBy: [{ status: "asc" }, { name: "asc" }]
       }),
       this.prisma.role.findMany({ where: { tenantId, deletedAt: null }, orderBy: [{ code: "asc" }] }),
@@ -84,8 +84,10 @@ export class ExportsService {
           tenantId: true,
           departmentId: true,
           email: true,
+          phone: true,
           name: true,
           isActive: true,
+          requiresWorkReport: true,
           lastLoginAt: true,
           createdAt: true,
           updatedAt: true,
@@ -97,7 +99,7 @@ export class ExportsService {
       }),
       this.prisma.workLog.findMany({
         where: { tenantId, deletedAt: null },
-        include: { user: { select: { id: true, email: true, name: true, departmentId: true } }, project: true, aiAnalysis: true },
+        include: { user: { select: { id: true, email: true, phone: true, name: true, departmentId: true } }, project: true, aiAnalysis: true },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }]
       }),
       this.prisma.report.findMany({ where: { tenantId, deletedAt: null }, orderBy: [{ createdAt: "asc" }] }),
@@ -140,8 +142,10 @@ export class ExportsService {
           tenantId: true,
           departmentId: true,
           email: true,
+          phone: true,
           name: true,
           isActive: true,
+          requiresWorkReport: true,
           lastLoginAt: true,
           createdAt: true,
           updatedAt: true,

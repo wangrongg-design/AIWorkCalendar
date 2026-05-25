@@ -17,11 +17,13 @@ export type AuthUser = {
   tenantId: string;
   tenantName: string;
   tenantCode: string;
-  email: string;
+  email: string | null;
+  phone?: string | null;
   name: string;
   departmentId: string | null;
   departmentName: string | null;
   roles: RoleCode[];
+  requiresWorkReport?: boolean;
 };
 
 export type Department = {
@@ -32,11 +34,13 @@ export type Department = {
 
 export type OrgUser = {
   id: string;
-  email: string;
+  email: string | null;
+  phone?: string | null;
   name: string;
   departmentId: string | null;
   departmentName: string | null;
   isActive: boolean;
+  requiresWorkReport: boolean;
   roles: RoleCode[];
   createdAt: string;
 };
@@ -52,7 +56,8 @@ export type Project = {
   owner?: {
     id: string;
     name: string;
-    email: string;
+    email: string | null;
+    phone?: string | null;
     departmentId?: string | null;
     department?: Department | null;
   } | null;
@@ -144,7 +149,8 @@ export type WorkLog = {
   user?: {
     id: string;
     name: string;
-    email: string;
+    email: string | null;
+    phone?: string | null;
     department?: Department | null;
   };
   aiAnalysis?: AiAnalysis | null;
@@ -194,14 +200,16 @@ export type CalendarDayDetail = {
   filledEmployees: Array<{
     id: string;
     name: string;
-    email: string;
+    email: string | null;
+    phone?: string | null;
     departmentName: string | null;
     logs: WorkLog[];
   }>;
   missingEmployees: Array<{
     id: string;
     name: string;
-    email: string;
+    email: string | null;
+    phone?: string | null;
     departmentName: string | null;
   }>;
   stats: {

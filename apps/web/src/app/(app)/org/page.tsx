@@ -89,6 +89,10 @@ const paymentProviderOptions: Array<{ value: PaymentProvider; label: string }> =
   { value: "STRIPE", label: "Stripe" }
 ];
 
+function contactText(record: { email?: string | null; phone?: string | null }) {
+  return [record.phone, record.email].filter(Boolean).join(" / ") || "-";
+}
+
 const orderStatusColors: Record<string, string> = {
   PENDING: "orange",
   PAID: "green",
@@ -220,12 +224,14 @@ export default function OrgPage() {
 
   const saveUser = useMutation({
     mutationFn: (values: {
-      email: string;
+      email?: string;
+      phone?: string;
       name: string;
       departmentId?: string;
       password?: string;
       roles: RoleCode[];
       isActive?: boolean;
+      requiresWorkReport?: boolean;
     }) => {
       if (editingUser) {
         return apiFetch<OrgUser>(`/org/users/${editingUser.id}`, {
@@ -347,7 +353,7 @@ export default function OrgPage() {
 
   const userColumns: ColumnsType<OrgUser> = [
     { title: "姓名", dataIndex: "name", width: 140 },
-    { title: "邮箱", dataIndex: "email", width: 220 },
+    { title: "联系方式", width: 260, render: (_, record) => contactText(record) },
     { title: "部门", dataIndex: "departmentName", width: 150, render: (value: string | null) => value ?? "未分配" },
     {
       title: "角色",
@@ -359,6 +365,12 @@ export default function OrgPage() {
       )
     },
     { title: "状态", dataIndex: "isActive", width: 90, render: (value: boolean) => <Tag color={value ? "green" : "red"}>{value ? "启用" : "停用"}</Tag> },
+    {
+      title: "填报",
+      dataIndex: "requiresWorkReport",
+      width: 90,
+      render: (value: boolean) => <Tag color={value ? "blue" : "default"}>{value ? "需要" : "不需要"}</Tag>
+    },
     {
       title: "操作",
       width: 110,
@@ -585,7 +597,7 @@ export default function OrgPage() {
                     onClick={() => {
                       setEditingUser(null);
                       userForm.resetFields();
-                      userForm.setFieldsValue({ roles: ["EMPLOYEE"], isActive: true });
+                      userForm.setFieldsValue({ roles: ["EMPLOYEE"], isActive: true, requiresWorkReport: true });
                       setUserModalOpen(true);
                     }}
                   >
@@ -812,8 +824,11 @@ export default function OrgPage() {
             <Form.Item name="name" label="姓名" rules={[{ required: true, min: 2 }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="email" label="邮箱" rules={[{ required: true, type: "email" }]}>
-              <Input disabled={Boolean(editingUser)} />
+            <Form.Item name="email" label="邮箱" rules={[{ type: "email", message: "请输入有效邮箱" }]}>
+              <Input placeholder="name@example.com" />
+            </Form.Item>
+            <Form.Item name="phone" label="手机号">
+              <Input placeholder="13900000000" />
             </Form.Item>
             <Form.Item name="departmentId" label="部门">
               <Select allowClear options={departmentOptions} />
@@ -822,8 +837,12 @@ export default function OrgPage() {
               <Input.Password placeholder={editingUser ? "留空不修改" : "默认 Passw0rd!"} />
             </Form.Item>
           </div>
+          <Alert className="mb-4" type="info" showIcon message="邮箱和手机号至少填写一个。管理员等无需日报统计的账号，可关闭“需要填报”。" />
           <Form.Item name="roles" label="角色" rules={[{ required: true }]}>
             <Select mode="multiple" options={roleOptions} />
+          </Form.Item>
+          <Form.Item name="requiresWorkReport" label="需要填报" valuePropName="checked">
+            <Switch checkedChildren="计入" unCheckedChildren="不计入" />
           </Form.Item>
           {editingUser ? (
             <Form.Item name="isActive" label="账号启用" valuePropName="checked">

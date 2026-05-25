@@ -89,9 +89,18 @@ nano config/deployment.json
   "wechatMiniProgram": {
     "appid": "你的微信小程序 AppID",
     "apiBaseUrl": "https://api.example.com"
+  },
+  "docker": {
+    "webPortBind": "127.0.0.1:3000",
+    "apiPortBind": "127.0.0.1:3001"
   }
 }
 ```
+
+`docker.webPortBind` 和 `docker.apiPortBind` 控制容器端口是否对公网开放：
+
+- 备案前用 IP 测试：设置为 `"3000"` 和 `"3001"`，浏览器访问 `http://服务器IP:3000`。
+- 正式域名通过 Nginx/HTTPS 访问：设置为 `"127.0.0.1:3000"` 和 `"127.0.0.1:3001"`，公网只开放 80/443。
 
 生成生产配置：
 

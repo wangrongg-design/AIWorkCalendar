@@ -11,6 +11,7 @@
     "prisma:push": "prisma db push",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "report-requirements:backfill": "tsx prisma/backfill-report-requirements.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "prisma": {

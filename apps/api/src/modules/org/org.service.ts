@@ -10,6 +10,24 @@ import { CreateDepartmentDto, UpdateDepartmentDto } from "./dto/department.dto";
 import { CreateTenantDto } from "./dto/tenant.dto";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
 
+function normalizeEmail(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || null;
+}
+
+function normalizePhone(value?: string | null) {
+  const normalized = value?.trim().replace(/[\s-]/g, "");
+  return normalized || null;
+}
+
+function contactWhere(email?: string | null, phone?: string | null) {
+  const OR = [
+    email ? { email } : null,
+    phone ? { phone } : null
+  ].filter(Boolean) as Array<{ email: string } | { phone: string }>;
+  return OR.length ? { OR } : null;
+}
+
 @Injectable()
 export class OrgService {
   constructor(
@@ -43,10 +61,12 @@ export class OrgService {
       users: users.map((item) => ({
         id: item.id,
         email: item.email,
+        phone: item.phone,
         name: item.name,
         departmentId: item.departmentId,
         departmentName: item.department?.name ?? null,
         isActive: item.isActive,
+        requiresWorkReport: item.requiresWorkReport,
         roles: item.roles.map((role) => role.role.code),
         createdAt: item.createdAt
       }))
@@ -60,6 +80,10 @@ export class OrgService {
     const existing = await this.prisma.tenant.findUnique({ where: { code: dto.code } });
     if (existing && !existing.deletedAt) {
       throw new BadRequestException("Tenant code already exists");
+    }
+    const adminEmail = normalizeEmail(dto.adminEmail);
+    if (!adminEmail) {
+      throw new BadRequestException("Admin email is required");
     }
 
     const passwordHash = await bcrypt.hash(dto.adminPassword ?? "Passw0rd!", 10);
@@ -102,18 +126,20 @@ export class OrgService {
         roles.set(roleDef.code, role.id);
       }
       const admin = await tx.user.upsert({
-        where: { tenantId_email: { tenantId: tenant.id, email: dto.adminEmail } },
+        where: { tenantId_email: { tenantId: tenant.id, email: adminEmail } },
         update: {
           name: dto.adminName,
           passwordHash,
           isActive: true,
+          requiresWorkReport: false,
           deletedAt: null
         },
         create: {
           tenantId: tenant.id,
-          email: dto.adminEmail,
+          email: adminEmail,
           name: dto.adminName,
-          passwordHash
+          passwordHash,
+          requiresWorkReport: false
         }
       });
       const roleId = roles.get(RoleCode.COMPANY_ADMIN);
@@ -191,32 +217,49 @@ export class OrgService {
     if (dto.departmentId) {
       await this.ensureDepartment(user.tenantId, dto.departmentId);
     }
-    const existing = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: user.tenantId, email: dto.email } }
+    const email = normalizeEmail(dto.email);
+    const phone = normalizePhone(dto.phone);
+    this.assertValidContact(email, phone);
+    const contactFilter = contactWhere(email, phone);
+    if (!contactFilter) {
+      throw new BadRequestException("请至少填写邮箱或手机号");
+    }
+    const matchingUsers = await this.prisma.user.findMany({
+      where: { tenantId: user.tenantId, ...contactFilter },
+      select: { id: true, deletedAt: true }
     });
-    if (existing && !existing.deletedAt) {
-      throw new BadRequestException("Email already exists in tenant");
+    const activeConflict = matchingUsers.find((item) => !item.deletedAt);
+    if (activeConflict) {
+      throw new BadRequestException("邮箱或手机号已被当前企业其他账号使用");
+    }
+    const deletedMatches = [...new Set(matchingUsers.map((item) => item.id))];
+    if (deletedMatches.length > 1) {
+      throw new BadRequestException("邮箱和手机号分别匹配到不同的已删除账号，请更换联系方式或联系运维处理");
     }
     await this.subscriptions.assertCanAddActiveUser(user.tenantId);
 
     const passwordHash = await bcrypt.hash(dto.password ?? "Passw0rd!", 10);
-    const created = await this.prisma.user.upsert({
-      where: { tenantId_email: { tenantId: user.tenantId, email: dto.email } },
-      update: {
-        name: dto.name,
-        departmentId: dto.departmentId ?? null,
-        passwordHash,
-        isActive: true,
-        deletedAt: null
-      },
-      create: {
-        tenantId: user.tenantId,
-        email: dto.email,
-        name: dto.name,
-        departmentId: dto.departmentId ?? null,
-        passwordHash
-      }
-    });
+    const data = {
+      email,
+      phone,
+      name: dto.name,
+      departmentId: dto.departmentId ?? null,
+      passwordHash,
+      isActive: true,
+      requiresWorkReport: dto.requiresWorkReport ?? true,
+      deletedAt: null
+    };
+    const created = deletedMatches[0]
+      ? await this.prisma.user.update({
+          where: { id: deletedMatches[0] },
+          data
+        })
+      : await this.prisma.user.create({
+          data: {
+            tenantId: user.tenantId,
+            ...data
+          }
+        });
     await this.replaceRoles(user.tenantId, created.id, dto.roles);
     await this.audit.log({
       tenantId: user.tenantId,
@@ -224,7 +267,7 @@ export class OrgService {
       action: "USER_CREATED",
       targetType: "User",
       targetId: created.id,
-      metadata: { email: created.email, roles: dto.roles, departmentId: dto.departmentId ?? null }
+      metadata: { email: created.email, phone: created.phone, roles: dto.roles, departmentId: dto.departmentId ?? null, requiresWorkReport: created.requiresWorkReport }
     });
     return this.getUser(user.tenantId, created.id);
   }
@@ -238,14 +281,34 @@ export class OrgService {
     if (dto.isActive === true && !existing.isActive) {
       await this.subscriptions.assertCanAddActiveUser(user.tenantId);
     }
+    const email = dto.email === undefined ? existing.email : normalizeEmail(dto.email);
+    const phone = dto.phone === undefined ? existing.phone : normalizePhone(dto.phone);
+    this.assertValidContact(email, phone);
+    const contactFilter = contactWhere(email, phone);
+    if (contactFilter) {
+      const contactConflict = await this.prisma.user.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          id: { not: id },
+          ...contactFilter
+        },
+        select: { id: true }
+      });
+      if (contactConflict) {
+        throw new BadRequestException("邮箱或手机号已被当前企业其他账号使用");
+      }
+    }
     const passwordHash = dto.password ? await bcrypt.hash(dto.password, 10) : undefined;
     await this.prisma.user.update({
       where: { id },
       data: {
+        email: dto.email === undefined ? undefined : email,
+        phone: dto.phone === undefined ? undefined : phone,
         name: dto.name,
         departmentId: dto.departmentId === undefined ? undefined : dto.departmentId,
         passwordHash,
-        isActive: dto.isActive
+        isActive: dto.isActive,
+        requiresWorkReport: dto.requiresWorkReport
       }
     });
     if (dto.roles) {
@@ -262,6 +325,7 @@ export class OrgService {
         departmentId: dto.departmentId ?? null,
         roles: dto.roles ?? null,
         isActive: dto.isActive ?? null,
+        requiresWorkReport: dto.requiresWorkReport ?? null,
         passwordChanged: Boolean(dto.password)
       }
     });
@@ -308,6 +372,15 @@ export class OrgService {
     return user;
   }
 
+  private assertValidContact(email?: string | null, phone?: string | null) {
+    if (!email && !phone) {
+      throw new BadRequestException("请至少填写邮箱或手机号");
+    }
+    if (phone && !/^\+?\d{6,20}$/.test(phone)) {
+      throw new BadRequestException("手机号格式不正确");
+    }
+  }
+
   private async getUser(tenantId: string, id: string) {
     const item = await this.prisma.user.findFirstOrThrow({
       where: { id, tenantId, deletedAt: null },
@@ -319,10 +392,12 @@ export class OrgService {
     return {
       id: item.id,
       email: item.email,
+      phone: item.phone,
       name: item.name,
       departmentId: item.departmentId,
       departmentName: item.department?.name ?? null,
       isActive: item.isActive,
+      requiresWorkReport: item.requiresWorkReport,
       roles: item.roles.map((role) => role.role.code),
       createdAt: item.createdAt
     };

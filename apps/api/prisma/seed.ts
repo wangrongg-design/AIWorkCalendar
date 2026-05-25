@@ -74,33 +74,43 @@ async function main() {
   const users = [
     {
       email: "super@example.com",
+      phone: "13900000001",
       name: "平台超管",
       departmentId: null,
-      role: RoleCode.SUPER_ADMIN
+      role: RoleCode.SUPER_ADMIN,
+      requiresWorkReport: false
     },
     {
       email: "admin@example.com",
+      phone: "13900000002",
       name: "企业管理员",
       departmentId: null,
-      role: RoleCode.COMPANY_ADMIN
+      role: RoleCode.COMPANY_ADMIN,
+      requiresWorkReport: false
     },
     {
       email: "manager@example.com",
+      phone: "13900000003",
       name: "研发经理",
       departmentId: engineering.id,
-      role: RoleCode.DEPARTMENT_MANAGER
+      role: RoleCode.DEPARTMENT_MANAGER,
+      requiresWorkReport: true
     },
     {
       email: "employee@example.com",
+      phone: "13900000004",
       name: "研发员工一",
       departmentId: engineering.id,
-      role: RoleCode.EMPLOYEE
+      role: RoleCode.EMPLOYEE,
+      requiresWorkReport: true
     },
     {
       email: "employee2@example.com",
+      phone: "13900000005",
       name: "产品员工一",
       departmentId: product.id,
-      role: RoleCode.EMPLOYEE
+      role: RoleCode.EMPLOYEE,
+      requiresWorkReport: true
     }
   ];
 
@@ -111,17 +121,21 @@ async function main() {
       update: {
         name: userDef.name,
         departmentId: userDef.departmentId,
+        phone: userDef.phone,
         passwordHash,
         isActive: true,
+        requiresWorkReport: userDef.requiresWorkReport,
         deletedAt: null
       },
       create: {
         tenantId: tenant.id,
         email: userDef.email,
+        phone: userDef.phone,
         name: userDef.name,
         departmentId: userDef.departmentId,
         passwordHash,
-        isActive: true
+        isActive: true,
+        requiresWorkReport: userDef.requiresWorkReport
       }
     });
     seededUsers[userDef.email] = user.id;

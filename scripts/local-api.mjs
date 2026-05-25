@@ -75,11 +75,11 @@ const subscription = {
 const subscriptions = new Map([[subscription.tenantId, subscription]]);
 
 const users = [
-  makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"]),
-  makeUser("admin", "admin@example.com", "企业管理员", null, ["COMPANY_ADMIN"]),
-  makeUser("manager", "manager@example.com", "研发经理", "dept-engineering", ["DEPARTMENT_MANAGER"]),
-  makeUser("employee", "employee@example.com", "研发员工一", "dept-engineering", ["EMPLOYEE"]),
-  makeUser("employee2", "employee2@example.com", "产品员工一", "dept-product", ["EMPLOYEE"])
+  makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD, "13900000001", false),
+  makeUser("admin", "admin@example.com", "企业管理员", null, ["COMPANY_ADMIN"], tenant.id, PASSWORD, "13900000002", false),
+  makeUser("manager", "manager@example.com", "研发经理", "dept-engineering", ["DEPARTMENT_MANAGER"], tenant.id, PASSWORD, "13900000003", true),
+  makeUser("employee", "employee@example.com", "研发员工一", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000004", true),
+  makeUser("employee2", "employee2@example.com", "产品员工一", "dept-product", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000005", true)
 ];
 
 const analyses = new Map();
@@ -208,16 +208,18 @@ server.listen(PORT, () => {
   console.log(`Local memory API listening on http://localhost:${PORT}`);
 });
 
-function makeUser(id, email, name, departmentId, roles, tenantId = tenant.id, password = PASSWORD) {
+function makeUser(id, email, name, departmentId, roles, tenantId = tenant.id, password = PASSWORD, phone = null, requiresWorkReport = true) {
   return {
     id,
     tenantId,
-    email,
+    email: normalizeEmail(email),
+    phone: normalizePhone(phone),
     name,
     departmentId,
     roles,
     password,
     isActive: true,
+    requiresWorkReport,
     createdAt: new Date().toISOString()
   };
 }
@@ -265,9 +267,10 @@ function createAnalysis(log) {
 }
 
 function login(res, body) {
+  const account = normalizeAccount(body.account ?? body.email);
   const found = users.find((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
-    return item.email === body.email && (!body.tenantCode || ownerTenant?.code === body.tenantCode);
+    return matchesAccount(item, account) && (!body.tenantCode || ownerTenant?.code === body.tenantCode);
   });
   if (!found || body.password !== (found.password ?? PASSWORD)) {
     return error(res, 401, "Invalid email or password");
@@ -310,7 +313,7 @@ function registerTenant(body) {
     updatedAt: new Date().toISOString(),
     deletedAt: null
   });
-  const admin = makeUser(`user-${Date.now()}`, body.adminEmail, body.adminName, null, ["COMPANY_ADMIN"], tenantId, body.password);
+  const admin = makeUser(`user-${Date.now()}`, body.adminEmail, body.adminName, null, ["COMPANY_ADMIN"], tenantId, body.password, null, false);
   users.push(admin);
   audit(admin, "TENANT_REGISTERED", "Tenant", tenantId, { tenantCode: newTenant.code, adminEmail: admin.email });
   return {
@@ -347,8 +350,8 @@ function clearLocalData(user) {
   users.splice(
     0,
     users.length,
-    makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD),
-    makeUser("admin", "admin@example.com", "企业管理员", null, ["COMPANY_ADMIN"], tenant.id, PASSWORD)
+    makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD, "13900000001", false),
+    makeUser("admin", "admin@example.com", "企业管理员", null, ["COMPANY_ADMIN"], tenant.id, PASSWORD, "13900000002", false)
   );
 
   subscriptions.clear();
@@ -392,9 +395,10 @@ function clearLocalData(user) {
 }
 
 function requestPasswordReset(body) {
+  const email = normalizeEmail(body.email);
   const found = users.find((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
-    return item.email === body.email && (!body.tenantCode || ownerTenant?.code === body.tenantCode);
+    return item.email === email && (!body.tenantCode || ownerTenant?.code === body.tenantCode);
   });
   if (!found) return { ok: true };
   const token = `reset-${Date.now()}-${found.id}`;
@@ -440,10 +444,12 @@ function me(user) {
     tenantName: ownerTenant.name,
     tenantCode: ownerTenant.code,
     email: user.email,
+    phone: user.phone ?? null,
     name: user.name,
     departmentId: user.departmentId,
     departmentName: dept?.name ?? null,
-    roles: user.roles
+    roles: user.roles,
+    requiresWorkReport: user.requiresWorkReport ?? true
   };
 }
 
@@ -458,10 +464,12 @@ function getOrg(user) {
     users: visibleUsers.map((item) => ({
       id: item.id,
       email: item.email,
+      phone: item.phone ?? null,
       name: item.name,
       departmentId: item.departmentId,
       departmentName: visibleDepartments.find((dept) => dept.id === item.departmentId)?.name ?? null,
       isActive: item.isActive,
+      requiresWorkReport: item.requiresWorkReport ?? true,
       roles: item.roles,
       createdAt: item.createdAt
     }))
@@ -503,9 +511,24 @@ function updateDepartment(user, id, body) {
 function createOrgUser(currentUser, body) {
   requireRole(currentUser, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
   assertSeatAvailable(currentUser.tenantId);
-  if (users.some((item) => item.email === body.email && item.tenantId === currentUser.tenantId)) throw httpError(400, "Email already exists in tenant");
+  const email = normalizeEmail(body.email);
+  const phone = normalizePhone(body.phone);
+  assertContact(email, phone);
+  if (users.some((item) => item.tenantId === currentUser.tenantId && (item.email === email || (phone && item.phone === phone)))) {
+    throw httpError(400, "邮箱或手机号已被当前企业其他账号使用");
+  }
   const item = {
-    ...makeUser(`user-${Date.now()}`, body.email, body.name, body.departmentId ?? null, body.roles?.length ? body.roles : ["EMPLOYEE"], currentUser.tenantId)
+    ...makeUser(
+      `user-${Date.now()}`,
+      email,
+      body.name,
+      body.departmentId ?? null,
+      body.roles?.length ? body.roles : ["EMPLOYEE"],
+      currentUser.tenantId,
+      body.password || PASSWORD,
+      phone,
+      body.requiresWorkReport ?? true
+    )
   };
   users.push(item);
   return orgUser(item);
@@ -674,9 +697,11 @@ function opsOverview(user) {
           tenantName: ownerTenant.name,
           tenantCode: ownerTenant.code,
           email: item.email,
+          phone: item.phone ?? null,
           name: item.name,
           departmentName: departments.find((dept) => dept.id === item.departmentId && dept.tenantId === item.tenantId)?.name ?? null,
           isActive: item.isActive,
+          requiresWorkReport: item.requiresWorkReport ?? true,
           roles: item.roles,
           lastLoginAt: item.lastLoginAt ?? null,
           createdAt: item.createdAt
@@ -692,7 +717,7 @@ function updateOpsAccount(user, accountId, body) {
   if (!target) throw httpError(404, "Account not found");
   if (body.name !== undefined) target.name = String(body.name).trim();
   if (body.isActive !== undefined) target.isActive = Boolean(body.isActive);
-  audit(user, "OPS_ACCOUNT_UPDATED", "User", target.id, { targetTenantId: target.tenantId, email: target.email, isActive: target.isActive });
+  audit(user, "OPS_ACCOUNT_UPDATED", "User", target.id, { targetTenantId: target.tenantId, email: target.email, phone: target.phone, isActive: target.isActive });
   const ownerTenant = tenants.find((candidate) => candidate.id === target.tenantId) ?? tenant;
   return {
     id: target.id,
@@ -700,9 +725,11 @@ function updateOpsAccount(user, accountId, body) {
     tenantName: ownerTenant.name,
     tenantCode: ownerTenant.code,
     email: target.email,
+    phone: target.phone ?? null,
     name: target.name,
     departmentName: departments.find((dept) => dept.id === target.departmentId && dept.tenantId === target.tenantId)?.name ?? null,
     isActive: target.isActive,
+    requiresWorkReport: target.requiresWorkReport ?? true,
     roles: target.roles,
     lastLoginAt: target.lastLoginAt ?? null,
     createdAt: target.createdAt
@@ -773,10 +800,20 @@ function updateOrgUser(user, id, body) {
   const item = users.find((candidate) => candidate.id === id && candidate.tenantId === user.tenantId);
   if (!item) throw httpError(404, "User not found");
   if (body.isActive === true && !item.isActive) assertSeatAvailable(user.tenantId);
+  const nextEmail = body.email === undefined ? item.email : normalizeEmail(body.email);
+  const nextPhone = body.phone === undefined ? item.phone : normalizePhone(body.phone);
+  assertContact(nextEmail, nextPhone);
+  if (users.some((candidate) => candidate.tenantId === user.tenantId && candidate.id !== id && (candidate.email === nextEmail || (nextPhone && candidate.phone === nextPhone)))) {
+    throw httpError(400, "邮箱或手机号已被当前企业其他账号使用");
+  }
+  if (body.email !== undefined) item.email = nextEmail;
+  if (body.phone !== undefined) item.phone = nextPhone;
   if (body.name !== undefined) item.name = body.name;
   if (body.departmentId !== undefined) item.departmentId = body.departmentId;
   if (body.roles !== undefined) item.roles = body.roles;
   if (body.isActive !== undefined) item.isActive = body.isActive;
+  if (body.requiresWorkReport !== undefined) item.requiresWorkReport = Boolean(body.requiresWorkReport);
+  if (body.password) item.password = body.password;
   return orgUser(item);
 }
 
@@ -785,10 +822,12 @@ function orgUser(item) {
   return {
     id: item.id,
     email: item.email,
+    phone: item.phone ?? null,
     name: item.name,
     departmentId: item.departmentId,
     departmentName: visibleDepartments.find((dept) => dept.id === item.departmentId)?.name ?? null,
     isActive: item.isActive,
+    requiresWorkReport: item.requiresWorkReport ?? true,
     roles: item.roles,
     createdAt: item.createdAt
   };
@@ -871,6 +910,7 @@ function projectWithOwner(project) {
           id: owner.id,
           name: owner.name,
           email: owner.email,
+          phone: owner.phone ?? null,
           departmentId: owner.departmentId,
           department: departments.find((item) => item.id === owner.departmentId && item.tenantId === owner.tenantId) ?? null
         }
@@ -982,7 +1022,8 @@ function calendar(user, url) {
   const start = new Date(`${month}-01T00:00:00.000Z`);
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
   const visibleUsers = filterUsersByAccess(user, url);
-  const visibleUserIds = new Set(visibleUsers.map((item) => item.id));
+  const reportUsers = visibleUsers.filter((item) => item.requiresWorkReport);
+  const visibleUserIds = new Set(reportUsers.map((item) => item.id));
   const days = [];
   for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
     const key = dateKey(cursor);
@@ -992,17 +1033,17 @@ function calendar(user, url) {
     days.push({
       date: key,
       filledCount: filled.size,
-      missingCount: Math.max(visibleUsers.length - filled.size, 0),
-      fillRate: visibleUsers.length ? Number(((filled.size / visibleUsers.length) * 100).toFixed(1)) : 0,
+      missingCount: Math.max(reportUsers.length - filled.size, 0),
+      fillRate: reportUsers.length ? Number(((filled.size / reportUsers.length) * 100).toFixed(1)) : 0,
       riskCount
     });
   }
-  return { month, scope: resolveScope(user, url), totalEmployees: visibleUsers.length, days };
+  return { month, scope: resolveScope(user, url), totalEmployees: reportUsers.length, days };
 }
 
 function calendarDay(user, url) {
   const date = url.searchParams.get("date") ?? todayKey;
-  const visibleUsers = filterUsersByAccess(user, url);
+  const visibleUsers = filterUsersByAccess(user, url).filter((item) => item.requiresWorkReport);
   const visibleUserIds = new Set(visibleUsers.map((item) => item.id));
   const logs = workLogs.filter((item) => item.date === date && item.status === "SUBMITTED" && !item.deletedAt && visibleUserIds.has(item.userId));
   const logsByUser = new Map();
@@ -1011,6 +1052,7 @@ function calendarDay(user, url) {
     id: item.id,
     name: item.name,
     email: item.email,
+    phone: item.phone ?? null,
     departmentName: departments.find((dept) => dept.id === item.departmentId)?.name ?? null,
     logs: logsByUser.get(item.id)
   }));
@@ -1018,6 +1060,7 @@ function calendarDay(user, url) {
     id: item.id,
     name: item.name,
     email: item.email,
+    phone: item.phone ?? null,
     departmentName: departments.find((dept) => dept.id === item.departmentId)?.name ?? null
   }));
   return {
@@ -1223,6 +1266,9 @@ function generateReport(user, body) {
 }
 
 function listNotifications(user) {
+  if (!user.requiresWorkReport) {
+    return notifications.filter((item) => item.userId === user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
   const hasSubmittedToday = workLogs.some((item) => item.userId === user.id && item.date === todayKey && item.status === "SUBMITTED" && !item.deletedAt);
   const hasReminder = notifications.some((item) => item.userId === user.id && item.type === "WORK_LOG_REMINDER" && item.createdAt.slice(0, 10) === todayKey);
   if (!hasSubmittedToday && !hasReminder) {
@@ -1308,6 +1354,33 @@ function filterUsersByAccess(user, url) {
   return tenantUsers.filter((item) => item.isActive);
 }
 
+function normalizeEmail(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || null;
+}
+
+function normalizePhone(value) {
+  const normalized = String(value ?? "").trim().replace(/[\s-]/g, "");
+  return normalized || null;
+}
+
+function normalizeAccount(value) {
+  const text = String(value ?? "").trim();
+  return {
+    email: text.toLowerCase(),
+    phone: normalizePhone(text)
+  };
+}
+
+function matchesAccount(user, account) {
+  return Boolean((account.email && user.email === account.email) || (account.phone && user.phone === account.phone));
+}
+
+function assertContact(email, phone) {
+  if (!email && !phone) throw httpError(400, "请至少填写邮箱或手机号");
+  if (phone && !/^\+?\d{6,20}$/.test(phone)) throw httpError(400, "手机号格式不正确");
+}
+
 function resolveScope(user, url) {
   const requestedScope = url.searchParams.get("scope");
   const requestedDepartmentId = url.searchParams.get("departmentId");
@@ -1330,6 +1403,7 @@ function enrichLog(log) {
           id: owner.id,
           name: owner.name,
           email: owner.email,
+          phone: owner.phone ?? null,
           departmentId: owner.departmentId,
           department: departments.find((item) => item.id === owner.departmentId && item.tenantId === owner.tenantId) ?? null
         }

@@ -233,3 +233,21 @@ pnpm config:apply
 - `apps/wechat-miniprogram/project.private.config.json`
 
 之后把 `.env.production.generated` 用作生产 `.env`，把生成的 Nginx 配置复制到服务器 Nginx 配置目录。
+
+生产 Docker 端口绑定也从 `config/deployment.json` 生成。备案前需要用 IP 直接访问时：
+
+```json
+"docker": {
+  "webPortBind": "3000",
+  "apiPortBind": "3001"
+}
+```
+
+备案完成并通过 Nginx/HTTPS 访问时，改回只监听本机：
+
+```json
+"docker": {
+  "webPortBind": "127.0.0.1:3000",
+  "apiPortBind": "127.0.0.1:3001"
+}
+```

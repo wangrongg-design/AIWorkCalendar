@@ -37,10 +37,12 @@ type OpsAccount = {
   tenantId: string;
   tenantName: string;
   tenantCode: string;
-  email: string;
+  email: string | null;
+  phone?: string | null;
   name: string;
   departmentName?: string | null;
   isActive: boolean;
+  requiresWorkReport: boolean;
   roles: RoleCode[];
   lastLoginAt?: string | null;
   createdAt: string;
@@ -167,7 +169,7 @@ export default function OpsPage() {
       render: (_, record) => (
         <div>
           <div className="font-medium text-ink">{record.name}</div>
-          <div className="mt-1 text-xs text-muted">{record.email}</div>
+          <div className="mt-1 text-xs text-muted">{[record.phone, record.email].filter(Boolean).join(" / ") || "-"}</div>
         </div>
       )
     },
@@ -195,6 +197,11 @@ export default function OpsPage() {
       )
     },
     { title: "部门", width: 120, render: (_, record) => record.departmentName ?? "-" },
+    {
+      title: "填报",
+      width: 90,
+      render: (_, record) => <Tag color={record.requiresWorkReport ? "blue" : "default"}>{record.requiresWorkReport ? "需要" : "不需要"}</Tag>
+    },
     { title: "最近登录", width: 150, render: (_, record) => (record.lastLoginAt ? dayjs(record.lastLoginAt).format("YYYY-MM-DD HH:mm") : "-") },
     {
       title: "启用",

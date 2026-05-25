@@ -18,7 +18,7 @@
   <view class="surface metrics">
     <view class="metric">
       <view class="metric-value">{{totalEmployees}}</view>
-      <view class="metric-label">可见成员</view>
+      <view class="metric-label">应填报</view>
     </view>
     <view class="metric">
       <view class="metric-value">{{todayData.fillRate || 0}}%</view>

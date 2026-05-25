@@ -32,6 +32,10 @@
     "appid": "touristappid",
     "apiBaseUrl": "https://api.example.com"
   },
+  "docker": {
+    "webPortBind": "127.0.0.1:3000",
+    "apiPortBind": "127.0.0.1:3001"
+  },
   "nginx": {
     "webServerName": "app.example.com",
     "apiServerName": "api.example.com"

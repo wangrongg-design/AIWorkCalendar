@@ -20,4 +20,4 @@ RUN pnpm install --filter @work-calendar-ai/api... --frozen-lockfile=false
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/prisma apps/api/prisma
 EXPOSE 3001
-CMD ["sh", "-c", "pnpm --filter @work-calendar-ai/api prisma:generate && if [ \"$RUN_DB_INIT_ON_START\" = \"true\" ]; then pnpm --filter @work-calendar-ai/api prisma:push && pnpm --filter @work-calendar-ai/api seed; fi && pnpm --filter @work-calendar-ai/api start:prod"]
+CMD ["sh", "-c", "pnpm --filter @work-calendar-ai/api prisma:generate && if [ \"$RUN_DB_INIT_ON_START\" = \"true\" ]; then pnpm --filter @work-calendar-ai/api prisma:push && pnpm --filter @work-calendar-ai/api report-requirements:backfill && pnpm --filter @work-calendar-ai/api seed; fi && pnpm --filter @work-calendar-ai/api start:prod"]

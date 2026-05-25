@@ -5,7 +5,7 @@ Page({
   data: {
     apiBaseUrl: "http://localhost:3001",
     tenantCode: "demo",
-    email: "admin@example.com",
+    account: "admin@example.com",
     password: "Passw0rd!",
     loading: false
   },
@@ -27,8 +27,8 @@ Page({
     this.setData({ tenantCode: event.detail.value.trim() });
   },
 
-  onEmailInput(event) {
-    this.setData({ email: event.detail.value.trim() });
+  onAccountInput(event) {
+    this.setData({ account: event.detail.value.trim() });
   },
 
   onPasswordInput(event) {
@@ -36,8 +36,8 @@ Page({
   },
 
   async login() {
-    const { apiBaseUrl: baseUrl, tenantCode, email, password } = this.data;
-    if (!baseUrl || !email || !password) {
+    const { apiBaseUrl: baseUrl, tenantCode, account, password } = this.data;
+    if (!baseUrl || !account || !password) {
       wx.showToast({ title: "请填写登录信息", icon: "none" });
       return;
     }
@@ -49,7 +49,7 @@ Page({
         method: "POST",
         data: {
           tenantCode,
-          email,
+          account,
           password
         }
       });

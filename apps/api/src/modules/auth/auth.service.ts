@@ -35,6 +35,14 @@ function addHours(hours: number) {
   return date;
 }
 
+function normalizeLoginAccount(dto: LoginDto) {
+  return (dto.account ?? dto.email ?? "").trim();
+}
+
+function normalizePhone(value: string) {
+  return value.replace(/[\s-]/g, "");
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -45,7 +53,8 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterTenantDto) {
-    this.rateLimit.consume(`register:${dto.adminEmail.toLowerCase()}`, 5, 60 * 60 * 1000);
+    const adminEmail = dto.adminEmail.trim().toLowerCase();
+    this.rateLimit.consume(`register:${adminEmail}`, 5, 60 * 60 * 1000);
     const existingTenant = await this.prisma.tenant.findUnique({ where: { code: dto.tenantCode } });
     if (existingTenant && !existingTenant.deletedAt) {
       throw new BadRequestException("企业代码已被使用");
@@ -87,10 +96,11 @@ export class AuthService {
       const admin = await tx.user.create({
         data: {
           tenantId: tenant.id,
-          email: dto.adminEmail,
+          email: adminEmail,
           name: dto.adminName,
           passwordHash,
           isActive: true,
+          requiresWorkReport: false,
           emailVerifiedAt: null,
           lastPasswordChangedAt: new Date()
         },
@@ -135,7 +145,7 @@ export class AuthService {
       action: "TENANT_REGISTERED",
       targetType: "Tenant",
       targetId: user.tenantId,
-      metadata: { tenantCode: dto.tenantCode, adminEmail: dto.adminEmail }
+      metadata: { tenantCode: dto.tenantCode, adminEmail }
     });
     return {
       ...(await this.buildAuthResponse(user, roles)),
@@ -145,15 +155,21 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    this.rateLimit.consume(`login:${dto.tenantCode ?? "any"}:${dto.email.toLowerCase()}`, 10, 15 * 60 * 1000);
+    const account = normalizeLoginAccount(dto);
+    if (!account) {
+      throw new BadRequestException("请输入邮箱或手机号");
+    }
+    const normalizedEmail = account.toLowerCase();
+    const normalizedPhone = normalizePhone(account);
+    this.rateLimit.consume(`login:${dto.tenantCode ?? "any"}:${normalizedEmail}`, 10, 15 * 60 * 1000);
     const where: Prisma.UserWhereInput = dto.tenantCode
       ? {
-          email: dto.email,
+          OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
           deletedAt: null,
           tenant: { code: dto.tenantCode, deletedAt: null }
         }
       : {
-          email: dto.email,
+          OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
           deletedAt: null
         };
 
@@ -168,7 +184,7 @@ export class AuthService {
     });
 
     if (users.length > 1 && !dto.tenantCode) {
-      throw new BadRequestException("Multiple tenants found for this email. Provide tenantCode.");
+      throw new BadRequestException("该账号存在于多个企业，请填写企业代码");
     }
     const user = users[0];
     if (!user || !user.isActive) {
@@ -177,7 +193,7 @@ export class AuthService {
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       throw new UnauthorizedException("Account is temporarily locked");
     }
-    if (process.env.REQUIRE_EMAIL_VERIFICATION === "true" && !user.emailVerifiedAt) {
+    if (process.env.REQUIRE_EMAIL_VERIFICATION === "true" && user.email && !user.emailVerifiedAt) {
       throw new UnauthorizedException("Email is not verified");
     }
 
@@ -227,18 +243,21 @@ export class AuthService {
       tenantName: fullUser.tenant.name,
       tenantCode: fullUser.tenant.code,
       email: fullUser.email,
+      phone: fullUser.phone,
       name: fullUser.name,
       departmentId: fullUser.departmentId,
       departmentName: fullUser.department?.name ?? null,
-      roles: fullUser.roles.map((item) => item.role.code)
+      roles: fullUser.roles.map((item) => item.role.code),
+      requiresWorkReport: fullUser.requiresWorkReport
     };
   }
 
   async requestPasswordReset(dto: PasswordResetRequestDto) {
-    this.rateLimit.consume(`password-reset:${dto.email.toLowerCase()}`, 5, 60 * 60 * 1000);
+    const email = dto.email.trim().toLowerCase();
+    this.rateLimit.consume(`password-reset:${email}`, 5, 60 * 60 * 1000);
     const user = await this.prisma.user.findFirst({
       where: {
-        email: dto.email,
+        email,
         deletedAt: null,
         tenant: dto.tenantCode ? { code: dto.tenantCode, deletedAt: null } : { deletedAt: null }
       },
@@ -360,11 +379,13 @@ export class AuthService {
     user: {
       id: string;
       tenantId: string;
-      email: string;
+      email: string | null;
+      phone?: string | null;
       name: string;
       departmentId: string | null;
       tenant: { name: string; code: string };
       department?: { name: string } | null;
+      requiresWorkReport?: boolean;
     },
     roles: RoleCode[]
   ) {
@@ -382,10 +403,12 @@ export class AuthService {
         tenantName: user.tenant.name,
         tenantCode: user.tenant.code,
         email: user.email,
+        phone: user.phone ?? null,
         name: user.name,
         departmentId: user.departmentId,
         departmentName: user.department?.name ?? null,
-        roles
+        roles,
+        requiresWorkReport: user.requiresWorkReport ?? true
       }
     };
   }

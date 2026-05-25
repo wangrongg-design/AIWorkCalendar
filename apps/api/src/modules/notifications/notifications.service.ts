@@ -42,6 +42,13 @@ export class NotificationsService {
   }
 
   private async ensureTodayWorkLogReminder(user: CurrentUser) {
+    const account = await this.prisma.user.findFirst({
+      where: { id: user.id, tenantId: user.tenantId, deletedAt: null },
+      select: { requiresWorkReport: true }
+    });
+    if (!account?.requiresWorkReport) {
+      return;
+    }
     const nowInShanghai = new Date(Date.now() + 8 * 60 * 60 * 1000);
     const today = new Date(
       Date.UTC(nowInShanghai.getUTCFullYear(), nowInShanghai.getUTCMonth(), nowInShanghai.getUTCDate())
