@@ -1,0 +1,69 @@
+import Foundation
+import Combine
+
+@MainActor
+final class AuthStore: ObservableObject {
+    @Published var user: AuthUser?
+    @Published var apiBaseURL: String {
+        didSet {
+            SessionStore.saveBaseURL(apiBaseURL)
+        }
+    }
+    @Published var isRefreshing = false
+
+    init() {
+        self.user = SessionStore.loadUser()
+        self.apiBaseURL = SessionStore.loadBaseURL()
+    }
+
+    var isAuthenticated: Bool {
+        user != nil && SessionStore.loadToken() != nil
+    }
+
+    func client() throws -> APIClient {
+        guard let client = APIClient(baseURLString: apiBaseURL, accessToken: SessionStore.loadToken()) else {
+            throw APIError.invalidBaseURL
+        }
+        return client
+    }
+
+    func login(account: String, password: String, tenantCode: String?) async throws {
+        let cleanBaseURL = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let client = APIClient(baseURLString: cleanBaseURL, accessToken: nil) else {
+            throw APIError.invalidBaseURL
+        }
+        let cleanTenantCode = tenantCode?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = LoginRequest(
+            account: account.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password,
+            tenantCode: cleanTenantCode?.isEmpty == true ? nil : cleanTenantCode
+        )
+        let response: LoginResponse = try await client.request("/auth/login", method: .post, body: request)
+        apiBaseURL = cleanBaseURL
+        SessionStore.saveToken(response.accessToken)
+        SessionStore.saveUser(response.user)
+        user = response.user
+    }
+
+    func refreshMeIfPossible() async {
+        guard SessionStore.loadToken() != nil else {
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let me: AuthUser = try await client().request("/auth/me")
+            SessionStore.saveUser(me)
+            user = me
+        } catch APIError.server(let statusCode, _) where statusCode == 401 {
+            logout()
+        } catch {
+            // Keep the cached user so the app can still open if the API is temporarily unreachable.
+        }
+    }
+
+    func logout() {
+        SessionStore.clearSession()
+        user = nil
+    }
+}
