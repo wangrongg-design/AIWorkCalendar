@@ -32,6 +32,10 @@
     "appid": "touristappid",
     "apiBaseUrl": "https://api.example.com"
   },
+  "exports": {
+    "hostDir": "/data/work-calendar-ai/exports",
+    "containerDir": "/app/storage/exports"
+  },
   "docker": {
     "webPortBind": "127.0.0.1:3000",
     "apiPortBind": "127.0.0.1:3001"

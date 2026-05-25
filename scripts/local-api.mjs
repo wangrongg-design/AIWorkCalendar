@@ -268,11 +268,20 @@ function createAnalysis(log) {
 
 function login(res, body) {
   const account = normalizeAccount(body.account ?? body.email);
-  const found = users.find((item) => {
+  const matches = users.filter((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
-    return matchesAccount(item, account) && (!body.tenantCode || ownerTenant?.code === body.tenantCode);
+    return (
+      matchesAccount(item, account) &&
+      !item.deletedAt &&
+      !ownerTenant?.deletedAt &&
+      (!body.tenantCode || ownerTenant?.code === body.tenantCode)
+    );
   });
-  if (!found || body.password !== (found.password ?? PASSWORD)) {
+  if (matches.length > 1 && !body.tenantCode) {
+    return error(res, 400, "该账号存在于多个企业，请填写企业代码");
+  }
+  const found = matches[0];
+  if (!found || !found.isActive || body.password !== (found.password ?? PASSWORD)) {
     return error(res, 401, "Invalid email or password");
   }
   found.lastLoginAt = new Date().toISOString();
@@ -478,16 +487,59 @@ function getOrg(user) {
 
 function createTenant(user, body) {
   requireRole(user, ["SUPER_ADMIN"]);
+  const code = String(body.code ?? "").trim().toLowerCase();
+  if (!/^[a-z0-9-]{2,32}$/.test(code)) throw httpError(400, "企业代码格式不正确");
+  if (tenants.some((item) => item.code === code && !item.deletedAt)) throw httpError(400, "Tenant code already exists");
+  const adminEmail = normalizeEmail(body.adminEmail);
+  if (!adminEmail) throw httpError(400, "Admin email is required");
+  const now = new Date().toISOString();
+  const tenantId = `tenant-${Date.now()}`;
+  const newTenant = {
+    id: tenantId,
+    name: body.name,
+    code,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null
+  };
+  tenants.push(newTenant);
+  const periodEnd = dateKey(addMonths(today, 1));
+  subscriptions.set(tenantId, {
+    id: `sub-${tenantId}`,
+    tenantId,
+    plan: "TRIAL",
+    status: "TRIALING",
+    seatLimit: 3,
+    currentPeriodStart: todayKey,
+    currentPeriodEnd: periodEnd,
+    trialEndsAt: periodEnd,
+    canceledAt: null,
+    provider: "manual",
+    externalCustomerId: null,
+    externalSubscriptionId: null,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null
+  });
+  const admin = makeUser(
+    `user-${Date.now()}`,
+    adminEmail,
+    body.adminName,
+    null,
+    ["COMPANY_ADMIN"],
+    tenantId,
+    body.adminPassword || PASSWORD,
+    null,
+    false
+  );
+  users.push(admin);
+  audit(user, "TENANT_CREATED", "Tenant", tenantId, { tenantCode: code, adminEmail });
   return {
-    tenant: {
-      id: `tenant-${Date.now()}`,
-      name: body.name,
-      code: body.code
-    },
+    tenant: newTenant,
     admin: {
-      id: `user-${Date.now()}`,
-      email: body.adminEmail,
-      name: body.adminName
+      id: admin.id,
+      email: admin.email,
+      name: admin.name
     }
   };
 }
@@ -514,7 +566,7 @@ function createOrgUser(currentUser, body) {
   const email = normalizeEmail(body.email);
   const phone = normalizePhone(body.phone);
   assertContact(email, phone);
-  if (users.some((item) => item.tenantId === currentUser.tenantId && (item.email === email || (phone && item.phone === phone)))) {
+  if (hasContactConflict(currentUser.tenantId, email, phone)) {
     throw httpError(400, "邮箱或手机号已被当前企业其他账号使用");
   }
   const item = {
@@ -803,7 +855,7 @@ function updateOrgUser(user, id, body) {
   const nextEmail = body.email === undefined ? item.email : normalizeEmail(body.email);
   const nextPhone = body.phone === undefined ? item.phone : normalizePhone(body.phone);
   assertContact(nextEmail, nextPhone);
-  if (users.some((candidate) => candidate.tenantId === user.tenantId && candidate.id !== id && (candidate.email === nextEmail || (nextPhone && candidate.phone === nextPhone)))) {
+  if (hasContactConflict(user.tenantId, nextEmail, nextPhone, id)) {
     throw httpError(400, "邮箱或手机号已被当前企业其他账号使用");
   }
   if (body.email !== undefined) item.email = nextEmail;
@@ -1376,6 +1428,20 @@ function matchesAccount(user, account) {
   return Boolean((account.email && user.email === account.email) || (account.phone && user.phone === account.phone));
 }
 
+function matchesContact(user, email, phone) {
+  return Boolean((email && user.email === email) || (phone && user.phone === phone));
+}
+
+function hasContactConflict(tenantId, email, phone, excludeUserId = null) {
+  return users.some(
+    (item) =>
+      item.tenantId === tenantId &&
+      item.id !== excludeUserId &&
+      !item.deletedAt &&
+      matchesContact(item, email, phone)
+  );
+}
+
 function assertContact(email, phone) {
   if (!email && !phone) throw httpError(400, "请至少填写邮箱或手机号");
   if (phone && !/^\+?\d{6,20}$/.test(phone)) throw httpError(400, "手机号格式不正确");
@@ -1431,6 +1497,7 @@ function assertCanAccessLog(user, log) {
 
 function requireUser(user) {
   if (!user) throw httpError(401, "Missing bearer token");
+  if (!user.isActive || user.deletedAt) throw httpError(401, "User not found");
   return user;
 }
 

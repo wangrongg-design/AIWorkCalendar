@@ -37,3 +37,34 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   return (await response.json()) as T;
 }
 
+export async function apiDownload(path: string, options: RequestInit = {}) {
+  const token = useAuthStore.getState().token;
+  const headers = new Headers(options.headers);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers
+  });
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const errorBody = (await response.json()) as { message?: string | string[] };
+      if (Array.isArray(errorBody.message)) {
+        message = errorBody.message.join("; ");
+      } else if (errorBody.message) {
+        message = errorBody.message;
+      }
+    } catch {
+      message = response.statusText;
+    }
+    throw new Error(message);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  return {
+    blob: await response.blob(),
+    filename: filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : "download.zip"
+  };
+}

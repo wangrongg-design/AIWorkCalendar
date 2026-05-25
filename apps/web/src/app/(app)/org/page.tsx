@@ -6,7 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
 import {
   AuditLog,
@@ -15,6 +15,8 @@ import {
   DataDeletionRequest,
   DataDeletionScope,
   Department,
+  ExportTask,
+  ExportTaskStatus,
   OrgUser,
   PaymentProvider,
   RoleCode,
@@ -107,6 +109,14 @@ const deletionStatusColors: Record<string, string> = {
   CANCELED: "default"
 };
 
+const exportTaskStatusColors: Record<ExportTaskStatus, string> = {
+  PENDING: "orange",
+  PROCESSING: "blue",
+  COMPLETED: "green",
+  FAILED: "red",
+  EXPIRED: "default"
+};
+
 function optionLabel<T extends string>(options: Array<{ value: T; label: string }>, value?: T) {
   return options.find((item) => item.value === value)?.label ?? value ?? "-";
 }
@@ -132,8 +142,14 @@ function moneyText(amountCents?: number, currency = "CNY") {
   }).format(amountCents / 100);
 }
 
-function downloadJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+function fileSizeText(bytes?: number | null) {
+  if (!bytes) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -191,6 +207,13 @@ export default function OrgPage() {
     queryKey: ["data-deletion-requests"],
     queryFn: () => apiFetch<DataDeletionRequest[]>("/privacy/data-deletion-requests"),
     enabled: Boolean(user)
+  });
+
+  const exportTasks = useQuery({
+    queryKey: ["export-tasks"],
+    queryFn: () => apiFetch<ExportTask[]>("/exports/data-tasks"),
+    enabled: Boolean(user),
+    refetchInterval: 5000
   });
 
   const saveDepartment = useMutation({
@@ -322,13 +345,29 @@ export default function OrgPage() {
     }
   });
 
-  const exportData = useMutation({
-    mutationFn: () => apiFetch<unknown>(`/exports/data?scope=${canManage ? "tenant" : "self"}`),
-    onSuccess: (data) => {
-      const scope = canManage ? "tenant" : "self";
-      const code = org.data?.tenant.code ?? "work-calendar";
-      downloadJson(`work-calendar-ai-${code}-${scope}-${dayjs().format("YYYYMMDD-HHmmss")}.json`, data);
-      message.success("数据备份已导出");
+  const createExportTask = useMutation({
+    mutationFn: () =>
+      apiFetch<ExportTask>(`/exports/data-tasks?scope=${canManage ? "tenant" : "self"}`, {
+        method: "POST",
+        body: JSON.stringify({})
+      }),
+    onSuccess: () => {
+      message.success("导出任务已创建，生成完成后可下载压缩包。");
+      queryClient.invalidateQueries({ queryKey: ["export-tasks"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "导出任务创建失败");
+    }
+  });
+
+  const downloadExportTask = useMutation({
+    mutationFn: (task: ExportTask) => apiDownload(`/exports/data-tasks/${task.id}/download`),
+    onSuccess: ({ blob, filename }) => {
+      downloadBlob(filename, blob);
+      message.success("备份压缩包已开始下载");
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "下载失败");
     }
   });
 
@@ -450,6 +489,35 @@ export default function OrgPage() {
     { title: "申请时间", dataIndex: "requestedAt", width: 170, render: dateTimeText }
   ];
 
+  const exportTaskColumns: ColumnsType<ExportTask> = [
+    { title: "范围", dataIndex: "scope", width: 110, render: (value: string) => (value === "TENANT" ? "全企业" : "仅本人") },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 120,
+      render: (value: ExportTaskStatus) => <Tag color={exportTaskStatusColors[value]}>{value}</Tag>
+    },
+    { title: "文件", dataIndex: "fileName", render: (value?: string | null) => value || "-" },
+    { title: "大小", dataIndex: "fileSize", width: 100, render: fileSizeText },
+    { title: "有效期至", dataIndex: "expiresAt", width: 170, render: dateTimeText },
+    {
+      title: "操作",
+      width: 120,
+      render: (_, record) =>
+        record.status === "COMPLETED" ? (
+          <Button size="small" loading={downloadExportTask.isPending} onClick={() => downloadExportTask.mutate(record)}>
+            下载
+          </Button>
+        ) : record.status === "FAILED" ? (
+          <Typography.Text type="danger" className="text-xs">
+            {record.error ?? "生成失败"}
+          </Typography.Text>
+        ) : (
+          "-"
+        )
+    }
+  ];
+
   return (
     <div className="page-stack">
       <div className="page-header">
@@ -535,12 +603,12 @@ export default function OrgPage() {
             <div className="min-w-0">
               <div className="text-sm font-medium text-ink">数据保密与导出备份</div>
               <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
-                企业数据按租户隔离并视为保密数据。企业管理员可导出全企业组织、填报、AI 分析、汇报、通知和订阅数据；普通员工可导出自己的相关数据。
+                企业数据按租户隔离并视为保密数据。导出会在后台生成 ZIP 压缩包并设置下载有效期，避免大数据量请求超时。
               </div>
             </div>
           </div>
-          <Button className="w-full shrink-0 lg:w-auto" icon={<Download size={16} />} loading={exportData.isPending} onClick={() => exportData.mutate()}>
-            {canManage ? "导出企业数据" : "导出我的数据"}
+          <Button className="w-full shrink-0 lg:w-auto" icon={<Download size={16} />} loading={createExportTask.isPending} onClick={() => createExportTask.mutate()}>
+            {canManage ? "生成企业备份" : "生成我的备份"}
           </Button>
         </div>
       </div>
@@ -700,8 +768,8 @@ export default function OrgPage() {
                       </div>
                     </div>
                     <Space className="w-full shrink-0 lg:w-auto">
-                      <Button icon={<Download size={16} />} loading={exportData.isPending} onClick={() => exportData.mutate()}>
-                        {canManage ? "导出企业数据" : "导出我的数据"}
+                      <Button icon={<Download size={16} />} loading={createExportTask.isPending} onClick={() => createExportTask.mutate()}>
+                        {canManage ? "生成企业备份" : "生成我的备份"}
                       </Button>
                       <Button
                         danger
@@ -715,6 +783,25 @@ export default function OrgPage() {
                       </Button>
                     </Space>
                   </div>
+                </div>
+                <div className="surface-panel p-5">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-ink">导出任务</div>
+                      <div className="mt-1 text-xs text-muted">生成完成后请在有效期内下载，过期后需重新生成。</div>
+                    </div>
+                    <Button icon={<RotateCw size={16} />} onClick={() => exportTasks.refetch()} loading={exportTasks.isFetching}>
+                      刷新任务
+                    </Button>
+                  </div>
+                  <Table
+                    rowKey="id"
+                    loading={exportTasks.isFetching}
+                    dataSource={exportTasks.data ?? []}
+                    columns={exportTaskColumns}
+                    locale={{ emptyText: <Empty description="暂无导出任务" /> }}
+                    pagination={{ pageSize: 5 }}
+                  />
                 </div>
                 <Table
                   rowKey="id"

@@ -11,6 +11,8 @@ export type PaymentProvider = "MANUAL" | "ALIPAY" | "WECHAT" | "STRIPE";
 export type PaymentStatus = "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
 export type DataDeletionScope = "SELF" | "TENANT";
 export type DataDeletionStatus = "REQUESTED" | "PROCESSING" | "COMPLETED" | "CANCELED";
+export type ExportScope = "SELF" | "TENANT";
+export type ExportTaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "EXPIRED";
 
 export type AuthUser = {
   id: string;
@@ -131,6 +133,20 @@ export type DataDeletionRequest = {
   requestedAt: string;
   processedAt?: string | null;
   createdAt: string;
+};
+
+export type ExportTask = {
+  id: string;
+  scope: ExportScope;
+  status: ExportTaskStatus;
+  fileName?: string | null;
+  fileSize?: number | null;
+  contentType?: string | null;
+  expiresAt: string;
+  completedAt?: string | null;
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type WorkLog = {

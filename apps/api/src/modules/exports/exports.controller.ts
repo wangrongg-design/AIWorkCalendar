@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Query } from "@nestjs/common";
+import { Controller, Get, Header, Param, Post, Query, Res, StreamableFile } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
 import { CurrentUser } from "../../common/types/current-user";
@@ -15,5 +15,28 @@ export class ExportsController {
   @Header("Content-Type", "application/json; charset=utf-8")
   exportData(@CurrentUserParam() user: CurrentUser, @Query() query: ExportQueryDto) {
     return this.exportsService.exportData(user, query);
+  }
+
+  @Post("data-tasks")
+  createExportTask(@CurrentUserParam() user: CurrentUser, @Query() query: ExportQueryDto) {
+    return this.exportsService.createExportTask(user, query);
+  }
+
+  @Get("data-tasks")
+  listExportTasks(@CurrentUserParam() user: CurrentUser) {
+    return this.exportsService.listExportTasks(user);
+  }
+
+  @Get("data-tasks/:id/download")
+  async downloadExportTask(
+    @CurrentUserParam() user: CurrentUser,
+    @Param("id") id: string,
+    @Res({ passthrough: true }) response: { setHeader(name: string, value: string | number): void }
+  ) {
+    const download = await this.exportsService.openDownload(user, id);
+    response.setHeader("Content-Type", download.contentType);
+    response.setHeader("Content-Length", download.fileSize);
+    response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(download.fileName)}"`);
+    return new StreamableFile(download.stream);
   }
 }

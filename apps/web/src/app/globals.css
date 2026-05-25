@@ -313,6 +313,11 @@ body {
   padding-bottom: 10px;
 }
 
+.dashboard-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 0.8fr));
+}
+
 .dashboard-calendar-grid .calendar-cell,
 .dashboard-calendar-grid .calendar-empty-cell {
   min-height: clamp(132px, calc((100vh - 286px) / 6), 178px);

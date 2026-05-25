@@ -175,6 +175,9 @@ pnpm build
 - `PATCH /ops/accounts/:id` 开发公司超级管理员启停账号
 - `GET /audit-logs?limit=100` 企业管理员查看审计日志
 - `GET /exports/data?scope=self|tenant` 导出用户或企业数据备份
+- `POST /exports/data-tasks?scope=self|tenant` 创建异步导出任务
+- `GET /exports/data-tasks` 查看当前账号创建的导出任务
+- `GET /exports/data-tasks/:id/download` 下载已完成且未过期的备份压缩包
 - `GET /privacy/data-deletion-requests`
 - `POST /privacy/data-deletion-requests`
 
@@ -186,7 +189,18 @@ pnpm build
 
 ## 数据保密与导出
 
-所有企业数据按 `tenant_id` 租户隔离，并在产品页面明确提示“企业数据均保密”。企业管理员可在「组织权限」页导出全企业 JSON 备份，包含组织、用户、工作填报、AI 分析、汇报、通知、订阅、账单、审计和数据删除申请；普通员工可导出自己的相关数据。导出不会包含密码哈希等登录凭据。
+所有企业数据按 `tenant_id` 租户隔离，并在产品页面明确提示“企业数据均保密”。企业管理员可在「组织权限」页创建全企业导出任务；普通员工可创建个人导出任务。后台会生成 ZIP 压缩包并记录导出任务、状态、文件大小和下载有效期，内容包含组织、用户、工作填报、AI 分析、汇报、通知、订阅、账单、审计、导出任务和数据删除申请；导出不会包含密码哈希等登录凭据。
+
+导出文件默认写入容器内 `/app/storage/exports`，生产环境通过 `EXPORT_STORAGE_HOST_DIR` 挂载到宿主机持久化目录。推荐在 `config/deployment.json` 增加：
+
+```json
+{
+  "exports": {
+    "hostDir": "/data/work-calendar-ai/exports",
+    "containerDir": "/app/storage/exports"
+  }
+}
+```
 
 ## 商业化关键项
 

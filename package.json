@@ -12,6 +12,7 @@
     "demo:start": "bash scripts/demo-start.sh",
     "demo:stop": "bash scripts/demo-stop.sh",
     "demo:status": "bash scripts/demo-status.sh",
+    "record:demo": "node scripts/record-demo.mjs",
     "config:apply": "node scripts/apply-deployment-config.mjs",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
@@ -19,5 +20,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright": "1.60.0"
   }
 }

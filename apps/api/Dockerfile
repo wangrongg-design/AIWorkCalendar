@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 COPY package.json pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN pnpm install --filter @work-calendar-ai/api... --frozen-lockfile=false
+RUN pnpm install --filter @work-calendar-ai/api... --prod=false --frozen-lockfile=false
 COPY . .
 RUN pnpm --filter @work-calendar-ai/api prisma:generate
 RUN pnpm --filter @work-calendar-ai/api build
@@ -16,7 +16,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 COPY package.json pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN pnpm install --filter @work-calendar-ai/api... --frozen-lockfile=false
+RUN pnpm install --filter @work-calendar-ai/api... --prod=false --frozen-lockfile=false
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/prisma apps/api/prisma
 EXPOSE 3001

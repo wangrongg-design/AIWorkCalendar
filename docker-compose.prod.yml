@@ -9,6 +9,8 @@ services:
       API_PORT: 3001
     ports:
       - "${API_PORT_BIND:-127.0.0.1:3001}:3001"
+    volumes:
+      - "${EXPORT_STORAGE_HOST_DIR:-./storage/exports}:${EXPORT_STORAGE_DIR:-/app/storage/exports}"
     restart: unless-stopped
 
   web:

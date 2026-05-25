@@ -342,7 +342,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="surface-panel dashboard-calendar-grid grid grid-cols-7 overflow-hidden">
+      <div className="surface-panel dashboard-calendar-grid overflow-hidden">
         {weekLabels.map((label) => (
           <div key={label} className="dashboard-week-label border-b border-line bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
             周{label}

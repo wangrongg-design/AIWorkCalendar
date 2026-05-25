@@ -36,7 +36,14 @@ export class ReportContentService {
           deletedAt: null,
           date: { gte: report.periodStart, lte: report.periodEnd },
           userId: isPersonal ? report.requesterId : undefined,
-          user: !isPersonal && report.departmentId ? { departmentId: report.departmentId } : undefined
+          user: isPersonal
+            ? undefined
+            : {
+                requiresWorkReport: true,
+                isActive: true,
+                deletedAt: null,
+                ...(report.departmentId ? { departmentId: report.departmentId } : {})
+              }
         },
         include: {
           user: { include: { department: true } },

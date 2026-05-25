@@ -109,6 +109,19 @@ enum DataDeletionStatus {
   CANCELED
 }
 
+enum ExportScope {
+  SELF
+  TENANT
+}
+
+enum ExportTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
 model Tenant {
   id                      String                   @id @default(cuid())
   name                    String
@@ -131,6 +144,7 @@ model Tenant {
   auditLogs               AuditLog[]
   aiUsageLogs             AiUsageLog[]
   dataDeletionRequests    DataDeletionRequest[]
+  exportTasks             ExportTask[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
 
@@ -211,6 +225,7 @@ model User {
   auditLogs               AuditLog[]
   aiUsageLogs             AiUsageLog[]
   dataDeletionRequests    DataDeletionRequest[]
+  exportTasks             ExportTask[]               @relation("ExportTaskRequester")
 
   @@unique([tenantId, email])
   @@unique([tenantId, phone])
@@ -538,4 +553,29 @@ model DataDeletionRequest {
   @@index([tenantId, status, createdAt])
   @@index([tenantId, requesterId, createdAt])
   @@map("data_deletion_requests")
+}
+
+model ExportTask {
+  id          String           @id @default(cuid())
+  tenantId    String           @map("tenant_id")
+  requesterId String           @map("requester_id")
+  scope       ExportScope
+  status      ExportTaskStatus @default(PENDING)
+  fileName    String?          @map("file_name")
+  filePath    String?          @map("file_path")
+  fileSize    Int?             @map("file_size")
+  contentType String?          @map("content_type")
+  expiresAt   DateTime         @map("expires_at")
+  completedAt DateTime?        @map("completed_at")
+  error       String?          @db.Text
+  metadata    Json?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  requester   User             @relation("ExportTaskRequester", fields: [requesterId], references: [id])
+
+  @@index([tenantId, requesterId, createdAt])
+  @@index([tenantId, status, expiresAt])
+  @@map("export_tasks")
 }
