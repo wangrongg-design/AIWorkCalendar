@@ -126,6 +126,22 @@
   flex: 0 0 190rpx;
 }
 
+.time-grid {
+  margin-top: 18rpx;
+}
+
+.time-grid .field {
+  flex: 1 1 0;
+}
+
+.quick-grid.time-grid .field:last-child {
+  flex: 1 1 0;
+}
+
+.time-value {
+  justify-content: center;
+}
+
 .picker-value {
   display: flex;
   height: 88rpx;
@@ -139,6 +155,71 @@
   font-size: 28rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.attachment-field {
+  margin-top: 20rpx;
+}
+
+.attachment-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.attachment-button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 78rpx;
+  border-radius: 39rpx;
+  background: #e8f0fe;
+  color: #174ea6;
+  font-size: 26rpx;
+  line-height: 78rpx;
+}
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  border-radius: 18rpx;
+  background: #f3f6fb;
+  padding: 16rpx 18rpx;
+}
+
+.attachment-info {
+  min-width: 0;
+}
+
+.attachment-name {
+  overflow: hidden;
+  color: #202124;
+  font-size: 25rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-meta {
+  margin-top: 4rpx;
+  color: #5f6368;
+  font-size: 22rpx;
+}
+
+.attachment-remove {
+  flex: 0 0 112rpx;
+  height: 58rpx;
+  border-radius: 29rpx;
+  background: #fce8e6;
+  color: #b3261e;
+  font-size: 24rpx;
+  line-height: 58rpx;
 }
 
 .bottom-actions {

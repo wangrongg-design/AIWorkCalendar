@@ -11,6 +11,7 @@ services:
       - "${API_PORT_BIND:-127.0.0.1:3001}:3001"
     volumes:
       - "${EXPORT_STORAGE_HOST_DIR:-./storage/exports}:${EXPORT_STORAGE_DIR:-/app/storage/exports}"
+      - "${WORK_LOG_ATTACHMENT_HOST_DIR:-./storage/work-log-attachments}:${WORK_LOG_ATTACHMENT_DIR:-/app/storage/work-log-attachments}"
     restart: unless-stopped
 
   web:

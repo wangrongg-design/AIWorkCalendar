@@ -19,6 +19,11 @@ export class BillingController {
     return this.billingService.getCurrentSubscription(user);
   }
 
+  @Get("plans")
+  getPlans() {
+    return this.billingService.getPlans();
+  }
+
   @Roles(RoleCode.SUPER_ADMIN)
   @Patch("subscription")
   updateCurrentSubscription(@CurrentUserParam() user: CurrentUser, @Body() dto: UpdateSubscriptionDto) {
@@ -43,6 +48,16 @@ export class BillingController {
   @Post("orders")
   createOrder(@CurrentUserParam() user: CurrentUser, @Body() dto: CreateBillingOrderDto) {
     return this.billingService.createOrder(user, dto);
+  }
+
+  @Get("orders/:orderId/payment")
+  getOrderPayment(@CurrentUserParam() user: CurrentUser, @Param("orderId") orderId: string) {
+    return this.billingService.getOrderPayment(user, orderId);
+  }
+
+  @Post("orders/:orderId/confirm-online-payment")
+  confirmOnlinePayment(@CurrentUserParam() user: CurrentUser, @Param("orderId") orderId: string) {
+    return this.billingService.confirmOnlinePayment(user, orderId);
   }
 
   @Roles(RoleCode.SUPER_ADMIN)

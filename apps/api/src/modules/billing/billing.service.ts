@@ -6,6 +6,7 @@ import { PrismaService } from "../../common/prisma.service";
 import { SubscriptionService } from "../../common/subscription/subscription.service";
 import { CurrentUser } from "../../common/types/current-user";
 import { ConfirmManualPaymentDto, CreateBillingOrderDto } from "./dto/order.dto";
+import { billingPlans, getPaymentProviderConfig, getPaymentProviderConfigs, planUnitPriceCents } from "./payment.config";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
 
 function parseDateOnly(value: string) {
@@ -27,16 +28,6 @@ function addPeriod(interval: BillingInterval) {
   return dateOnly(date);
 }
 
-function planUnitPriceCents(plan: SubscriptionPlan, interval: BillingInterval) {
-  const monthly = {
-    [SubscriptionPlan.TRIAL]: 0,
-    [SubscriptionPlan.TEAM]: 3900,
-    [SubscriptionPlan.BUSINESS]: 9900,
-    [SubscriptionPlan.ENTERPRISE]: 29900
-  }[plan];
-  return interval === BillingInterval.YEARLY ? Math.round(monthly * 10) : monthly;
-}
-
 @Injectable()
 export class BillingService {
   constructor(
@@ -48,6 +39,18 @@ export class BillingService {
 
   getCurrentSubscription(user: CurrentUser) {
     return this.subscriptions.getSubscriptionSummary(user.tenantId);
+  }
+
+  getPlans() {
+    return {
+      currency: "CNY",
+      plans: billingPlans,
+      paymentProviders: getPaymentProviderConfigs().map((item) => ({
+        provider: item.provider,
+        enabled: item.enabled,
+        mode: item.mode
+      }))
+    };
   }
 
   async updateCurrentSubscription(user: CurrentUser, dto: UpdateSubscriptionDto) {
@@ -85,6 +88,17 @@ export class BillingService {
       throw new BadRequestException("Only company admins can create billing orders");
     }
     const amountCents = planUnitPriceCents(dto.plan, dto.interval) * dto.seatLimit;
+    if (amountCents <= 0) {
+      throw new BadRequestException("Invalid billing plan");
+    }
+    const providerConfig = getPaymentProviderConfig(dto.provider);
+    if (dto.provider !== PaymentProvider.MANUAL && (!providerConfig || !providerConfig.enabled)) {
+      throw new BadRequestException(`${dto.provider} payment is not configured`);
+    }
+    const payment = this.createPaymentSession(dto.provider, amountCents);
+    if (dto.provider !== PaymentProvider.MANUAL && !payment) {
+      throw new BadRequestException(`${dto.provider} payment is not supported`);
+    }
     const order = await this.prisma.billingOrder.create({
       data: {
         tenantId: user.tenantId,
@@ -95,18 +109,73 @@ export class BillingService {
         amountCents,
         provider: dto.provider,
         expiresAt: addPeriod(BillingInterval.MONTHLY),
-        paymentUrl: dto.provider === PaymentProvider.MANUAL ? null : "PAYMENT_PROVIDER_NOT_CONFIGURED"
-      }
+        paymentUrl: payment?.paymentUrl ?? null,
+        metadata: payment ? { payment } : undefined
+      },
+      include: { payments: true }
     });
+    if (dto.provider !== PaymentProvider.MANUAL) {
+      const onlinePayment = payment;
+      if (!onlinePayment) {
+        throw new BadRequestException(`${dto.provider} payment is not supported`);
+      }
+      await this.prisma.paymentRecord.create({
+        data: {
+          tenantId: user.tenantId,
+          orderId: order.id,
+          provider: dto.provider,
+          status: PaymentStatus.PENDING,
+          amountCents,
+          currency: order.currency,
+          transactionId: onlinePayment.transactionId,
+          raw: onlinePayment
+        }
+      });
+    }
     await this.audit.log({
       tenantId: user.tenantId,
       actorUserId: user.id,
       action: "BILLING_ORDER_CREATED",
       targetType: "BillingOrder",
       targetId: order.id,
-      metadata: { plan: dto.plan, interval: dto.interval, seatLimit: dto.seatLimit, amountCents }
+      metadata: { plan: dto.plan, interval: dto.interval, seatLimit: dto.seatLimit, amountCents, provider: dto.provider }
     });
-    return order;
+    return this.prisma.billingOrder.findFirst({ where: { id: order.id }, include: { payments: true } });
+  }
+
+  async getOrderPayment(user: CurrentUser, orderId: string) {
+    const order = await this.getTenantOrder(user, orderId);
+    const rawPayment =
+      typeof order.metadata === "object" && order.metadata && !Array.isArray(order.metadata)
+        ? (order.metadata as { payment?: unknown }).payment
+        : null;
+    return {
+      order,
+      payment:
+        rawPayment ??
+        (order.paymentUrl
+          ? {
+              provider: order.provider,
+              paymentUrl: order.paymentUrl,
+              qrCodeText: order.paymentUrl
+            }
+          : null)
+    };
+  }
+
+  async confirmOnlinePayment(user: CurrentUser, orderId: string) {
+    const order = await this.getTenantOrder(user, orderId);
+    if (order.status !== BillingOrderStatus.PENDING) {
+      return order;
+    }
+    if (order.provider !== PaymentProvider.ALIPAY && order.provider !== PaymentProvider.WECHAT) {
+      throw new BadRequestException("Only Alipay or WeChat Pay orders can be confirmed here");
+    }
+    const providerConfig = getPaymentProviderConfig(order.provider);
+    if (providerConfig?.mode === "live") {
+      throw new BadRequestException("Live payments must be confirmed by provider callback");
+    }
+    return this.applyPaidOrder(user.id, order, order.provider, `mock-paid-${order.id}`, { mode: "mock" });
   }
 
   async confirmManualPayment(user: CurrentUser, orderId: string, dto: ConfirmManualPaymentDto) {
@@ -119,6 +188,52 @@ export class BillingService {
     if (!order) {
       throw new BadRequestException("Order not found");
     }
+    return this.applyPaidOrder(user.id, order, PaymentProvider.MANUAL, dto.transactionId ?? `manual-${order.id}`, { manual: true });
+  }
+
+  private createPaymentSession(provider: PaymentProvider, amountCents: number) {
+    if (provider === PaymentProvider.MANUAL) {
+      return null;
+    }
+    const providerConfig = getPaymentProviderConfig(provider);
+    const transactionId = `${provider.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const paymentUrl =
+      providerConfig?.mode === "live"
+        ? `${providerConfig.returnUrl ?? "https://work-calendar-ai.local/pay"}?provider=${provider}&tradeNo=${transactionId}`
+        : `work-calendar-ai://mock-pay/${provider.toLowerCase()}?tradeNo=${transactionId}&amount=${amountCents}`;
+    return {
+      provider,
+      mode: providerConfig?.mode ?? "mock",
+      paymentUrl,
+      qrCodeText: paymentUrl,
+      transactionId,
+      amountCents,
+      notifyUrl: providerConfig?.notifyUrl ?? null,
+      returnUrl: providerConfig?.returnUrl ?? null
+    };
+  }
+
+  private async getTenantOrder(user: CurrentUser, orderId: string) {
+    const order = await this.prisma.billingOrder.findFirst({
+      where: { id: orderId, tenantId: user.tenantId, deletedAt: null },
+      include: { payments: true }
+    });
+    if (!order) {
+      throw new BadRequestException("Order not found");
+    }
+    if (!this.access.isCompanyAdmin(user)) {
+      throw new BadRequestException("Only company admins can access billing orders");
+    }
+    return order;
+  }
+
+  private async applyPaidOrder(
+    actorUserId: string,
+    order: { id: string; tenantId: string; plan: SubscriptionPlan; interval: BillingInterval; seatLimit: number; amountCents: number; currency: string },
+    provider: PaymentProvider,
+    transactionId: string,
+    raw: Prisma.InputJsonValue
+  ) {
     const periodEnd = addPeriod(order.interval);
     await this.prisma.$transaction([
       this.prisma.billingOrder.update({
@@ -129,11 +244,23 @@ export class BillingService {
         data: {
           tenantId: order.tenantId,
           orderId: order.id,
-          provider: PaymentProvider.MANUAL,
+          provider,
           status: PaymentStatus.SUCCEEDED,
           amountCents: order.amountCents,
           currency: order.currency,
-          transactionId: dto.transactionId ?? `manual-${order.id}`
+          transactionId,
+          raw
+        }
+      }),
+      this.prisma.paymentRecord.updateMany({
+        where: {
+          orderId: order.id,
+          provider,
+          status: PaymentStatus.PENDING
+        },
+        data: {
+          status: PaymentStatus.SUCCEEDED,
+          raw
         }
       }),
       this.prisma.subscription.upsert({
@@ -144,7 +271,7 @@ export class BillingService {
           seatLimit: order.seatLimit,
           currentPeriodStart: dateOnly(),
           currentPeriodEnd: periodEnd,
-          provider: PaymentProvider.MANUAL
+          provider
         },
         create: {
           tenantId: order.tenantId,
@@ -153,17 +280,17 @@ export class BillingService {
           seatLimit: order.seatLimit,
           currentPeriodStart: dateOnly(),
           currentPeriodEnd: periodEnd,
-          provider: PaymentProvider.MANUAL
+          provider
         }
       })
     ]);
     await this.audit.log({
       tenantId: order.tenantId,
-      actorUserId: user.id,
-      action: "BILLING_MANUAL_PAYMENT_CONFIRMED",
+      actorUserId,
+      action: provider === PaymentProvider.MANUAL ? "BILLING_MANUAL_PAYMENT_CONFIRMED" : "BILLING_ONLINE_PAYMENT_CONFIRMED",
       targetType: "BillingOrder",
       targetId: order.id,
-      metadata: { transactionId: dto.transactionId ?? null }
+      metadata: { transactionId, provider }
     });
     return this.prisma.billingOrder.findFirst({ where: { id: order.id }, include: { payments: true } });
   }

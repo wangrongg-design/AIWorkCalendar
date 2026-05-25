@@ -1,13 +1,15 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { Bot, Edit2, Plus, RotateCw, Send, Trash2, WandSparkles } from "lucide-react";
+import { Bot, Download, Edit2, Paperclip, Plus, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import { useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
-import { Project, WorkLog, WorkLogDraft } from "@/lib/types";
+import { apiDownload, apiFetch } from "@/lib/api";
+import { Project, WorkLog, WorkLogAttachment, WorkLogDraft } from "@/lib/types";
+import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type WorkLogForm = {
   date: dayjs.Dayjs;
@@ -23,6 +25,32 @@ type AiChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
+
+type PendingAttachment = {
+  uid: string;
+  file: File;
+};
+
+const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+
+function formatFileSize(value: number) {
+  if (value >= 1024 * 1024) {
+    return `${(value / 1024 / 1024).toFixed(1)}MB`;
+  }
+  return `${Math.max(1, Math.round(value / 1024))}KB`;
+}
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result ?? "");
+      resolve(value.includes(",") ? value.split(",")[1] : value);
+    };
+    reader.onerror = () => reject(new Error("附件读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
 
 function toPayload(values: WorkLogForm) {
   const date = values.date;
@@ -45,6 +73,7 @@ export default function WorkLogsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<WorkLogForm>();
   const [editing, setEditing] = useState<WorkLog | null>(null);
+  const [detailRecord, setDetailRecord] = useState<WorkLog | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(null);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "DRAFT" | "SUBMITTED">("ALL");
@@ -56,6 +85,7 @@ export default function WorkLogsPage() {
       content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
     }
   ]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
 
   const logs = useQuery({
     queryKey: ["work-logs"],
@@ -84,25 +114,103 @@ export default function WorkLogsPage() {
     });
   }, [dateFilter, logs.data, projectFilter, statusFilter]);
 
+  const pendingUploadFiles: UploadFile[] = useMemo(
+    () =>
+      pendingAttachments.map((item) => ({
+        uid: item.uid,
+        name: item.file.name,
+        size: item.file.size,
+        status: "done"
+      })),
+    [pendingAttachments]
+  );
+
+  const uploadPendingAttachments = async (workLogId: string) => {
+    const files = [...pendingAttachments];
+    for (const item of files) {
+      const contentBase64 = await fileToBase64(item.file);
+      await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: item.file.name,
+          mimeType: item.file.type || "application/octet-stream",
+          fileSize: item.file.size,
+          contentBase64
+        })
+      });
+    }
+    if (files.length) {
+      setPendingAttachments([]);
+    }
+  };
+
+  const addPendingAttachment = (file: RcFile) => {
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      message.error("单个附件不能超过 8MB");
+      return Upload.LIST_IGNORE;
+    }
+    setPendingAttachments((items) => [...items, { uid: file.uid, file }]);
+    return false;
+  };
+
+  const downloadAttachment = async (workLogId: string, attachment: WorkLogAttachment) => {
+    const download = await apiDownload(`/work-logs/${workLogId}/attachments/${attachment.id}/download`);
+    const url = URL.createObjectURL(download.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = download.filename || attachment.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const createLog = useMutation({
-    mutationFn: (values: WorkLogForm) =>
-      apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toPayload(values)) }),
+    mutationFn: async (values: WorkLogForm) => {
+      const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toPayload(values)) });
+      await uploadPendingAttachments(workLog.id);
+      return workLog;
+    },
     onSuccess: () => {
       message.success("已保存填报");
       setModalOpen(false);
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error((error as Error).message || "保存失败");
     }
   });
 
   const updateLog = useMutation({
-    mutationFn: ({ id, values }: { id: string; values: WorkLogForm }) =>
-      apiFetch<WorkLog>(`/work-logs/${id}`, { method: "PATCH", body: JSON.stringify(toPayload(values)) }),
+    mutationFn: async ({ id, values }: { id: string; values: WorkLogForm }) => {
+      const workLog = await apiFetch<WorkLog>(`/work-logs/${id}`, { method: "PATCH", body: JSON.stringify(toPayload(values)) });
+      await uploadPendingAttachments(id);
+      return workLog;
+    },
     onSuccess: () => {
       message.success("已更新填报");
       setModalOpen(false);
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error((error as Error).message || "更新失败");
+    }
+  });
+
+  const deleteAttachment = useMutation({
+    mutationFn: ({ workLogId, attachmentId }: { workLogId: string; attachmentId: string }) =>
+      apiFetch<{ ok: boolean }>(`/work-logs/${workLogId}/attachments/${attachmentId}`, { method: "DELETE" }),
+    onSuccess: (_, variables) => {
+      message.success("已删除附件");
+      setEditing((current) =>
+        current?.id === variables.workLogId
+          ? { ...current, attachments: current.attachments?.filter((attachment) => attachment.id !== variables.attachmentId) }
+          : current
+      );
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error((error as Error).message || "删除附件失败");
     }
   });
 
@@ -138,8 +246,8 @@ export default function WorkLogsPage() {
         title: draft.title,
         content: draft.content,
         hours: Number(draft.hours),
-        startTime: draft.startTime ? dayjs(draft.startTime) : undefined,
-        endTime: draft.endTime ? dayjs(draft.endTime) : undefined
+        startTime: parseWorkLogTime(draft.startTime),
+        endTime: parseWorkLogTime(draft.endTime)
       });
       setAiMessages((messages) => [...messages, { role: "assistant", content: draft.assistantMessage }]);
       message.success(draft.kind === "PLAN" ? "已生成计划草稿" : "已生成日报草稿");
@@ -157,6 +265,7 @@ export default function WorkLogsPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setPendingAttachments([]);
     form.resetFields();
     form.setFieldsValue({ date: dayjs(), hours: 1 });
     setAiInput("");
@@ -171,12 +280,13 @@ export default function WorkLogsPage() {
 
   const openEdit = (record: WorkLog) => {
     setEditing(record);
+    setPendingAttachments([]);
     form.setFieldsValue({
       date: dayjs(record.date),
       title: record.title,
       content: record.content,
-      startTime: record.startTime ? dayjs(record.startTime) : undefined,
-      endTime: record.endTime ? dayjs(record.endTime) : undefined,
+      startTime: parseWorkLogTime(record.startTime),
+      endTime: parseWorkLogTime(record.endTime),
       hours: Number(record.hours),
       projectId: record.projectId ?? undefined
     });
@@ -196,9 +306,19 @@ export default function WorkLogsPage() {
       title: "标题与内容",
       render: (_, record) => (
         <div>
-          <div className="font-medium">{record.title}</div>
+          <Button type="link" className="!h-auto !p-0 !text-left font-medium" onClick={() => setDetailRecord(record)}>
+            {record.title}
+          </Button>
           {record.project ? <Tag className="mt-2" color="blue">{record.project.code ? `${record.project.code} · ${record.project.name}` : record.project.name}</Tag> : null}
           <div className="mt-1 max-w-3xl text-sm text-muted">{record.content}</div>
+          {record.attachments?.length ? (
+            <Space className="mt-2" wrap>
+              <Tag icon={<Paperclip size={13} />}>附件 {record.attachments.length}</Tag>
+              {record.attachments.slice(0, 3).map((attachment) => (
+                <Tag key={attachment.id}>{attachment.fileName}</Tag>
+              ))}
+            </Space>
+          ) : null}
           {record.aiAnalysis ? (
             <Space className="mt-2" wrap>
               <Tag color="green">{record.aiAnalysis.category}</Tag>
@@ -287,7 +407,10 @@ export default function WorkLogsPage() {
       <Modal
         title={editing ? "编辑填报" : "新增填报"}
         open={modalOpen}
-        onCancel={() => setModalOpen(false)}
+        onCancel={() => {
+          setModalOpen(false);
+          setPendingAttachments([]);
+        }}
         onOk={() => form.submit()}
         confirmLoading={createLog.isPending || updateLog.isPending}
         width={880}
@@ -295,6 +418,7 @@ export default function WorkLogsPage() {
         <Form
           form={form}
           layout="vertical"
+          onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, form.setFieldsValue)}
           onFinish={(values) => {
             if (editing) {
               updateLog.mutate({ id: editing.id, values });
@@ -362,7 +486,113 @@ export default function WorkLogsPage() {
           <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
             <Input.TextArea rows={6} />
           </Form.Item>
+          <Form.Item label="附件">
+            {editing?.attachments?.length ? (
+              <div className="mb-3 space-y-2">
+                {editing.attachments.map((attachment) => (
+                  <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-line px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-ink">{attachment.fileName}</div>
+                      <div className="text-xs text-muted">
+                        {attachment.kind === "IMAGE" ? "图片" : "文件"} · {formatFileSize(attachment.fileSize)}
+                      </div>
+                    </div>
+                    <Space>
+                      <Button
+                        size="small"
+                        icon={<Download size={14} />}
+                        onClick={() =>
+                          downloadAttachment(editing.id, attachment).catch((error) => message.error((error as Error).message || "下载失败"))
+                        }
+                      />
+                      <Popconfirm title="确认删除这个附件？" onConfirm={() => deleteAttachment.mutate({ workLogId: editing.id, attachmentId: attachment.id })}>
+                        <Button size="small" danger icon={<Trash2 size={14} />} loading={deleteAttachment.isPending} />
+                      </Popconfirm>
+                    </Space>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <Upload.Dragger
+              multiple
+              fileList={pendingUploadFiles}
+              beforeUpload={addPendingAttachment}
+              onRemove={(file) => {
+                setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+                return true;
+              }}
+            >
+              <p className="ant-upload-drag-icon">
+                <UploadCloud size={28} />
+              </p>
+              <p className="ant-upload-text">添加照片或文件</p>
+              <p className="ant-upload-hint">单个附件最大 8MB，提交后 AI 会结合附件摘要和图片内容分析。</p>
+            </Upload.Dragger>
+          </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={detailRecord ? `${dayjs(detailRecord.date).format("YYYY-MM-DD")} · ${detailRecord.title}` : "填报详情"}
+        open={Boolean(detailRecord)}
+        onCancel={() => setDetailRecord(null)}
+        footer={null}
+        width={860}
+      >
+        {detailRecord ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="metric-card">
+                <div className="metric-label">人员</div>
+                <div className="mt-2 text-sm font-medium text-ink">{detailRecord.user?.name ?? "-"}</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">项目</div>
+                <div className="mt-2 text-sm font-medium text-ink">{detailRecord.project?.name ?? "未关联"}</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">工时</div>
+                <div className="metric-value">{Number(detailRecord.hours).toFixed(1)}h</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">状态</div>
+                <Tag className="mt-2" color={detailRecord.status === "SUBMITTED" ? "green" : "default"}>
+                  {detailRecord.status === "SUBMITTED" ? "已提交" : "草稿"}
+                </Tag>
+              </div>
+            </div>
+            <div className="rounded-[8px] border border-line p-4">
+              <div className="mb-2 text-sm font-medium text-ink">工作内容 / 计划</div>
+              <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{detailRecord.content}</div>
+            </div>
+            {detailRecord.attachments?.length ? (
+              <div className="rounded-[8px] border border-line p-4">
+                <div className="mb-2 text-sm font-medium text-ink">附件</div>
+                <Space wrap>
+                  {detailRecord.attachments.map((attachment) => (
+                    <Tag key={attachment.id} icon={<Paperclip size={13} />}>
+                      {attachment.fileName}
+                    </Tag>
+                  ))}
+                </Space>
+              </div>
+            ) : null}
+            {detailRecord.aiAnalysis ? (
+              <div className="rounded-[8px] border border-line p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
+                  <Bot size={16} />
+                  AI 分析
+                </div>
+                <div className="text-sm leading-6 text-muted">{detailRecord.aiAnalysis.summary}</div>
+                <Space className="mt-3" wrap>
+                  <Tag color="green">{detailRecord.aiAnalysis.category}</Tag>
+                  {detailRecord.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+                  {detailRecord.aiAnalysis.risks?.map((risk) => <Tag color="red" key={risk}>{risk}</Tag>)}
+                </Space>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

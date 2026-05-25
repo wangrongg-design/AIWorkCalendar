@@ -122,6 +122,11 @@ enum ExportTaskStatus {
   EXPIRED
 }
 
+enum WorkLogAttachmentKind {
+  IMAGE
+  FILE
+}
+
 model Tenant {
   id                      String                   @id @default(cuid())
   name                    String
@@ -134,6 +139,7 @@ model Tenant {
   roles                   Role[]
   projects                Project[]
   workLogs                WorkLog[]
+  workLogAttachments      WorkLogAttachment[]
   aiAnalyses              AiAnalysis[]
   reports                 Report[]
   notifications           Notification[]
@@ -217,6 +223,7 @@ model User {
   roles                   UserRole[]
   ownedProjects           Project[]                @relation("ProjectOwner")
   workLogs                WorkLog[]
+  workLogAttachments      WorkLogAttachment[]
   reports                 Report[]                 @relation("ReportRequester")
   notifications           Notification[]
   passwordResetTokens     PasswordResetToken[]
@@ -339,6 +346,7 @@ model WorkLog {
   tenant      Tenant        @relation(fields: [tenantId], references: [id])
   user        User          @relation(fields: [userId], references: [id])
   project     Project?      @relation(fields: [projectId], references: [id])
+  attachments WorkLogAttachment[]
   aiAnalysis  AiAnalysis?
   aiTasks     AiTask[]
 
@@ -347,6 +355,30 @@ model WorkLog {
   @@index([tenantId, projectId, date])
   @@index([tenantId, deletedAt])
   @@map("work_logs")
+}
+
+model WorkLogAttachment {
+  id            String                @id @default(cuid())
+  tenantId      String                @map("tenant_id")
+  workLogId     String                @map("work_log_id")
+  uploaderId    String                @map("uploader_id")
+  kind          WorkLogAttachmentKind
+  fileName      String                @map("file_name")
+  mimeType      String                @map("mime_type")
+  fileSize      Int                   @map("file_size")
+  storagePath   String                @map("storage_path")
+  textContent   String?               @map("text_content") @db.Text
+  aiSummary     String?               @map("ai_summary") @db.Text
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  deletedAt     DateTime?             @map("deleted_at")
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  workLog       WorkLog               @relation(fields: [workLogId], references: [id])
+  uploader      User                  @relation(fields: [uploaderId], references: [id])
+
+  @@index([tenantId, workLogId, deletedAt])
+  @@index([tenantId, uploaderId, createdAt])
+  @@map("work_log_attachments")
 }
 
 model AiAnalysis {

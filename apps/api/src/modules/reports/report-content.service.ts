@@ -48,7 +48,11 @@ export class ReportContentService {
         include: {
           user: { include: { department: true } },
           project: true,
-          aiAnalysis: true
+          aiAnalysis: true,
+          attachments: {
+            where: { deletedAt: null },
+            orderBy: [{ createdAt: "asc" }]
+          }
         },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }]
       });
@@ -68,6 +72,14 @@ export class ReportContentService {
           title: item.title,
           content: item.content,
           hours: Number(item.hours),
+          attachments: item.attachments.map((attachment) => ({
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            kind: attachment.kind,
+            fileSize: attachment.fileSize,
+            textContent: attachment.textContent,
+            aiSummary: attachment.aiSummary
+          })),
           analysis: item.aiAnalysis
             ? {
                 achievements: item.aiAnalysis.achievements,

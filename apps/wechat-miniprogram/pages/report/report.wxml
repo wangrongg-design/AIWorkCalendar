@@ -55,6 +55,21 @@
       </view>
     </view>
 
+    <view class="quick-grid time-grid">
+      <view class="field">
+        <text class="field-label">开始时间</text>
+        <picker mode="time" value="{{startTime}}" bindchange="onStartTimeChange">
+          <view class="picker-value time-value">{{startTime || "--:--"}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="field-label">结束时间</text>
+        <picker mode="time" value="{{endTime}}" bindchange="onEndTimeChange">
+          <view class="picker-value time-value">{{endTime || "--:--"}}</view>
+        </picker>
+      </view>
+    </view>
+
     <view class="field">
       <text class="field-label">关联项目</text>
       <picker value="{{projectIndex}}" range="{{projectOptions}}" range-key="displayName" bindchange="onProjectChange">
@@ -70,6 +85,23 @@
     <view class="field">
       <text class="field-label">工作内容 / 计划</text>
       <textarea class="textarea" value="{{content}}" maxlength="3000" placeholder="可以手动输入，也可以用语音识别填入。" bindinput="onContentInput" />
+    </view>
+
+    <view class="field attachment-field">
+      <text class="field-label">照片 / 文件</text>
+      <view class="attachment-actions">
+        <button class="attachment-button" bindtap="choosePhotos">添加照片</button>
+        <button class="attachment-button" bindtap="chooseFiles">添加文件</button>
+      </view>
+      <view wx:if="{{attachments.length}}" class="attachment-list">
+        <view wx:for="{{attachments}}" wx:key="id" class="attachment-item">
+          <view class="attachment-info">
+            <view class="attachment-name">{{item.name}}</view>
+            <view class="attachment-meta">{{item.kind === "IMAGE" ? "图片" : "文件"}} · {{item.displaySize}}</view>
+          </view>
+          <button class="attachment-remove" data-id="{{item.id}}" bindtap="removeAttachment">移除</button>
+        </view>
+      </view>
     </view>
 
     <view class="bottom-actions">

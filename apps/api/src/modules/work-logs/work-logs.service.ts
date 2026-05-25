@@ -1,20 +1,133 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from "@nestjs/common";
-import { WorkLogStatus } from "@prisma/client";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from "@nestjs/common";
+import { WorkLogAttachmentKind, WorkLogStatus } from "@prisma/client";
+import { createReadStream, type ReadStream } from "fs";
+import { mkdir, stat, writeFile } from "fs/promises";
+import { basename, join } from "path";
+import { randomBytes } from "crypto";
 import { AccessService } from "../../common/access/access.service";
 import { PrismaService } from "../../common/prisma.service";
 import { CurrentUser } from "../../common/types/current-user";
 import { AiQueueService } from "../ai/ai-queue.service";
-import { CreateWorkLogDto, UpdateWorkLogDto, WorkLogQueryDto } from "./dto/work-log.dto";
+import { CreateWorkLogAttachmentDto, CreateWorkLogDto, UpdateWorkLogDto, WorkLogQueryDto } from "./dto/work-log.dto";
+
+const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+const ATTACHMENT_TEXT_LIMIT = 12_000;
+const attachmentPublicSelect = {
+  id: true,
+  workLogId: true,
+  uploaderId: true,
+  kind: true,
+  fileName: true,
+  mimeType: true,
+  fileSize: true,
+  aiSummary: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+function attachmentStorageRoot() {
+  return process.env.WORK_LOG_ATTACHMENT_DIR ?? join(process.cwd(), "tmp", "work-log-attachments");
+}
 
 function parseDateOnly(value: string) {
   const date = new Date(value);
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+function parseOptionalDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException("Invalid start or end time");
+  }
+  return date;
+}
+
+function roundHours(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function durationHours(startTime: Date, endTime: Date) {
+  let diff = endTime.getTime() - startTime.getTime();
+  if (diff < 0) {
+    diff += 24 * 60 * 60 * 1000;
+  }
+  return roundHours(diff / 60 / 60 / 1000);
+}
+
+function addHours(date: Date, hours: number) {
+  return new Date(date.getTime() + Math.round(hours * 60) * 60 * 1000);
+}
+
+function subtractHours(date: Date, hours: number) {
+  return new Date(date.getTime() - Math.round(hours * 60) * 60 * 1000);
+}
+
+function normalizeTiming(startTime: Date | null, endTime: Date | null, hours: number | null) {
+  let normalizedStartTime = startTime;
+  let normalizedEndTime = endTime;
+  let normalizedHours = hours;
+
+  if (normalizedStartTime && normalizedEndTime) {
+    normalizedHours = durationHours(normalizedStartTime, normalizedEndTime);
+  } else if (normalizedStartTime && normalizedHours !== null) {
+    normalizedEndTime = addHours(normalizedStartTime, normalizedHours);
+  } else if (normalizedEndTime && normalizedHours !== null) {
+    normalizedStartTime = subtractHours(normalizedEndTime, normalizedHours);
+  }
+
+  if (normalizedHours === null || !Number.isFinite(normalizedHours)) {
+    throw new BadRequestException("Hours or two timing fields are required");
+  }
+  if (normalizedHours < 0 || normalizedHours > 24) {
+    throw new BadRequestException("Hours must be between 0 and 24");
+  }
+
+  return {
+    startTime: normalizedStartTime,
+    endTime: normalizedEndTime,
+    hours: normalizedHours
+  };
+}
+
 function addDays(date: Date, days: number) {
   const result = new Date(date);
   result.setUTCDate(result.getUTCDate() + days);
   return result;
+}
+
+function sanitizeFileName(value: string) {
+  const name = basename(value || "attachment")
+    .replace(/[\/\\:*?"<>|\u0000-\u001f]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (name || "attachment").slice(0, 180);
+}
+
+function attachmentKind(mimeType: string) {
+  return mimeType.toLowerCase().startsWith("image/") ? WorkLogAttachmentKind.IMAGE : WorkLogAttachmentKind.FILE;
+}
+
+function isTextLike(mimeType: string, fileName: string) {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.startsWith("text/")) return true;
+  if (["application/json", "application/xml", "application/csv", "application/x-ndjson"].includes(normalized)) return true;
+  return /\.(txt|md|csv|json|log|xml)$/i.test(fileName);
+}
+
+function extractTextContent(mimeType: string, fileName: string, buffer: Buffer) {
+  if (!isTextLike(mimeType, fileName)) {
+    return null;
+  }
+  return buffer.toString("utf8").replace(/\u0000/g, "").slice(0, ATTACHMENT_TEXT_LIMIT);
+}
+
+function summarizeAttachment(kind: WorkLogAttachmentKind, fileName: string, mimeType: string, fileSize: number, textContent: string | null) {
+  const base = `${kind === WorkLogAttachmentKind.IMAGE ? "图片" : "文件"}附件：${fileName}，类型 ${mimeType}，大小 ${Math.round(fileSize / 1024)}KB。`;
+  if (!textContent) {
+    return base;
+  }
+  return `${base} 文本摘录：${textContent.slice(0, 500)}`;
 }
 
 @Injectable()
@@ -53,7 +166,12 @@ export class WorkLogsService {
       include: {
         user: { select: { id: true, name: true, email: true, departmentId: true, department: true } },
         project: true,
-        aiAnalysis: true
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        }
       },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }]
     });
@@ -67,6 +185,7 @@ export class WorkLogsService {
     });
     this.access.assertCanAccessUser(user, target);
     await this.assertProjectInTenant(user.tenantId, dto.projectId);
+    const timing = normalizeTiming(parseOptionalDate(dto.startTime), parseOptionalDate(dto.endTime), dto.hours ?? null);
     return this.prisma.workLog.create({
       data: {
         tenantId: user.tenantId,
@@ -75,12 +194,21 @@ export class WorkLogsService {
         date: parseDateOnly(dto.date),
         title: dto.title,
         content: dto.content,
-        startTime: dto.startTime ? new Date(dto.startTime) : null,
-        endTime: dto.endTime ? new Date(dto.endTime) : null,
-        hours: dto.hours.toString(),
+        startTime: timing.startTime,
+        endTime: timing.endTime,
+        hours: timing.hours.toString(),
         status: WorkLogStatus.DRAFT
       },
-      include: { user: true, project: true, aiAnalysis: true }
+      include: {
+        user: true,
+        project: true,
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
     });
   }
 
@@ -90,7 +218,12 @@ export class WorkLogsService {
       include: {
         user: { include: { department: true } },
         project: true,
-        aiAnalysis: true
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        }
       }
     });
     if (!item) {
@@ -104,6 +237,11 @@ export class WorkLogsService {
     const existing = await this.get(user, id);
     this.assertCanModifyWorkLog(user, existing.userId);
     await this.assertProjectInTenant(user.tenantId, dto.projectId);
+    const timing = normalizeTiming(
+      Object.prototype.hasOwnProperty.call(dto, "startTime") ? parseOptionalDate(dto.startTime) : existing.startTime,
+      Object.prototype.hasOwnProperty.call(dto, "endTime") ? parseOptionalDate(dto.endTime) : existing.endTime,
+      Object.prototype.hasOwnProperty.call(dto, "hours") ? dto.hours ?? null : Number(existing.hours)
+    );
     const item = await this.prisma.workLog.update({
       where: { id },
       data: {
@@ -111,11 +249,20 @@ export class WorkLogsService {
         date: dto.date ? parseDateOnly(dto.date) : undefined,
         title: dto.title,
         content: dto.content,
-        startTime: dto.startTime === undefined ? undefined : dto.startTime ? new Date(dto.startTime) : null,
-        endTime: dto.endTime === undefined ? undefined : dto.endTime ? new Date(dto.endTime) : null,
-        hours: dto.hours === undefined ? undefined : dto.hours.toString()
+        startTime: timing.startTime,
+        endTime: timing.endTime,
+        hours: timing.hours.toString()
       },
-      include: { user: true, project: true, aiAnalysis: true }
+      include: {
+        user: true,
+        project: true,
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
     });
     return item;
   }
@@ -123,10 +270,17 @@ export class WorkLogsService {
   async remove(user: CurrentUser, id: string) {
     const existing = await this.get(user, id);
     this.assertCanModifyWorkLog(user, existing.userId);
-    await this.prisma.workLog.update({
-      where: { id },
-      data: { deletedAt: new Date() }
-    });
+    const deletedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.workLog.update({
+        where: { id },
+        data: { deletedAt }
+      }),
+      this.prisma.workLogAttachment.updateMany({
+        where: { tenantId: user.tenantId, workLogId: id, deletedAt: null },
+        data: { deletedAt }
+      })
+    ]);
     return { ok: true };
   }
 
@@ -139,10 +293,109 @@ export class WorkLogsService {
         status: WorkLogStatus.SUBMITTED,
         submittedAt: new Date()
       },
-      include: { user: true, project: true, aiAnalysis: true }
+      include: {
+        user: true,
+        project: true,
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
     });
     await this.aiQueue.enqueueWorkLogAnalysis(user.tenantId, id, user.id);
     return submitted;
+  }
+
+  async createAttachment(user: CurrentUser, id: string, dto: CreateWorkLogAttachmentDto) {
+    const existing = await this.get(user, id);
+    this.assertCanModifyWorkLog(user, existing.userId);
+
+    const buffer = Buffer.from(dto.contentBase64, "base64");
+    if (!buffer.length || buffer.length !== dto.fileSize || buffer.length > ATTACHMENT_MAX_BYTES) {
+      throw new BadRequestException("Invalid attachment content or file size");
+    }
+
+    const fileName = sanitizeFileName(dto.fileName);
+    const mimeType = dto.mimeType || "application/octet-stream";
+    const kind = attachmentKind(mimeType);
+    const tenantDir = join(attachmentStorageRoot(), user.tenantId, id);
+    await mkdir(tenantDir, { recursive: true });
+    const storedName = `${Date.now()}-${randomBytes(6).toString("hex")}-${fileName}`;
+    const storagePath = join(tenantDir, storedName);
+    await writeFile(storagePath, buffer);
+
+    const textContent = extractTextContent(mimeType, fileName, buffer);
+    const attachment = await this.prisma.workLogAttachment.create({
+      data: {
+        tenantId: user.tenantId,
+        workLogId: id,
+        uploaderId: user.id,
+        kind,
+        fileName,
+        mimeType,
+        fileSize: buffer.length,
+        storagePath,
+        textContent,
+        aiSummary: summarizeAttachment(kind, fileName, mimeType, buffer.length, textContent)
+      },
+      select: attachmentPublicSelect
+    });
+
+    if (existing.status === WorkLogStatus.SUBMITTED) {
+      await this.aiQueue.enqueueWorkLogAnalysis(user.tenantId, id, user.id);
+    }
+
+    return attachment;
+  }
+
+  async removeAttachment(user: CurrentUser, id: string, attachmentId: string) {
+    const existing = await this.get(user, id);
+    this.assertCanModifyWorkLog(user, existing.userId);
+    const attachment = await this.prisma.workLogAttachment.findFirst({
+      where: { id: attachmentId, tenantId: user.tenantId, workLogId: id, deletedAt: null },
+      select: { id: true }
+    });
+    if (!attachment) {
+      throw new NotFoundException("Attachment not found");
+    }
+    await this.prisma.workLogAttachment.update({
+      where: { id: attachment.id },
+      data: { deletedAt: new Date() }
+    });
+    if (existing.status === WorkLogStatus.SUBMITTED) {
+      await this.aiQueue.enqueueWorkLogAnalysis(user.tenantId, id, user.id);
+    }
+    return { ok: true };
+  }
+
+  async openAttachmentDownload(
+    user: CurrentUser,
+    id: string,
+    attachmentId: string
+  ): Promise<{ stream: ReadStream; fileName: string; mimeType: string; fileSize: number }> {
+    await this.get(user, id);
+    const attachment = await this.prisma.workLogAttachment.findFirst({
+      where: { id: attachmentId, tenantId: user.tenantId, workLogId: id, deletedAt: null }
+    });
+    if (!attachment) {
+      throw new NotFoundException("Attachment not found");
+    }
+    try {
+      const info = await stat(attachment.storagePath);
+      if (!info.isFile()) {
+        throw new Error("Attachment path is not a file");
+      }
+    } catch {
+      throw new NotFoundException("Attachment file not found");
+    }
+    return {
+      stream: createReadStream(attachment.storagePath),
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      fileSize: attachment.fileSize
+    };
   }
 
   async findSubmittedInRange(tenantId: string, userIds: string[], start: Date, end: Date) {
@@ -160,7 +413,12 @@ export class WorkLogsService {
       include: {
         user: { include: { department: true } },
         project: true,
-        aiAnalysis: true
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        }
       },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }]
     });

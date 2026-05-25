@@ -89,6 +89,8 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 
 OpenAI 模式使用 Responses API 和 JSON Schema structured output。DeepSeek 模式使用 OpenAI-compatible Chat Completions 和 `response_format: { "type": "json_object" }`。如果指定了 `openai` 或 `deepseek` 但没有配置对应 API Key，系统会自动回退到 mock，避免填报提交流程被 AI 阻塞。
 
+日报附件会在提交后进入同一条 AI 分析链路。OpenAI 模式会把图片附件以内联图片输入参与分析；DeepSeek/mock 模式会使用附件元数据、摘要和可解析文本摘录。
+
 阿里云生产环境推荐：
 
 ```env
@@ -99,6 +101,29 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
 DeepSeek 官方文档入口：<https://api-docs.deepseek.com/>。
+
+## 支付配置
+
+订阅订单支持支付宝和微信支付。支付配置集中在 `apps/api/src/modules/billing/payment.config.ts`，生产环境由主控窗口统一注入环境变量，不要把商户密钥写进代码仓库：
+
+```env
+BILLING_PAYMENT_MODE=mock
+PUBLIC_WEB_URL=https://your-web.example.com
+PUBLIC_API_URL=https://your-api.example.com
+
+ALIPAY_APP_ID=
+ALIPAY_PRIVATE_KEY=
+ALIPAY_NOTIFY_URL=
+ALIPAY_RETURN_URL=
+
+WECHAT_PAY_APP_ID=
+WECHAT_PAY_MCH_ID=
+WECHAT_PAY_API_V3_KEY=
+WECHAT_PAY_NOTIFY_URL=
+WECHAT_PAY_RETURN_URL=
+```
+
+`BILLING_PAYMENT_MODE=mock` 用于本地联调，会生成模拟支付链接并允许在后台点击“模拟支付完成”。`live` 模式需要接入微信/支付宝回调验签后确认支付。
 
 ## 冒烟测试
 
@@ -153,6 +178,9 @@ pnpm build
 - `GET /work-logs/:id`
 - `PATCH /work-logs/:id`
 - `DELETE /work-logs/:id`
+- `POST /work-logs/:id/attachments` 上传日报附件，JSON body 使用 base64，单个最大 8MB
+- `DELETE /work-logs/:id/attachments/:attachmentId` 删除日报附件
+- `GET /work-logs/:id/attachments/:attachmentId/download` 下载日报附件
 - `POST /work-logs/:id/submit`
 - `GET /analytics/calendar?month=YYYY-MM&scope=self|department|company&departmentId=`
 - `GET /analytics/calendar/day?date=YYYY-MM-DD&scope=self|department|company&departmentId=`
@@ -166,8 +194,11 @@ pnpm build
 - `POST /notifications/:id/read`
 - `POST /notifications/read-all`
 - `GET /billing/subscription`
+- `GET /billing/plans`
 - `GET /billing/orders`
 - `POST /billing/orders`
+- `GET /billing/orders/:orderId/payment`
+- `POST /billing/orders/:orderId/confirm-online-payment` 本地 mock 支付确认，生产支付应使用平台回调确认
 - `POST /billing/orders/:orderId/confirm-manual-payment` 超级管理员确认线下收款
 - `PATCH /billing/subscription` 超级管理员调整当前企业订阅
 - `PATCH /billing/tenants/:tenantId/subscription` 超级管理员调整指定企业订阅
@@ -201,6 +232,8 @@ pnpm build
   }
 }
 ```
+
+日报附件默认写入 API 进程工作目录下的 `tmp/work-log-attachments`。生产环境建议配置 `WORK_LOG_ATTACHMENT_DIR` 指向持久化目录，例如 `/app/storage/work-log-attachments`，并把该目录挂载到宿主机或对象存储同步目录。
 
 ## 商业化关键项
 

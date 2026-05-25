@@ -1,5 +1,6 @@
 export type RoleCode = "SUPER_ADMIN" | "COMPANY_ADMIN" | "DEPARTMENT_MANAGER" | "EMPLOYEE";
 export type WorkLogStatus = "DRAFT" | "SUBMITTED";
+export type WorkLogAttachmentKind = "IMAGE" | "FILE";
 export type ProjectStatus = "ACTIVE" | "PAUSED" | "ARCHIVED";
 export type ReportType = "PERSONAL_DAILY" | "PERSONAL_WEEKLY" | "DEPARTMENT_DAILY" | "DEPARTMENT_WEEKLY";
 export type ReportStatus = "PENDING" | "COMPLETED" | "FAILED";
@@ -114,6 +115,40 @@ export type BillingOrder = {
   payments?: PaymentRecord[];
 };
 
+export type BillingPlan = {
+  plan: Exclude<SubscriptionPlan, "TRIAL">;
+  name: string;
+  description: string;
+  monthlyPriceCents: number;
+  yearlyPriceCents: number;
+  recommendedSeats: number;
+  features: string[];
+};
+
+export type BillingPlansResponse = {
+  currency: string;
+  plans: BillingPlan[];
+  paymentProviders: Array<{
+    provider: "ALIPAY" | "WECHAT";
+    enabled: boolean;
+    mode: "mock" | "live";
+  }>;
+};
+
+export type BillingOrderPayment = {
+  order: BillingOrder;
+  payment: {
+    provider: PaymentProvider;
+    mode?: "mock" | "live";
+    paymentUrl?: string | null;
+    qrCodeText?: string | null;
+    transactionId?: string | null;
+    amountCents?: number;
+    notifyUrl?: string | null;
+    returnUrl?: string | null;
+  } | null;
+};
+
 export type AuditLog = {
   id: string;
   tenantId: string;
@@ -162,6 +197,7 @@ export type WorkLog = {
   submittedAt?: string | null;
   projectId?: string | null;
   project?: Project | null;
+  attachments?: WorkLogAttachment[];
   user?: {
     id: string;
     name: string;
@@ -170,6 +206,19 @@ export type WorkLog = {
     department?: Department | null;
   };
   aiAnalysis?: AiAnalysis | null;
+};
+
+export type WorkLogAttachment = {
+  id: string;
+  workLogId: string;
+  uploaderId: string;
+  kind: WorkLogAttachmentKind;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  aiSummary?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type WorkLogDraft = {

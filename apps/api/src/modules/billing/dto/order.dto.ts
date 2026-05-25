@@ -13,7 +13,7 @@ export class CreateBillingOrderDto {
   @Max(100000)
   seatLimit: number;
 
-  @IsIn(Object.values(PaymentProvider))
+  @IsIn([PaymentProvider.ALIPAY, PaymentProvider.WECHAT, PaymentProvider.MANUAL])
   provider: PaymentProvider;
 }
 

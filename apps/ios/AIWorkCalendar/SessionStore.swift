@@ -5,17 +5,8 @@ enum SessionStore {
     private static let service = "com.aiworkcalendar.app"
     private static let tokenAccount = "accessToken"
     private static let userKey = "AIWorkCalendar.user"
-    private static let baseURLKey = "AIWorkCalendar.apiBaseURL"
 
-    static let defaultBaseURL = "http://localhost:3001"
-
-    static func loadBaseURL() -> String {
-        UserDefaults.standard.string(forKey: baseURLKey) ?? defaultBaseURL
-    }
-
-    static func saveBaseURL(_ value: String) {
-        UserDefaults.standard.set(value, forKey: baseURLKey)
-    }
+    static let defaultBaseURL = AppConfig.apiBaseURL
 
     static func loadUser() -> AuthUser? {
         guard let data = UserDefaults.standard.data(forKey: userKey) else {

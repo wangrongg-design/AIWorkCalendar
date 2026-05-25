@@ -1,11 +1,14 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Inject, Logger, forwardRef } from "@nestjs/common";
-import { AiTaskStatus, NotificationType } from "@prisma/client";
+import { AiTaskStatus, NotificationType, WorkLogAttachmentKind } from "@prisma/client";
 import { Job } from "bullmq";
+import { readFile } from "fs/promises";
 import { PrismaService } from "../../common/prisma.service";
 import { ReportContentService } from "../reports/report-content.service";
 import { AI_QUEUE } from "./ai-queue.service";
 import { OpenAiService } from "./openai.service";
+
+const INLINE_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 
 @Processor(AI_QUEUE)
 export class AiProcessor extends WorkerHost {
@@ -63,7 +66,13 @@ export class AiProcessor extends WorkerHost {
     }
     const workLog = await this.prisma.workLog.findFirst({
       where: { id: workLogId, deletedAt: null },
-      include: { user: true }
+      include: {
+        user: true,
+        attachments: {
+          where: { deletedAt: null },
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
     });
     if (!workLog) {
       throw new Error("Work log not found for AI analysis");
@@ -75,7 +84,21 @@ export class AiProcessor extends WorkerHost {
       date: workLog.date,
       hours: Number(workLog.hours),
       startTime: workLog.startTime,
-      endTime: workLog.endTime
+      endTime: workLog.endTime,
+      attachments: await Promise.all(
+        workLog.attachments.map(async (attachment) => {
+          const canInlineImage = attachment.kind === WorkLogAttachmentKind.IMAGE && attachment.fileSize <= INLINE_IMAGE_MAX_BYTES;
+          return {
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            kind: attachment.kind,
+            fileSize: attachment.fileSize,
+            textContent: attachment.textContent,
+            aiSummary: attachment.aiSummary,
+            dataUrl: canInlineImage ? await this.readAttachmentDataUrl(attachment.storagePath, attachment.mimeType) : null
+          };
+        })
+      )
     });
 
     await this.prisma.aiAnalysis.upsert({
@@ -121,6 +144,16 @@ export class AiProcessor extends WorkerHost {
     });
   }
 
+  private async readAttachmentDataUrl(storagePath: string, mimeType: string) {
+    try {
+      const buffer = await readFile(storagePath);
+      return `data:${mimeType};base64,${buffer.toString("base64")}`;
+    } catch (error) {
+      this.logger.warn(`Failed to read attachment for AI vision input: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
   private async processReportGeneration(_taskId: string, reportId: string | null) {
     if (!reportId) {
       throw new Error("AI task missing reportId");
@@ -128,4 +161,3 @@ export class AiProcessor extends WorkerHost {
     await this.reportContent.generateAndSave(reportId);
   }
 }
-

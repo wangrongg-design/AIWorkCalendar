@@ -36,6 +36,28 @@
     "hostDir": "/data/work-calendar-ai/exports",
     "containerDir": "/app/storage/exports"
   },
+  "workLogAttachments": {
+    "hostDir": "/data/work-calendar-ai/work-log-attachments",
+    "containerDir": "/app/storage/work-log-attachments"
+  },
+  "billing": {
+    "paymentMode": "mock",
+    "publicWebUrl": "https://app.example.com",
+    "publicApiUrl": "https://api.example.com",
+    "alipay": {
+      "appId": "",
+      "privateKey": "",
+      "notifyUrl": "",
+      "returnUrl": ""
+    },
+    "wechatPay": {
+      "appId": "",
+      "merchantId": "",
+      "apiV3Key": "",
+      "notifyUrl": "",
+      "returnUrl": ""
+    }
+  },
   "docker": {
     "webPortBind": "127.0.0.1:3000",
     "apiPortBind": "127.0.0.1:3001"

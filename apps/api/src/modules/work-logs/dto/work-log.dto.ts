@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsDateString, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import { IsBase64, IsDateString, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 
 export class WorkLogQueryDto {
   @IsOptional()
@@ -43,11 +43,12 @@ export class CreateWorkLogDto {
   @IsDateString()
   endTime?: string;
 
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   @Max(24)
-  hours: number;
+  hours?: number;
 
   @IsOptional()
   @IsString()
@@ -91,4 +92,24 @@ export class UpdateWorkLogDto {
   @IsOptional()
   @IsString()
   projectId?: string | null;
+}
+
+export class CreateWorkLogAttachmentDto {
+  @IsString()
+  @MinLength(1)
+  fileName: string;
+
+  @IsString()
+  @MinLength(1)
+  mimeType: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(8 * 1024 * 1024)
+  fileSize: number;
+
+  @IsString()
+  @IsBase64()
+  contentBase64: string;
 }

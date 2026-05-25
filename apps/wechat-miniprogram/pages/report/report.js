@@ -4,6 +4,64 @@ const { dateKey } = require("../../utils/date");
 
 let speechManager = null;
 
+const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+
+function fileNameFromPath(path, fallback) {
+  const parts = String(path || "").split(/[\\/]/);
+  return parts[parts.length - 1] || fallback;
+}
+
+function mimeFromName(name, fallback) {
+  const lower = String(name || "").toLowerCase();
+  if (/\.(jpg|jpeg)$/.test(lower)) return "image/jpeg";
+  if (/\.png$/.test(lower)) return "image/png";
+  if (/\.gif$/.test(lower)) return "image/gif";
+  if (/\.webp$/.test(lower)) return "image/webp";
+  if (/\.pdf$/.test(lower)) return "application/pdf";
+  if (/\.txt$/.test(lower)) return "text/plain";
+  if (/\.csv$/.test(lower)) return "text/csv";
+  if (/\.json$/.test(lower)) return "application/json";
+  if (/\.(doc|docx)$/.test(lower)) return "application/msword";
+  if (/\.(xls|xlsx)$/.test(lower)) return "application/vnd.ms-excel";
+  return fallback || "application/octet-stream";
+}
+
+function formatFileSize(size) {
+  if (size >= 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)}MB`;
+  }
+  return `${Math.max(1, Math.round(size / 1024))}KB`;
+}
+
+function parseTimeMinutes(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function formatTime(minutes) {
+  const normalized = ((Math.round(minutes) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+function durationHours(startMinutes, endMinutes) {
+  let diff = endMinutes - startMinutes;
+  if (diff < 0) diff += 24 * 60;
+  return Number((diff / 60).toFixed(2));
+}
+
+function timeFromIso(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 Page({
   data: {
     user: {},
@@ -18,9 +76,12 @@ Page({
     title: "",
     content: "",
     hours: "1",
+    startTime: "",
+    endTime: "",
     projectOptions: [{ id: "", displayName: "不关联项目" }],
     projectIndex: 0,
     projectId: "",
+    attachments: [],
     recording: false,
     drafting: false,
     submitting: false,
@@ -129,6 +190,8 @@ Page({
         title: draft.title,
         content: draft.content,
         hours: String(draft.hours),
+        startTime: timeFromIso(draft.startTime),
+        endTime: timeFromIso(draft.endTime),
         chatMessages: messages.concat([{ role: "assistant", content: draft.assistantMessage }])
       });
       wx.showToast({ title: draft.kind === "PLAN" ? "已生成计划" : "已生成日报" });
@@ -183,7 +246,41 @@ Page({
   },
 
   onHoursInput(event) {
-    this.setData({ hours: event.detail.value });
+    this.setData({ hours: event.detail.value }, () => this.syncTiming("hours"));
+  },
+
+  onStartTimeChange(event) {
+    this.setData({ startTime: event.detail.value }, () => this.syncTiming("startTime"));
+  },
+
+  onEndTimeChange(event) {
+    this.setData({ endTime: event.detail.value }, () => this.syncTiming("endTime"));
+  },
+
+  syncTiming(changed) {
+    const startMinutes = parseTimeMinutes(this.data.startTime);
+    const endMinutes = parseTimeMinutes(this.data.endTime);
+    const hours = Number(this.data.hours);
+    const hasHours = Number.isFinite(hours) && hours >= 0 && hours <= 24;
+    const patch = {};
+
+    if ((changed === "startTime" || changed === "endTime") && startMinutes !== null && endMinutes !== null) {
+      patch.hours = String(durationHours(startMinutes, endMinutes));
+    } else if (changed === "startTime" && startMinutes !== null && hasHours && !this.data.endTime) {
+      patch.endTime = formatTime(startMinutes + hours * 60);
+    } else if (changed === "endTime" && endMinutes !== null && hasHours && !this.data.startTime) {
+      patch.startTime = formatTime(endMinutes - hours * 60);
+    } else if (changed === "hours" && hasHours) {
+      if (startMinutes !== null) {
+        patch.endTime = formatTime(startMinutes + hours * 60);
+      } else if (endMinutes !== null) {
+        patch.startTime = formatTime(endMinutes - hours * 60);
+      }
+    }
+
+    if (Object.keys(patch).length) {
+      this.setData(patch);
+    }
   },
 
   onTitleInput(event) {
@@ -194,14 +291,108 @@ Page({
     this.setData({ content: event.detail.value });
   },
 
+  choosePhotos() {
+    wx.chooseMedia({
+      count: Math.max(1, 9 - this.data.attachments.length),
+      mediaType: ["image"],
+      sourceType: ["album", "camera"],
+      success: (res) => {
+        const items = (res.tempFiles || [])
+          .filter((item) => this.acceptAttachmentSize(item.size))
+          .map((item) => {
+            const path = item.tempFilePath || item.path;
+            const name = fileNameFromPath(path, `photo-${Date.now()}.jpg`);
+            return {
+              id: `${Date.now()}-${Math.random()}`,
+              name,
+              path,
+              size: item.size || 0,
+              displaySize: formatFileSize(item.size || 0),
+              mimeType: mimeFromName(name, "image/jpeg"),
+              kind: "IMAGE"
+            };
+          });
+        this.setData({ attachments: this.data.attachments.concat(items).slice(0, 9) });
+      }
+    });
+  },
+
+  chooseFiles() {
+    if (!wx.chooseMessageFile) {
+      wx.showToast({ title: "当前微信版本不支持选择文件", icon: "none" });
+      return;
+    }
+    wx.chooseMessageFile({
+      count: Math.max(1, 9 - this.data.attachments.length),
+      type: "file",
+      success: (res) => {
+        const items = (res.tempFiles || [])
+          .filter((item) => this.acceptAttachmentSize(item.size))
+          .map((item) => ({
+            id: `${Date.now()}-${Math.random()}`,
+            name: item.name || fileNameFromPath(item.path, "attachment"),
+            path: item.path,
+            size: item.size || 0,
+            displaySize: formatFileSize(item.size || 0),
+            mimeType: mimeFromName(item.name || item.path),
+            kind: "FILE"
+          }));
+        this.setData({ attachments: this.data.attachments.concat(items).slice(0, 9) });
+      }
+    });
+  },
+
+  acceptAttachmentSize(size) {
+    if (size > ATTACHMENT_MAX_BYTES) {
+      wx.showToast({ title: "单个附件不能超过 8MB", icon: "none" });
+      return false;
+    }
+    return true;
+  },
+
+  removeAttachment(event) {
+    const id = event.currentTarget.dataset.id;
+    this.setData({
+      attachments: this.data.attachments.filter((item) => item.id !== id)
+    });
+  },
+
+  readFileBase64(path) {
+    return new Promise((resolve, reject) => {
+      wx.getFileSystemManager().readFile({
+        filePath: path,
+        encoding: "base64",
+        success: (res) => resolve(res.data),
+        fail: (error) => reject(new Error(error.errMsg || "附件读取失败"))
+      });
+    });
+  },
+
+  async uploadAttachments(workLogId) {
+    for (const item of this.data.attachments) {
+      await request(`/work-logs/${workLogId}/attachments`, {
+        method: "POST",
+        data: {
+          fileName: item.name,
+          mimeType: item.mimeType,
+          fileSize: item.size,
+          contentBase64: await this.readFileBase64(item.path)
+        }
+      });
+    }
+  },
+
   clearForm() {
     this.setData({
       title: "",
       content: "",
       hours: "1",
+      startTime: "",
+      endTime: "",
       date: dateKey(),
       projectIndex: 0,
       projectId: "",
+      attachments: [],
       chatInput: "",
       chatMessages: [
         {
@@ -233,9 +424,12 @@ Page({
           title,
           content,
           hours,
+          startTime: this.data.startTime ? this.dateTimeIso(this.data.startTime) : undefined,
+          endTime: this.data.endTime ? this.dateTimeIso(this.data.endTime) : undefined,
           projectId: this.data.projectId || undefined
         }
       });
+      await this.uploadAttachments(workLog.id);
       await request(`/work-logs/${workLog.id}/submit`, { method: "POST" });
       wx.showToast({ title: "已提交" });
       this.clearForm();
@@ -249,5 +443,9 @@ Page({
   logout() {
     clearSession();
     wx.reLaunch({ url: "/pages/login/login" });
+  },
+
+  dateTimeIso(time) {
+    return new Date(`${this.data.date}T${time}:00`).toISOString();
   }
 });

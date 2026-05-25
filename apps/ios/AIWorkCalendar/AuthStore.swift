@@ -4,16 +4,12 @@ import Combine
 @MainActor
 final class AuthStore: ObservableObject {
     @Published var user: AuthUser?
-    @Published var apiBaseURL: String {
-        didSet {
-            SessionStore.saveBaseURL(apiBaseURL)
-        }
-    }
+    let apiBaseURL: String
     @Published var isRefreshing = false
 
     init() {
         self.user = SessionStore.loadUser()
-        self.apiBaseURL = SessionStore.loadBaseURL()
+        self.apiBaseURL = AppConfig.apiBaseURL
     }
 
     var isAuthenticated: Bool {
@@ -28,7 +24,7 @@ final class AuthStore: ObservableObject {
     }
 
     func login(account: String, password: String, tenantCode: String?) async throws {
-        let cleanBaseURL = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanBaseURL = AppConfig.apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let client = APIClient(baseURLString: cleanBaseURL, accessToken: nil) else {
             throw APIError.invalidBaseURL
         }
@@ -39,7 +35,6 @@ final class AuthStore: ObservableObject {
             tenantCode: cleanTenantCode?.isEmpty == true ? nil : cleanTenantCode
         )
         let response: LoginResponse = try await client.request("/auth/login", method: .post, body: request)
-        apiBaseURL = cleanBaseURL
         SessionStore.saveToken(response.accessToken)
         SessionStore.saveUser(response.user)
         user = response.user

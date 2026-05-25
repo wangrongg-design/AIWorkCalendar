@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Radio, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
-import { CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, QrCode, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
@@ -12,6 +12,9 @@ import {
   AuditLog,
   BillingInterval,
   BillingOrder,
+  BillingOrderPayment,
+  BillingPlan,
+  BillingPlansResponse,
   DataDeletionRequest,
   DataDeletionScope,
   Department,
@@ -85,11 +88,16 @@ const billingIntervalOptions: Array<{ value: BillingInterval; label: string }> =
 ];
 
 const paymentProviderOptions: Array<{ value: PaymentProvider; label: string }> = [
-  { value: "MANUAL", label: "线下转账" },
   { value: "ALIPAY", label: "支付宝" },
-  { value: "WECHAT", label: "微信支付" },
-  { value: "STRIPE", label: "Stripe" }
+  { value: "WECHAT", label: "微信支付" }
 ];
+
+const paymentProviderLabels: Record<PaymentProvider, string> = {
+  MANUAL: "线下转账",
+  ALIPAY: "支付宝",
+  WECHAT: "微信支付",
+  STRIPE: "Stripe"
+};
 
 function contactText(record: { email?: string | null; phone?: string | null }) {
   return [record.phone, record.email].filter(Boolean).join(" / ") || "-";
@@ -142,6 +150,10 @@ function moneyText(amountCents?: number, currency = "CNY") {
   }).format(amountCents / 100);
 }
 
+function planPrice(plan: BillingPlan, interval: BillingInterval) {
+  return interval === "YEARLY" ? plan.yearlyPriceCents : plan.monthlyPriceCents;
+}
+
 function fileSizeText(bytes?: number | null) {
   if (!bytes) return "-";
   if (bytes < 1024) return `${bytes} B`;
@@ -180,6 +192,10 @@ export default function OrgPage() {
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
   const [billingOrderModalOpen, setBillingOrderModalOpen] = useState(false);
   const [dataDeletionModalOpen, setDataDeletionModalOpen] = useState(false);
+  const [checkoutInterval, setCheckoutInterval] = useState<BillingInterval>("MONTHLY");
+  const [checkoutProvider, setCheckoutProvider] = useState<"ALIPAY" | "WECHAT">("WECHAT");
+  const [checkoutSeatLimit, setCheckoutSeatLimit] = useState(5);
+  const [checkout, setCheckout] = useState<BillingOrderPayment | null>(null);
 
   const org = useQuery({
     queryKey: ["org"],
@@ -194,6 +210,12 @@ export default function OrgPage() {
   const billingOrders = useQuery({
     queryKey: ["billing-orders"],
     queryFn: () => apiFetch<BillingOrder[]>("/billing/orders"),
+    enabled: canManage
+  });
+
+  const billingPlans = useQuery({
+    queryKey: ["billing-plans"],
+    queryFn: () => apiFetch<BillingPlansResponse>("/billing/plans"),
     enabled: canManage
   });
 
@@ -298,11 +320,27 @@ export default function OrgPage() {
         method: "POST",
         body: JSON.stringify(values)
       }),
-    onSuccess: () => {
+    onSuccess: (order) => {
       message.success("订阅订单已创建");
       setBillingOrderModalOpen(false);
       billingOrderForm.resetFields();
+      apiFetch<BillingOrderPayment>(`/billing/orders/${order.id}/payment`)
+        .then(setCheckout)
+        .catch((error) => message.error(error instanceof Error ? error.message : "支付信息获取失败"));
       queryClient.invalidateQueries({ queryKey: ["billing-orders"] });
+    }
+  });
+
+  const confirmOnlinePayment = useMutation({
+    mutationFn: (orderId: string) => apiFetch<BillingOrder>(`/billing/orders/${orderId}/confirm-online-payment`, { method: "POST" }),
+    onSuccess: () => {
+      message.success("支付已完成，订阅已开通");
+      setCheckout(null);
+      queryClient.invalidateQueries({ queryKey: ["billing-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["org"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "支付确认失败");
     }
   });
 
@@ -371,6 +409,15 @@ export default function OrgPage() {
     }
   });
 
+  const startPlanCheckout = (plan: BillingPlan) => {
+    createBillingOrder.mutate({
+      plan: plan.plan,
+      interval: checkoutInterval,
+      seatLimit: Math.max(1, checkoutSeatLimit || plan.recommendedSeats),
+      provider: checkoutProvider
+    });
+  };
+
   const departmentColumns: ColumnsType<Department> = [
     { title: "部门", dataIndex: "name" },
     {
@@ -432,7 +479,7 @@ export default function OrgPage() {
     { title: "周期", dataIndex: "interval", width: 90, render: (value: BillingInterval) => optionLabel(billingIntervalOptions, value) },
     { title: "席位", dataIndex: "seatLimit", width: 90 },
     { title: "金额", dataIndex: "amountCents", width: 130, render: (value: number, record) => moneyText(value, record.currency) },
-    { title: "支付方式", dataIndex: "provider", width: 120, render: (value: PaymentProvider) => optionLabel(paymentProviderOptions, value) },
+    { title: "支付方式", dataIndex: "provider", width: 120, render: (value: PaymentProvider) => paymentProviderLabels[value] ?? value },
     {
       title: "状态",
       dataIndex: "status",
@@ -448,9 +495,16 @@ export default function OrgPage() {
           <Button size="small" loading={confirmManualPayment.isPending} onClick={() => confirmManualPayment.mutate(record.id)}>
             确认收款
           </Button>
-        ) : record.paymentUrl ? (
-          <Button size="small" href={record.paymentUrl} target="_blank">
-            去支付
+        ) : record.paymentUrl && record.status === "PENDING" ? (
+          <Button
+            size="small"
+            onClick={() =>
+              apiFetch<BillingOrderPayment>(`/billing/orders/${record.id}/payment`)
+                .then(setCheckout)
+                .catch((error) => message.error(error instanceof Error ? error.message : "支付信息获取失败"))
+            }
+          >
+            支付
           </Button>
         ) : (
           "-"
@@ -689,30 +743,78 @@ export default function OrgPage() {
                   key: "billing",
                   label: "订阅订单",
                   children: (
-                    <div className="space-y-3">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <Alert
-                          className="flex-1"
-                          type="info"
-                          showIcon
-                          message="第一版支持手动开通订单"
-                          description="企业管理员可创建升级订单；平台超级管理员确认线下收款后，系统会自动开通对应套餐。支付宝、微信支付和 Stripe 已预留 Provider。"
-                        />
-                        <Button
-                          type="primary"
-                          icon={<ReceiptText size={16} />}
-                          onClick={() => {
-                            billingOrderForm.setFieldsValue({
-                              plan: "TEAM",
-                              interval: "MONTHLY",
-                              seatLimit: Math.max(org.data?.subscription.seatLimit ?? 3, 5),
-                              provider: "MANUAL"
-                            });
-                            setBillingOrderModalOpen(true);
-                          }}
-                        >
-                          创建订阅订单
-                        </Button>
+                    <div className="space-y-4">
+                      <div className="surface-panel p-5">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                          <div>
+                            <div className="text-base font-medium text-ink">选择套餐并支付</div>
+                            <div className="mt-1 text-sm text-muted">选择席位、周期和支付方式，系统会创建订单并打开支付对话框。</div>
+                          </div>
+                          <Space wrap>
+                            <Radio.Group
+                              optionType="button"
+                              buttonStyle="solid"
+                              value={checkoutInterval}
+                              options={billingIntervalOptions}
+                              onChange={(event) => setCheckoutInterval(event.target.value)}
+                            />
+                            <Select
+                              value={checkoutProvider}
+                              style={{ width: 128 }}
+                              options={paymentProviderOptions}
+                              onChange={setCheckoutProvider}
+                            />
+                            <InputNumber
+                              addonBefore="席位"
+                              min={1}
+                              max={100000}
+                              value={checkoutSeatLimit}
+                              onChange={(value) => setCheckoutSeatLimit(Number(value) || 1)}
+                            />
+                          </Space>
+                        </div>
+                        <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                          {(billingPlans.data?.plans ?? []).map((plan) => {
+                            const amount = planPrice(plan, checkoutInterval) * Math.max(1, checkoutSeatLimit || plan.recommendedSeats);
+                            const isCurrent = org.data?.subscription.plan === plan.plan;
+                            return (
+                              <div key={plan.plan} className="rounded-[8px] border border-line bg-white p-4 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-base font-semibold text-ink">{plan.name}</div>
+                                    <div className="mt-1 min-h-10 text-sm leading-5 text-muted">{plan.description}</div>
+                                  </div>
+                                  {isCurrent ? <Tag color="green">当前</Tag> : null}
+                                </div>
+                                <div className="mt-4 flex items-end gap-2">
+                                  <span className="text-3xl font-semibold text-ink">{moneyText(planPrice(plan, checkoutInterval))}</span>
+                                  <span className="pb-1 text-xs text-muted">/席/{checkoutInterval === "YEARLY" ? "年" : "月"}</span>
+                                </div>
+                                <div className="mt-2 text-sm text-muted">
+                                  {checkoutSeatLimit} 席合计 {moneyText(amount)}
+                                </div>
+                                <div className="mt-4 space-y-2">
+                                  {plan.features.map((feature) => (
+                                    <div key={feature} className="flex items-center gap-2 text-sm text-muted">
+                                      <CheckCircle2 size={15} className="text-success" />
+                                      <span>{feature}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <Button
+                                  className="mt-4 w-full"
+                                  type={plan.plan === "BUSINESS" ? "primary" : "default"}
+                                  icon={<ReceiptText size={16} />}
+                                  loading={createBillingOrder.isPending}
+                                  onClick={() => startPlanCheckout(plan)}
+                                >
+                                  选择并支付
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {billingPlans.error ? <Alert className="mt-4" type="error" showIcon message={(billingPlans.error as Error).message} /> : null}
                       </div>
                       <Table
                         rowKey="id"
@@ -1000,6 +1102,63 @@ export default function OrgPage() {
             description="团队版 39 元/席/月，商业版 99 元/席/月，企业版 299 元/席/月；年付按 10 个月计费。"
           />
         </Form>
+      </Modal>
+
+      <Modal
+        title="完成支付"
+        open={Boolean(checkout)}
+        onCancel={() => setCheckout(null)}
+        footer={null}
+        width={560}
+      >
+        {checkout ? (
+          <div className="space-y-4">
+            <div className="rounded-[8px] bg-surface-container p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm text-muted">{paymentProviderLabels[checkout.order.provider] ?? checkout.order.provider}</div>
+                  <div className="mt-1 text-2xl font-semibold text-ink">{moneyText(checkout.order.amountCents, checkout.order.currency)}</div>
+                </div>
+                <Tag color={checkout.order.status === "PAID" ? "green" : "orange"}>{checkout.order.status}</Tag>
+              </div>
+              <div className="mt-2 text-sm text-muted">
+                {optionLabel(planOptions, checkout.order.plan)} · {optionLabel(billingIntervalOptions, checkout.order.interval)} · {checkout.order.seatLimit} 席
+              </div>
+            </div>
+            <div className="flex flex-col items-center rounded-[8px] border border-line bg-white p-5 text-center">
+              <div className="flex h-32 w-32 items-center justify-center rounded-[8px] border border-line bg-surface-container-low text-primary">
+                <QrCode size={74} />
+              </div>
+              <div className="mt-3 text-sm font-medium text-ink">
+                {checkout.payment?.mode === "mock" ? "本地模拟支付码" : "请使用对应支付 App 扫码"}
+              </div>
+              <Typography.Text className="mt-2 max-w-full break-all text-xs text-muted">
+                {checkout.payment?.qrCodeText ?? checkout.payment?.paymentUrl ?? "等待支付信息"}
+              </Typography.Text>
+            </div>
+            <Space className="w-full justify-end" wrap>
+              {checkout.payment?.paymentUrl ? (
+                <Button href={checkout.payment.paymentUrl} target="_blank">
+                  打开支付链接
+                </Button>
+              ) : null}
+              <Button onClick={() => billingOrders.refetch()} loading={billingOrders.isFetching}>
+                刷新订单
+              </Button>
+              <Button
+                type="primary"
+                loading={confirmOnlinePayment.isPending}
+                disabled={checkout.order.status === "PAID"}
+                onClick={() => confirmOnlinePayment.mutate(checkout.order.id)}
+              >
+                {checkout.payment?.mode === "mock" ? "模拟支付完成" : "我已完成支付"}
+              </Button>
+            </Space>
+            {checkout.payment?.mode === "live" ? (
+              <Alert type="info" showIcon message="生产支付应由微信/支付宝回调确认，本按钮不会绕过平台验签。" />
+            ) : null}
+          </div>
+        ) : null}
       </Modal>
 
       <Modal

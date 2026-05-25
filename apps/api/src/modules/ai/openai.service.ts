@@ -24,6 +24,7 @@ type ReportInput = {
     title: string;
     content: string;
     hours: number;
+    attachments?: WorkLogAttachmentInput[];
     analysis?: {
       achievements?: unknown;
       risks?: unknown;
@@ -65,6 +66,33 @@ type DraftWorkLogInput = {
   }>;
 };
 
+type WorkLogAttachmentInput = {
+  fileName: string;
+  mimeType: string;
+  kind: "IMAGE" | "FILE";
+  fileSize: number;
+  textContent?: string | null;
+  aiSummary?: string | null;
+  dataUrl?: string | null;
+};
+
+type WorkLogAnalysisInput = {
+  title: string;
+  content: string;
+  date: Date;
+  hours: number;
+  startTime?: Date | null;
+  endTime?: Date | null;
+  attachments?: WorkLogAttachmentInput[];
+};
+
+type OpenAiWorkLogContent =
+  | string
+  | Array<
+      | { type: "input_text"; text: string }
+      | { type: "input_image"; image_url: string; detail: "low" | "high" | "auto" }
+    >;
+
 @Injectable()
 export class OpenAiService {
   private readonly logger = new Logger(OpenAiService.name);
@@ -83,14 +111,7 @@ export class OpenAiService {
       : null;
   }
 
-  async analyzeWorkLog(input: {
-    title: string;
-    content: string;
-    date: Date;
-    hours: number;
-    startTime?: Date | null;
-    endTime?: Date | null;
-  }): Promise<WorkLogAnalysisResult> {
+  async analyzeWorkLog(input: WorkLogAnalysisInput): Promise<WorkLogAnalysisResult> {
     if (this.provider === "deepseek" && this.deepSeekClient) {
       return this.analyzeWorkLogWithDeepSeek(input);
     }
@@ -156,14 +177,7 @@ export class OpenAiService {
     return "mock";
   }
 
-  private async analyzeWorkLogWithOpenAi(input: {
-    title: string;
-    content: string;
-    date: Date;
-    hours: number;
-    startTime?: Date | null;
-    endTime?: Date | null;
-  }): Promise<WorkLogAnalysisResult> {
+  private async analyzeWorkLogWithOpenAi(input: WorkLogAnalysisInput): Promise<WorkLogAnalysisResult> {
     if (!this.openAiClient) {
       return this.localWorkLogAnalysis(input);
     }
@@ -177,14 +191,7 @@ export class OpenAiService {
         },
         {
           role: "user",
-          content: JSON.stringify({
-            title: input.title,
-            content: input.content,
-            date: input.date.toISOString().slice(0, 10),
-            hours: input.hours,
-            startTime: input.startTime?.toISOString() ?? null,
-            endTime: input.endTime?.toISOString() ?? null
-          })
+          content: this.workLogAnalysisContent(input)
         }
       ],
       text: {
@@ -280,14 +287,7 @@ export class OpenAiService {
     return this.parseStructuredOutput<WorkLogDraftResult>(response);
   }
 
-  private async analyzeWorkLogWithDeepSeek(input: {
-    title: string;
-    content: string;
-    date: Date;
-    hours: number;
-    startTime?: Date | null;
-    endTime?: Date | null;
-  }): Promise<WorkLogAnalysisResult> {
+  private async analyzeWorkLogWithDeepSeek(input: WorkLogAnalysisInput): Promise<WorkLogAnalysisResult> {
     if (!this.deepSeekClient) {
       return this.localWorkLogAnalysis(input);
     }
@@ -300,14 +300,7 @@ export class OpenAiService {
         },
         {
           role: "user",
-          content: JSON.stringify({
-            title: input.title,
-            content: input.content,
-            date: input.date.toISOString().slice(0, 10),
-            hours: input.hours,
-            startTime: input.startTime?.toISOString() ?? null,
-            endTime: input.endTime?.toISOString() ?? null
-          })
+          content: JSON.stringify(this.compactWorkLogAnalysisInput(input))
         }
       ],
       response_format: { type: "json_object" },
@@ -443,14 +436,51 @@ export class OpenAiService {
     return serialized.length > 0 ? serialized.slice(0, 1200) : "没有生成可用回答。";
   }
 
-  private localWorkLogAnalysis(input: {
-    title: string;
-    content: string;
-    hours: number;
-  }): WorkLogAnalysisResult {
-    const text = `${input.title} ${input.content}`;
+  private workLogAnalysisContent(input: WorkLogAnalysisInput): OpenAiWorkLogContent {
+    const payload = this.compactWorkLogAnalysisInput(input);
+    const images = (input.attachments ?? []).filter((attachment) => attachment.kind === "IMAGE" && attachment.dataUrl).slice(0, 6);
+    if (!images.length) {
+      return JSON.stringify(payload);
+    }
+    return [
+      { type: "input_text", text: JSON.stringify(payload) },
+      ...images.map((attachment) => ({
+        type: "input_image" as const,
+        image_url: attachment.dataUrl as string,
+        detail: "low" as const
+      }))
+    ];
+  }
+
+  private compactWorkLogAnalysisInput(input: WorkLogAnalysisInput) {
+    return {
+      title: input.title,
+      content: input.content,
+      date: input.date.toISOString().slice(0, 10),
+      hours: input.hours,
+      startTime: input.startTime?.toISOString() ?? null,
+      endTime: input.endTime?.toISOString() ?? null,
+      attachments: (input.attachments ?? []).map((attachment, index) => ({
+        imageRef: attachment.kind === "IMAGE" && attachment.dataUrl ? `image-${index + 1}` : null,
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        kind: attachment.kind,
+        fileSize: attachment.fileSize,
+        textContent: attachment.textContent ?? null,
+        aiSummary: attachment.aiSummary ?? null
+      }))
+    };
+  }
+
+  private localWorkLogAnalysis(input: WorkLogAnalysisInput): WorkLogAnalysisResult {
+    const attachmentText = (input.attachments ?? [])
+      .map((attachment) => [attachment.fileName, attachment.aiSummary, attachment.textContent].filter(Boolean).join(" "))
+      .join(" ");
+    const text = `${input.title} ${input.content} ${attachmentText}`;
     const hasRisk = /风险|延迟|问题|阻塞|blocked|risk/i.test(text);
     const hasBlocker = /阻塞|卡住|依赖|blocked/i.test(text);
+    const hasAttachments = Boolean(input.attachments?.length);
+    const hasImages = Boolean(input.attachments?.some((attachment) => attachment.kind === "IMAGE"));
     const keywords = Array.from(
       new Set(
         text
@@ -466,9 +496,13 @@ export class OpenAiService {
       risks: hasRisk ? ["填报内容中提到风险、延迟或问题，需要管理者关注。"] : [],
       blockers: hasBlocker ? ["填报内容中提到阻塞或外部依赖。"] : [],
       keywords,
-      tags: ["自动分析", input.hours > 8 ? "工时偏高" : "常规工时"],
+      tags: ["自动分析", input.hours > 8 ? "工时偏高" : "常规工时", hasAttachments ? "含附件" : null, hasImages ? "含图片" : null].filter(
+        Boolean
+      ) as string[],
       timeReasonableness: input.hours > 10 ? "工时偏高，建议确认是否拆分记录。" : "工时与填报内容基本匹配。",
-      summary: input.content.length > 80 ? `${input.content.slice(0, 80)}...` : input.content
+      summary: `${input.content.length > 80 ? `${input.content.slice(0, 80)}...` : input.content}${
+        hasAttachments ? `（含 ${input.attachments?.length ?? 0} 个附件）` : ""
+      }`
     };
   }
 
@@ -566,7 +600,14 @@ export class OpenAiService {
     });
     return {
       completed: input.workLogs.map((item) => `${item.userName}: ${item.title}`).slice(0, 20),
-      progress: input.workLogs.map((item) => item.analysis?.summary ?? item.content).slice(0, 10),
+      progress: input.workLogs
+        .map((item) => {
+          const attachmentSummary = item.attachments?.length
+            ? ` 附件：${item.attachments.map((attachment) => attachment.aiSummary ?? attachment.fileName).join("；")}`
+            : "";
+          return `${item.analysis?.summary ?? item.content}${attachmentSummary}`;
+        })
+        .slice(0, 10),
       risks,
       nextPlan: ["继续推进已提交工作中的后续事项。"],
       hours: {

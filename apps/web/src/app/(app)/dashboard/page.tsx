@@ -1,14 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, TimePicker, Typography, message } from "antd";
+import { Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, MessageCircle, Send, Sparkles, UsersRound } from "lucide-react";
+import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, MessageCircle, Paperclip, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog } from "@/lib/types";
+import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment } from "@/lib/types";
+import { applyWorkLogTimingAutoFill } from "@/lib/work-log-time";
 
 type OrgResponse = {
   departments: Department[];
@@ -21,6 +23,11 @@ type QuickFillForm = {
   projectId?: string;
   startTime?: Dayjs;
   endTime?: Dayjs;
+};
+
+type PendingAttachment = {
+  uid: string;
+  file: File;
 };
 
 type ChatMessage = {
@@ -40,6 +47,19 @@ type CalendarChatResponse = {
 };
 
 const quickQuestions = ["总结本月团队重点", "今天有哪些风险？", "未来计划怎么安排？"];
+const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result ?? "");
+      resolve(value.includes(",") ? value.split(",")[1] : value);
+    };
+    reader.onerror = () => reject(new Error("附件读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
 
 function monthCells(month: Dayjs) {
   const startOfMonth = month.startOf("month");
@@ -111,6 +131,7 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [quickFillOpen, setQuickFillOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [selectedWorkLog, setSelectedWorkLog] = useState<WorkLog | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -119,6 +140,7 @@ export default function DashboardPage() {
       content: "可以直接问我：本月团队重点、今天风险、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
     }
   ]);
+  const [quickAttachments, setQuickAttachments] = useState<PendingAttachment[]>([]);
 
   const org = useQuery({
     queryKey: ["org"],
@@ -172,6 +194,43 @@ export default function DashboardPage() {
   const cells = useMemo(() => monthCells(month), [month]);
   const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
+  const quickUploadFiles: UploadFile[] = useMemo(
+    () =>
+      quickAttachments.map((item) => ({
+        uid: item.uid,
+        name: item.file.name,
+        size: item.file.size,
+        status: "done"
+      })),
+    [quickAttachments]
+  );
+
+  const addQuickAttachment = (file: RcFile) => {
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      message.error("单个附件不能超过 8MB");
+      return Upload.LIST_IGNORE;
+    }
+    setQuickAttachments((items) => [...items, { uid: file.uid, file }]);
+    return false;
+  };
+
+  const uploadQuickAttachments = async (workLogId: string) => {
+    const files = [...quickAttachments];
+    for (const item of files) {
+      await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: item.file.name,
+          mimeType: item.file.type || "application/octet-stream",
+          fileSize: item.file.size,
+          contentBase64: await fileToBase64(item.file)
+        })
+      });
+    }
+    if (files.length) {
+      setQuickAttachments([]);
+    }
+  };
 
   const quickFill = useMutation({
     mutationFn: async (values: QuickFillForm) => {
@@ -182,15 +241,20 @@ export default function DashboardPage() {
         method: "POST",
         body: JSON.stringify(toQuickFillPayload(selectedDate, values))
       });
+      await uploadQuickAttachments(created.id);
       return apiFetch<WorkLog>(`/work-logs/${created.id}/submit`, { method: "POST" });
     },
     onSuccess: () => {
       message.success(selectedDate && dateKind(selectedDate) === "future" ? "计划已保存" : "日报已提交");
       setQuickFillOpen(false);
+      setQuickAttachments([]);
       quickForm.resetFields();
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["calendar-day"] });
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error((error as Error).message || "提交失败");
     }
   });
 
@@ -240,6 +304,7 @@ export default function DashboardPage() {
   const openQuickFill = (date: string) => {
     const kind = dateKind(date);
     quickForm.resetFields();
+    setQuickAttachments([]);
     quickForm.setFieldsValue({
       title: kind === "future" ? "工作计划" : kind === "today" ? "今日工作" : "工作日报",
       content: "",
@@ -263,16 +328,26 @@ export default function DashboardPage() {
       render: (_, record) => (
         <Space direction="vertical" size={8} className="w-full">
           {record.logs.map((log) => (
-            <div key={log.id} className="border-b border-line pb-2 last:border-b-0">
+            <button
+              key={log.id}
+              type="button"
+              className="block w-full border-b border-line pb-2 text-left transition-colors hover:bg-surface-container-low last:border-b-0"
+              onClick={() => setSelectedWorkLog(log)}
+            >
               <div className="font-medium">{log.title}</div>
               {log.project ? <Tag color="blue">{log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name}</Tag> : null}
               <div className="mt-1 text-sm text-muted">{log.content}</div>
+              {log.attachments?.length ? (
+                <Tag className="mt-2" icon={<Paperclip size={13} />}>
+                  附件 {log.attachments.length}
+                </Tag>
+              ) : null}
               <Space className="mt-2" wrap>
                 <Tag>{Number(log.hours).toFixed(1)} 小时</Tag>
                 {log.aiAnalysis?.achievements?.map((item) => <Tag color="green" key={item}>{item}</Tag>)}
                 {log.aiAnalysis?.risks?.map((item) => <Tag color="red" key={item}>{item}</Tag>)}
               </Space>
-            </div>
+            </button>
           ))}
         </Space>
       )
@@ -462,7 +537,7 @@ export default function DashboardPage() {
         open={Boolean(selectedDate)}
         onCancel={() => setSelectedDate(null)}
         footer={null}
-        width={980}
+        width={1180}
       >
         {selectedDate ? (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-surface-container px-4 py-3">
@@ -472,9 +547,6 @@ export default function DashboardPage() {
               </Typography.Text>
             </div>
             <Space>
-              <Button icon={<MessageCircle size={16} />} onClick={() => setChatOpen(true)}>
-                问 AI
-              </Button>
               <Button type="primary" icon={<CalendarPlus size={16} />} onClick={() => openQuickFill(selectedDate)}>
                 {dateKind(selectedDate) === "future" ? "填写计划" : "填写日报"}
               </Button>
@@ -518,12 +590,134 @@ export default function DashboardPage() {
             <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
           ))}
         </Space>
+        <div className="mt-6 rounded-[8px] border border-line bg-surface-container-low">
+          <div className="border-b border-line px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-ink">
+              <Bot size={17} />
+              问 AI
+            </div>
+            <div className="mt-1 text-xs text-muted">
+              当前上下文：{selectedDate ? `${selectedDate} 单日` : `${month.format("YYYY-MM")} 整月`} · {scope === "self" ? "只看自己" : scope === "department" ? "本部门" : "全公司"}
+            </div>
+          </div>
+          <div className="max-h-72 space-y-3 overflow-y-auto px-4 py-4">
+            {chatMessages.map((item) => (
+              <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[86%] rounded-[16px] px-4 py-3 text-sm leading-6 ${item.role === "user" ? "bg-primary text-white" : "bg-white text-ink"}`}>
+                  <div className={`mb-1 flex items-center gap-2 text-xs font-medium ${item.role === "user" ? "text-white/80" : "text-muted"}`}>
+                    {item.role === "assistant" ? <Bot size={14} /> : <MessageCircle size={14} />}
+                    {item.role === "assistant" ? "AI 助手" : user?.name ?? "我"}
+                    {typeof item.contextCount === "number" ? <span>· 参考 {item.contextCount} 条记录</span> : null}
+                  </div>
+                  <div className="whitespace-pre-wrap">{item.content}</div>
+                </div>
+              </div>
+            ))}
+            {calendarChat.isPending ? (
+              <div className="rounded-[16px] bg-white px-4 py-3 text-sm text-muted">正在基于当前详情生成回答...</div>
+            ) : null}
+          </div>
+          <div className="border-t border-line bg-white p-4">
+            <Input.TextArea
+              value={chatInput}
+              rows={3}
+              placeholder="例如：这一天有哪些风险？谁还没有填？这些计划是否合理？"
+              onChange={(event) => setChatInput(event.target.value)}
+              onPressEnter={(event) => {
+                if (!event.shiftKey) {
+                  event.preventDefault();
+                  submitCalendarChat();
+                }
+              }}
+            />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <Space wrap>
+                {quickQuestions.map((item) => (
+                  <Button key={item} size="small" onClick={() => submitCalendarChat(item)} disabled={calendarChat.isPending}>
+                    {item}
+                  </Button>
+                ))}
+              </Space>
+              <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()}>
+                发送
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        title={selectedWorkLog ? `${dayjs(selectedWorkLog.date).format("YYYY-MM-DD")} · ${selectedWorkLog.title}` : "填报详情"}
+        open={Boolean(selectedWorkLog)}
+        onCancel={() => setSelectedWorkLog(null)}
+        footer={null}
+        width={860}
+      >
+        {selectedWorkLog ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="metric-card">
+                <div className="metric-label">人员</div>
+                <div className="mt-2 text-sm font-medium text-ink">{selectedWorkLog.user?.name ?? "-"}</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">项目</div>
+                <div className="mt-2 text-sm font-medium text-ink">{selectedWorkLog.project?.name ?? "未关联"}</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">工时</div>
+                <div className="metric-value">{Number(selectedWorkLog.hours).toFixed(1)}h</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">时间</div>
+                <div className="mt-2 text-sm font-medium text-ink">
+                  {selectedWorkLog.startTime ? dayjs(selectedWorkLog.startTime).format("HH:mm") : "--"}
+                  {" - "}
+                  {selectedWorkLog.endTime ? dayjs(selectedWorkLog.endTime).format("HH:mm") : "--"}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-[8px] border border-line p-4">
+              <div className="mb-2 text-sm font-medium text-ink">内容</div>
+              <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{selectedWorkLog.content}</div>
+            </div>
+            {selectedWorkLog.attachments?.length ? (
+              <div className="rounded-[8px] border border-line p-4">
+                <div className="mb-2 text-sm font-medium text-ink">附件</div>
+                <Space wrap>
+                  {selectedWorkLog.attachments.map((attachment) => (
+                    <Tag key={attachment.id} icon={<Paperclip size={13} />}>
+                      {attachment.fileName}
+                    </Tag>
+                  ))}
+                </Space>
+              </div>
+            ) : null}
+            {selectedWorkLog.aiAnalysis ? (
+              <div className="rounded-[8px] border border-line p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
+                  <Bot size={16} />
+                  AI 分析
+                </div>
+                <div className="text-sm leading-6 text-muted">{selectedWorkLog.aiAnalysis.summary}</div>
+                <Space className="mt-3" wrap>
+                  <Tag color="green">{selectedWorkLog.aiAnalysis.category}</Tag>
+                  {selectedWorkLog.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+                  {selectedWorkLog.aiAnalysis.risks?.map((risk) => <Tag color="red" key={risk}>{risk}</Tag>)}
+                </Space>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </Modal>
 
       <Modal
         title={selectedDate && dateKind(selectedDate) === "future" ? "填写未来计划" : "填写工作日报"}
         open={quickFillOpen}
-        onCancel={() => setQuickFillOpen(false)}
+        onCancel={() => {
+          setQuickFillOpen(false);
+          setQuickAttachments([]);
+        }}
         onOk={() => quickForm.submit()}
         confirmLoading={quickFill.isPending}
         width={680}
@@ -534,12 +728,34 @@ export default function DashboardPage() {
             {selectedDate} · {selectedDate && dateKind(selectedDate) === "future" ? "计划会显示在对应未来日期" : "日报会立即进入日历统计"}
           </span>
         </div>
-        <Form form={quickForm} layout="vertical" onFinish={(values) => quickFill.mutate(values)}>
+        <Form
+          form={quickForm}
+          layout="vertical"
+          onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, quickForm.setFieldsValue)}
+          onFinish={(values) => quickFill.mutate(values)}
+        >
           <Form.Item name="title" label={selectedDate && dateKind(selectedDate) === "future" ? "计划标题" : "日报标题"} rules={[{ required: true, min: 2 }]}>
             <Input />
           </Form.Item>
           <Form.Item name="content" label={selectedDate && dateKind(selectedDate) === "future" ? "计划内容" : "工作内容"} rules={[{ required: true, min: 2 }]}>
             <Input.TextArea rows={5} placeholder={selectedDate && dateKind(selectedDate) === "future" ? "写下计划完成的事项、预期产出或潜在风险。" : "写下已经完成的事项、进展、风险或阻塞。"} />
+          </Form.Item>
+          <Form.Item label="照片 / 文件">
+            <Upload.Dragger
+              multiple
+              fileList={quickUploadFiles}
+              beforeUpload={addQuickAttachment}
+              onRemove={(file) => {
+                setQuickAttachments((items) => items.filter((item) => item.uid !== file.uid));
+                return true;
+              }}
+            >
+              <p className="ant-upload-drag-icon">
+                <UploadCloud size={28} />
+              </p>
+              <p className="ant-upload-text">添加附件</p>
+              <p className="ant-upload-hint">支持照片和文件，单个最大 8MB，提交后 AI 自动结合附件分析。</p>
+            </Upload.Dragger>
           </Form.Item>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Form.Item name="hours" label="预计/实际工时" rules={[{ required: true }]}>

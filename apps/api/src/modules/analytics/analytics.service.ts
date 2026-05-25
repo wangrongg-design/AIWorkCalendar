@@ -114,7 +114,23 @@ export class AnalyticsService {
       include: {
         user: { include: { department: true } },
         project: true,
-        aiAnalysis: true
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            workLogId: true,
+            uploaderId: true,
+            kind: true,
+            fileName: true,
+            mimeType: true,
+            fileSize: true,
+            aiSummary: true,
+            createdAt: true,
+            updatedAt: true
+          },
+          orderBy: [{ createdAt: "asc" }]
+        }
       },
       orderBy: [{ createdAt: "asc" }]
     });
