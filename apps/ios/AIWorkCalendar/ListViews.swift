@@ -251,6 +251,17 @@ final class ProjectsViewModel: ObservableObject {
         }
     }
 
+    var projectInsights: [String] {
+        let paused = projects.filter { $0.status == .paused }.count
+        let missingOwner = projects.filter { $0.owner == nil }.count
+        let active = projects.filter { $0.status == .active }.count
+        return [
+            active > 0 ? "\(active) 个项目处于进行中，建议优先关注临近结束日期的项目。" : "当前没有进行中的项目，项目看板处于低活跃状态。",
+            paused > 0 ? "\(paused) 个项目已暂停，AI 建议确认是否存在跨团队阻塞。" : "暂无暂停项目，整体推进状态稳定。",
+            missingOwner > 0 ? "\(missingOwner) 个项目缺少负责人，风险归属可能不清晰。" : "项目负责人信息完整，有利于后续风险追踪。"
+        ]
+    }
+
     func load(auth: AuthStore) async {
         isLoading = true
         defer { isLoading = false }
@@ -269,6 +280,12 @@ struct ProjectsView: View {
     var body: some View {
         NavigationStack {
             List {
+                if !viewModel.projects.isEmpty {
+                    AIInsightPanel(title: "AI 项目雷达", insights: viewModel.projectInsights)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+
                 if viewModel.filteredProjects.isEmpty, !viewModel.isLoading {
                     EmptyListView(
                         title: viewModel.projects.isEmpty ? "暂无项目" : "没有匹配项目",
@@ -287,6 +304,8 @@ struct ProjectsView: View {
                 }
             }
             .navigationTitle("项目")
+            .scrollContentBackground(.hidden)
+            .background(AITheme.ColorToken.appBackground)
             .searchable(text: $viewModel.searchText, prompt: "搜索项目、负责人")
             .overlay {
                 if viewModel.isLoading {
@@ -322,26 +341,28 @@ struct ProjectRow: View {
     let project: Project
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text(project.displayName)
                     .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 StatusBadge(title: project.status.title, systemImage: nil, tint: project.status.badgeTint)
             }
-            if let description = project.description, !description.isEmpty {
-                Text(description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
+
+            HStack(spacing: AITheme.Spacing.sm) {
+                Label(project.owner?.name ?? "未设置负责人", systemImage: "person")
+                Label(project.timelineText, systemImage: "clock")
             }
-            if let owner = project.owner {
-                Label(owner.name, systemImage: "person")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Label(project.aiRiskHint, systemImage: "sparkles")
+                .font(.caption)
+                .foregroundStyle(project.aiRiskTint)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, AITheme.Spacing.xs)
     }
 }
 
@@ -350,6 +371,13 @@ struct ProjectDetailView: View {
 
     var body: some View {
         List {
+            Section("AI 项目判断") {
+                Label(project.aiRiskHint, systemImage: "sparkles")
+                    .foregroundStyle(project.aiRiskTint)
+                LabeledContent("负责人", value: project.owner?.name ?? "未设置")
+                LabeledContent("周期", value: project.timelineText)
+            }
+
             Section("项目") {
                 LabeledContent("名称", value: project.name)
                 if let code = project.code, !code.isEmpty {
@@ -384,5 +412,57 @@ struct ProjectDetailView: View {
             }
         }
         .navigationTitle(project.displayName)
+    }
+}
+
+private extension Project {
+    var timelineText: String {
+        switch (startDate, endDate) {
+        case let (start?, end?):
+            return "\(String(start.prefix(10))) - \(String(end.prefix(10)))"
+        case let (start?, nil):
+            return "\(String(start.prefix(10))) 开始"
+        case let (nil, end?):
+            return "\(String(end.prefix(10))) 截止"
+        default:
+            return "周期未设置"
+        }
+    }
+
+    var aiRiskHint: String {
+        if status == .paused {
+            return "AI 检测到推进暂停，建议确认阻塞原因。"
+        }
+        if owner == nil {
+            return "AI 检测到负责人缺失，风险归属不清晰。"
+        }
+        if let endDate,
+           let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
+            let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
+            if days < 0 {
+                return "AI 检测到项目已过结束日期，建议复核交付状态。"
+            }
+            if days <= 7, status == .active {
+                return "AI 检测到交付窗口临近，建议关注延期风险。"
+            }
+        }
+        if description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            return "AI 建议补充项目目标，便于日报自动归因。"
+        }
+        return "AI 暂未发现明显项目风险。"
+    }
+
+    var aiRiskTint: Color {
+        if status == .paused || owner == nil {
+            return .orange
+        }
+        if let endDate,
+           let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
+            let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
+            if days <= 7 {
+                return days < 0 ? .red : .orange
+            }
+        }
+        return AITheme.ColorToken.brand
     }
 }

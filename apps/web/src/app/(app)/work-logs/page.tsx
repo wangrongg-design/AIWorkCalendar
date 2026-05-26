@@ -7,6 +7,7 @@ import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
 import { Bot, Download, Edit2, Paperclip, Plus, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import { useMemo, useState } from "react";
+import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { Project, WorkLog, WorkLogAttachment, WorkLogDraft } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
@@ -568,13 +569,7 @@ export default function WorkLogsPage() {
             {detailRecord.attachments?.length ? (
               <div className="rounded-[8px] border border-line p-4">
                 <div className="mb-2 text-sm font-medium text-ink">附件</div>
-                <Space wrap>
-                  {detailRecord.attachments.map((attachment) => (
-                    <Tag key={attachment.id} icon={<Paperclip size={13} />}>
-                      {attachment.fileName}
-                    </Tag>
-                  ))}
-                </Space>
+                <WorkLogAttachmentViewer workLogId={detailRecord.id} attachments={detailRecord.attachments} />
               </div>
             ) : null}
             {detailRecord.aiAnalysis ? (

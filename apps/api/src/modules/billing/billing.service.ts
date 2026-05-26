@@ -87,7 +87,7 @@ export class BillingService {
     if (!this.access.isCompanyAdmin(user)) {
       throw new BadRequestException("Only company admins can create billing orders");
     }
-    const amountCents = planUnitPriceCents(dto.plan, dto.interval) * dto.seatLimit;
+    const amountCents = planUnitPriceCents(dto.plan, dto.interval);
     if (amountCents <= 0) {
       throw new BadRequestException("Invalid billing plan");
     }

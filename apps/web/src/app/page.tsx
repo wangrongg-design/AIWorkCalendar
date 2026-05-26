@@ -3,7 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Form, Input, Space, Tag, Typography, message } from "antd";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarCheck2, CheckCircle2, CreditCard, ShieldCheck, UsersRound } from "lucide-react";
+import { ArrowRight, CalendarCheck2, CheckCircle2, ShieldCheck } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser } from "@/lib/types";
@@ -21,54 +21,44 @@ type RegisterResponse = {
   user: AuthUser;
 };
 
-const trialItems = ["1 个月免费试用", "包含 3 个成员席位", "日报、计划、AI 汇报全功能开放"];
+const productCapabilities = [
+  "AI 自动生成日报、周报、月报",
+  "AI 自动分析团队风险和项目阻塞",
+  "管理者可在日历中查看团队状态",
+  "工作记录自动沉淀为企业知识"
+];
+
+const aiInsightExamples = [
+  "本周团队填报率较上周提升 18%",
+  "研发项目存在 1 个延期风险",
+  "AI 已为团队生成本周工作摘要"
+];
 
 const pricingPlans = [
   {
-    name: "小团队版",
-    price: "¥29",
-    period: "/人/月",
-    seats: "10 人以下",
-    extra: "按实际成员数计费",
-    annual: "适合先从小团队试用",
-    description: "适合 1-9 人团队，低门槛使用日报、计划和 AI 汇报。"
+    name: "免费版",
+    price: "¥0",
+    description: "3人以内永久免费，完整体验 AI 工作能力。",
+    features: ["完整 AI 日报、周报、月报", "AI 风险分析", "AI 工作问答", "日历看板", "项目管理", "3人以内", "适合小团队试用"],
+    note: "适合体验和小团队早期使用",
+    cta: "免费创建团队"
   },
   {
-    name: "团队版",
+    name: "专业版",
     price: "¥299",
     period: "/月",
-    seats: "含 10 人",
-    extra: "超出 ¥19/人/月",
-    annual: "年付 ¥2,990",
-    description: "适合小团队快速落地日报、计划和 AI 汇报。"
-  },
-  {
-    name: "商业版",
-    price: "¥999",
-    period: "/月",
-    seats: "含 50 人",
-    extra: "超出 ¥15/人/月",
-    annual: "年付 ¥9,990",
-    description: "推荐给 20-200 人企业，覆盖部门管理和团队看板。",
+    badge: "推荐",
+    description: "适合正式团队协作使用，一个团队每月 299。",
+    features: ["免费版全部功能", "更多成员容量", "更高 AI 使用额度", "完整历史数据", "团队管理", "数据导出", "适合中小企业团队长期使用"],
+    cta: "升级专业版",
     recommended: true
   },
   {
     name: "企业版",
-    price: "¥2,999",
-    period: "/月",
-    seats: "含 200 人",
-    extra: "超出 ¥12/人/月",
-    annual: "年付 ¥29,990",
-    description: "适合多部门企业，按席位扩容并支持更高服务量。"
-  },
-  {
-    name: "私有化部署",
-    price: "¥50,000",
-    period: "/年起",
-    seats: "按合同",
-    extra: "专属部署与交付",
-    annual: "按需报价",
-    description: "适合数据敏感客户、内网部署或专属运维场景。"
+    price: "联系销售",
+    description: "适合需要私有化部署、安全合规和专属支持的企业。",
+    features: ["专业版全部功能", "私有化部署", "API 接入", "SSO / LDAP", "审计日志", "专属部署与运维支持", "本地模型或专属模型支持"],
+    cta: "联系销售"
   }
 ];
 
@@ -86,7 +76,7 @@ export default function HomePage() {
       }),
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
-      message.success("企业已创建，已进入 1 个月免费试用。");
+      message.success("企业已创建，已进入 AI 工作空间。");
       router.replace("/dashboard");
     }
   });
@@ -118,49 +108,53 @@ export default function HomePage() {
         </header>
 
         <section className="grid items-stretch gap-5 lg:grid-cols-[1fr_440px]">
-          <div className="surface-panel flex flex-col justify-between p-7">
+          <div className="register-value-panel flex flex-col justify-between p-7">
             <div>
               <Tag color="blue" className="mb-5">
-                七数AI出品 · 订阅式服务 · 新企业免费试用
+                Work Calendar AI · AI 工作操作系统
               </Tag>
-              <Typography.Title className="!mb-4 !text-[34px] !font-medium !leading-tight">
-                用日历管理团队日报，用 AI 生成可用汇报
+              <Typography.Title className="register-value-title">
+                AI 自动理解团队工作，而不只是收集日报
               </Typography.Title>
-              <Typography.Paragraph className="max-w-2xl !text-base !leading-7 !text-muted">
-                员工填写日报和未来计划，管理者在月历中查看填报情况、风险和工时，AI 基于真实工作记录生成日报、周报和日历问答。
+              <div className="register-value-english">Your AI-powered team operating system.</div>
+              <Typography.Paragraph className="register-value-copy">
+                用日历管理日报与计划，用 AI 自动生成汇报、发现风险、沉淀团队知识。
               </Typography.Paragraph>
             </div>
 
-            <div className="mt-8 grid gap-3 md:grid-cols-3">
-              <div className="metric-card">
-                <CalendarCheck2 size={20} className="mb-3 text-primary" />
-                <div className="metric-label">核心视图</div>
-                <div className="mt-1 text-lg font-medium">月历看板</div>
+            <div className="mt-8 grid gap-3 md:grid-cols-2">
+              {productCapabilities.map((item) => (
+                <div key={item} className="register-capability-card">
+                  <CheckCircle2 size={17} />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="register-ai-insight mt-6">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+                <CalendarCheck2 size={17} className="text-primary" />
+                AI 工作洞察
               </div>
-              <div className="metric-card">
-                <UsersRound size={20} className="mb-3 text-secondary" />
-                <div className="metric-label">试用席位</div>
-                <div className="mt-1 text-lg font-medium">3 人免费使用</div>
-              </div>
-              <div className="metric-card">
-                <CreditCard size={20} className="mb-3 text-warning" />
-                <div className="metric-label">试用周期</div>
-                <div className="mt-1 text-lg font-medium">1 个月</div>
+              <div className="space-y-2">
+                {aiInsightExamples.map((item) => (
+                  <div key={item} className="flex items-center gap-2 text-sm text-muted">
+                    <CheckCircle2 size={15} className="text-success" />
+                    <span>{item}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
             <div className="mt-6 rounded-[18px] bg-surface-container-low p-4">
-              <div className="mb-3 text-sm font-medium text-ink">订阅说明</div>
+              <div className="mb-3 text-sm font-medium text-ink">降低团队使用成本</div>
               <div className="grid gap-2 md:grid-cols-3">
-                {trialItems.map((item) => (
+                {["3人以内永久免费", "完整功能开放", "正式团队每月299"].map((item) => (
                   <div key={item} className="flex items-center gap-2 text-sm text-muted">
                     <CheckCircle2 size={16} className="text-secondary" />
                     {item}
                   </div>
                 ))}
-              </div>
-              <div className="mt-3 text-xs leading-5 text-muted">
-                试用结束或超过 3 个席位后，可升级为团队版、商业版或企业版。第一版支持手动开通，后续可接入支付宝、微信支付或 Stripe。
               </div>
             </div>
 
@@ -179,23 +173,23 @@ export default function HomePage() {
 
           <div className="surface-panel bg-white p-7">
             <Typography.Title level={3} className="!mb-1 !font-medium">
-              注册企业
+              免费创建团队
             </Typography.Title>
-            <Typography.Text className="text-muted">创建企业管理员账号，立即开始免费试用。</Typography.Text>
+            <Typography.Text className="text-muted">创建企业管理员账号，进入你的 AI 工作空间。</Typography.Text>
             {register.error ? <Alert className="mt-5" type="error" showIcon message={(register.error as Error).message} /> : null}
             <Form
               form={form}
-              className="mt-6"
+              className="register-form mt-6"
               layout="vertical"
               onFinish={(values) => register.mutate({ ...values, tenantCode: values.tenantCode.toLowerCase() })}
             >
-              <Form.Item name="companyName" label="企业名称" rules={[{ required: true, min: 2 }]}>
+              <Form.Item className="register-priority-field" name="companyName" label="企业名称" rules={[{ required: true, min: 2 }]}>
                 <Input placeholder="例如：星河科技有限公司" />
               </Form.Item>
               <Form.Item
                 name="tenantCode"
                 label="企业代码"
-                extra="用于登录识别企业，只能包含小写字母、数字和中划线。"
+                extra="用于团队成员登录识别，可使用公司简称或拼音。"
                 rules={[{ required: true, pattern: /^[a-z0-9-]{2,32}$/, message: "请输入 2-32 位小写字母、数字或中划线" }]}
               >
                 <Input placeholder="acme" />
@@ -204,15 +198,15 @@ export default function HomePage() {
                 <Form.Item name="adminName" label="管理员姓名" rules={[{ required: true, min: 2 }]}>
                   <Input placeholder="王明" />
                 </Form.Item>
-                <Form.Item name="adminEmail" label="管理员邮箱" rules={[{ required: true, type: "email" }]}>
+                <Form.Item className="register-priority-field" name="adminEmail" label="管理员邮箱" rules={[{ required: true, type: "email" }]}>
                   <Input placeholder="admin@company.com" />
                 </Form.Item>
               </div>
-              <Form.Item name="password" label="登录密码" rules={[{ required: true, min: 6 }]}>
+              <Form.Item className="register-priority-field" name="password" label="登录密码" rules={[{ required: true, min: 6 }]}>
                 <Input.Password placeholder="至少 6 位" />
               </Form.Item>
               <Button type="primary" htmlType="submit" block icon={<ArrowRight size={16} />} loading={register.isPending}>
-                免费试用 1 个月
+                免费创建团队
               </Button>
             </Form>
           </div>
@@ -222,38 +216,56 @@ export default function HomePage() {
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <Typography.Title level={3} className="!mb-1 !font-medium">
-                订阅价格
+                套餐价格
               </Typography.Title>
               <Typography.Text className="text-muted">
-                新企业 1 个月、3 人免费试用。试用后 10 人以下可按 ¥29/人/月使用，也可选择团队版、商业版或企业版。
+                免费版和专业版都开放完整功能，差异只体现在人数、AI额度、数据保留和企业服务上。
               </Typography.Text>
             </div>
-            <Tag color="green">年付约送 2 个月</Tag>
+            <Tag color="green">免费版：3人以内永久免费</Tag>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 lg:grid-cols-3">
             {pricingPlans.map((plan) => (
               <div
                 key={plan.name}
-                className={`rounded-[18px] border p-5 ${
+                className={`pricing-card ${
                   plan.recommended
-                    ? "border-primary bg-primary-container/60"
-                    : "border-line bg-surface-container-low"
+                    ? "is-recommended"
+                    : ""
                 }`}
               >
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="text-base font-medium text-ink">{plan.name}</div>
-                  {plan.recommended ? <Tag color="blue">推荐</Tag> : null}
+                  {plan.badge ? <Tag color="blue">{plan.badge}</Tag> : null}
                 </div>
                 <div className="flex items-end gap-1">
                   <span className="text-[30px] font-semibold leading-9 text-ink">{plan.price}</span>
-                  <span className="pb-1 text-sm text-muted">{plan.period}</span>
+                  {"period" in plan ? <span className="pb-1 text-sm text-muted">{plan.period}</span> : null}
                 </div>
-                <div className="mt-3 space-y-2 text-sm text-muted">
-                  <div>{plan.seats}</div>
-                  <div>{plan.extra}</div>
-                  <div>{plan.annual}</div>
+                <div className="mt-3 min-h-12 text-sm leading-6 text-muted">{plan.description}</div>
+                <div className="mt-4 space-y-2">
+                  {plan.features.map((feature) => (
+                    <div key={feature} className="flex items-center gap-2 text-sm text-muted">
+                      <CheckCircle2 size={15} className="text-success" />
+                      <span>{feature}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-4 text-xs leading-5 text-muted">{plan.description}</div>
+                {"note" in plan ? <div className="mt-4 text-xs leading-5 text-warning">{plan.note}</div> : null}
+                <Button
+                  className="mt-5"
+                  type={plan.recommended ? "primary" : "default"}
+                  block
+                  onClick={() => {
+                    if (plan.name === "企业版") {
+                      message.info("请联系销售获取企业版方案。");
+                      return;
+                    }
+                    form.submit();
+                  }}
+                >
+                  {plan.cta}
+                </Button>
               </div>
             ))}
           </div>

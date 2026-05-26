@@ -17,11 +17,13 @@ struct LoginView: View {
                 LoginBackground()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: AITheme.Spacing.xxl) {
+                    VStack(alignment: .leading, spacing: AITheme.Spacing.xl) {
                         LoginBrandMark()
-                            .padding(.top, AITheme.Spacing.lg)
+                            .padding(.top, AITheme.Spacing.md)
 
                         LoginHero()
+
+                        LoginCapabilities()
 
                         VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
                             VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
@@ -74,21 +76,15 @@ struct LoginView: View {
                             .opacity(canLogin ? 1 : 0.48)
                             .accessibilityHint("登录到 AI 工作日历")
                         }
+
+                        LoginFooter()
+                            .padding(.top, AITheme.Spacing.md)
                     }
                     .frame(maxWidth: AITheme.Layout.maxReadableWidth)
                     .padding(.horizontal, AITheme.Spacing.lg)
-                    .padding(.bottom, 168)
+                    .padding(.bottom, AITheme.Spacing.xxl)
                     .frame(maxWidth: .infinity)
                 }
-            }
-            .safeAreaInset(edge: .bottom) {
-                LoginFooter()
-                    .frame(maxWidth: AITheme.Layout.maxReadableWidth)
-                    .padding(.horizontal, AITheme.Spacing.lg)
-                    .padding(.top, AITheme.Spacing.md)
-                    .padding(.bottom, AITheme.Spacing.sm)
-                    .frame(maxWidth: .infinity)
-                    .background(AITheme.ColorToken.appBackground.opacity(0.96))
             }
             .loginNavigationChrome()
             .animation(.snappy, value: errorMessage)
@@ -168,6 +164,27 @@ private struct LoginHero: View {
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct LoginCapabilities: View {
+    private let items = [
+        ("自动生成日报", "sparkles", AITheme.ColorToken.brand),
+        ("分析延期风险", "exclamationmark.triangle", Color.orange),
+        ("汇总团队进度", "chart.bar.xaxis", AITheme.ColorToken.accentBlue)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            Text("AI 会主动整理工作信号")
+                .font(.headline)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: AITheme.Spacing.xs), count: 3), spacing: AITheme.Spacing.xs) {
+                ForEach(items, id: \.0) { item in
+                    FlatTag(title: item.0, systemImage: item.1, tint: item.2)
+                        .frame(maxWidth: .infinity)
+                }
+            }
         }
     }
 }

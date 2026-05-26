@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 enum AITheme {
     enum Spacing {
@@ -21,37 +24,64 @@ enum AITheme {
     enum ColorToken {
         static let brand = Color(red: 0.02, green: 0.46, blue: 0.62)
         static let brandSecondary = Color(red: 0.00, green: 0.62, blue: 0.55)
+        static let accentBlue = Color(red: 0.10, green: 0.38, blue: 0.92)
+        static let appBackgroundLight = Color(red: 0.97, green: 0.97, blue: 0.98)
+        static let cardBackgroundLight = Color.white
+        static let activeBackgroundLight = Color(red: 0.95, green: 0.96, blue: 0.98)
+
         static var appBackground: Color {
             #if os(iOS)
-            Color(.systemGroupedBackground)
+            Color(UIColor { traits in
+                traits.userInterfaceStyle == .dark
+                    ? UIColor.black
+                    : UIColor(red: 0.97, green: 0.97, blue: 0.98, alpha: 1)
+            })
             #else
-            Color.gray.opacity(0.08)
+            appBackgroundLight
             #endif
         }
 
         static var cardBackground: Color {
             #if os(iOS)
-            Color(.secondarySystemGroupedBackground)
+            Color(UIColor { traits in
+                traits.userInterfaceStyle == .dark
+                    ? UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1)
+                    : UIColor.white
+            })
             #else
-            Color.gray.opacity(0.12)
+            cardBackgroundLight
+            #endif
+        }
+
+        static var activeBackground: Color {
+            #if os(iOS)
+            Color(UIColor { traits in
+                traits.userInterfaceStyle == .dark
+                    ? UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)
+                    : UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
+            })
+            #else
+            activeBackgroundLight
             #endif
         }
 
         static var separator: Color {
             #if os(iOS)
-            Color(.separator)
+            Color(.separator).opacity(0.34)
             #else
-            Color.gray.opacity(0.22)
+            Color.gray.opacity(0.16)
             #endif
         }
     }
 
     enum Typography {
         static let eyebrow = Font.footnote.weight(.semibold)
-        static let title = Font.largeTitle.weight(.bold)
-        static let section = Font.title3.weight(.semibold)
-        static let body = Font.body
-        static let caption = Font.caption
+        static let title = Font.system(size: 34, weight: .bold, design: .default)
+        static let pageTitle = Font.system(size: 26, weight: .semibold, design: .default)
+        static let section = Font.system(size: 20, weight: .semibold, design: .default)
+        static let body = Font.system(size: 16, weight: .regular, design: .default)
+        static let support = Font.system(size: 14, weight: .regular, design: .default)
+        static let caption = Font.system(size: 13, weight: .regular, design: .default)
     }
 
     enum Layout {
@@ -66,12 +96,79 @@ struct BrandedCard<Content: View>: View {
     var body: some View {
         content
             .padding(AITheme.Spacing.md)
-            .background(.regularMaterial)
+            .background(AITheme.ColorToken.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+    }
+}
+
+struct SectionTitle: View {
+    let title: String
+    let subtitle: String?
+
+    init(_ title: String, subtitle: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
+            Text(title)
+                .font(AITheme.Typography.section)
+            if let subtitle {
+                Text(subtitle)
+                    .font(AITheme.Typography.support)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+struct AIInsightPanel: View {
+    let title: String
+    let insights: [String]
+
+    var body: some View {
+        BrandedCard {
+            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+                Label(title, systemImage: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(AITheme.ColorToken.brand)
+
+                VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+                    ForEach(insights.prefix(3), id: \.self) { insight in
+                        HStack(alignment: .top, spacing: AITheme.Spacing.xs) {
+                            Circle()
+                                .fill(AITheme.ColorToken.brand)
+                                .frame(width: 5, height: 5)
+                                .padding(.top, 7)
+                            Text(insight)
+                                .font(AITheme.Typography.support)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct FlatTag: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.vertical, AITheme.Spacing.xs)
+            .padding(.horizontal, AITheme.Spacing.sm)
+            .background(tint.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
     }
 }
 
@@ -125,7 +222,7 @@ struct MetricTile: View {
             Spacer(minLength: 0)
         }
         .padding(AITheme.Spacing.sm)
-        .background(AITheme.ColorToken.cardBackground)
+        .background(AITheme.ColorToken.activeBackground)
         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
     }
 }
@@ -139,12 +236,8 @@ struct AITextFieldStyle: TextFieldStyle {
             .padding(.horizontal, AITheme.Spacing.md)
             .padding(.vertical, AITheme.Spacing.sm)
             .frame(minHeight: AITheme.Layout.minTouchTarget + 8)
-            .background(AITheme.ColorToken.cardBackground)
+            .background(AITheme.ColorToken.activeBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(isEnabled ? 0.07 : 0), lineWidth: 1)
-            }
     }
 }
 
@@ -168,15 +261,8 @@ struct PrimaryActionButton: View {
             .font(.headline)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget + 10)
-            .background {
-                LinearGradient(
-                    colors: [AITheme.ColorToken.brand, AITheme.ColorToken.brandSecondary],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
-            .shadow(color: AITheme.ColorToken.brand.opacity(0.22), radius: 18, x: 0, y: 10)
+            .background(AITheme.ColorToken.brand)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isLoading)

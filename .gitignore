@@ -10,6 +10,8 @@ coverage
 tmp
 storage
 apps/ios/build
+*.xcuserstate
+xcuserdata
 config/deployment.json
 .env.production.generated
 nginx/work-calendar.generated.conf

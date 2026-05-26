@@ -93,21 +93,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <Layout className="min-h-screen">
       <Sider
-        width={264}
+        width={296}
         collapsedWidth={88}
         collapsed={collapsed}
         trigger={null}
-        className="border-r border-line bg-surface"
+        className="app-sidebar border-r border-line bg-surface"
       >
         <div className="flex min-h-screen flex-col">
           <div className={`flex h-[76px] items-center gap-3 ${collapsed ? "justify-center px-3" : "px-5"}`}>
-            <div className={`flex h-8 shrink-0 items-center ${collapsed ? "w-12 justify-center" : "w-24"}`}>
+            <div className={`flex h-8 shrink-0 items-center ${collapsed ? "w-12 justify-center" : "w-28"}`}>
               <img src="/seven-ai-logo.png" alt="七数AI" className="h-7 w-full object-contain opacity-75" />
             </div>
             {!collapsed ? (
               <div className="min-w-0">
                 <Typography.Text className="block truncate text-base font-medium text-ink">Work Calendar AI</Typography.Text>
-                <Typography.Text className="block truncate text-xs text-muted">{user.tenantName}</Typography.Text>
+                <Typography.Text className="app-sidebar-subtext block text-xs text-muted">{user.tenantName}</Typography.Text>
               </div>
             ) : null}
           </div>
@@ -191,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium leading-5 text-ink">{user.name}</div>
-                    <div className="truncate text-xs leading-4 text-muted">{user.roles.join(" / ")}</div>
+                    <div className="app-sidebar-subtext text-xs leading-4 text-muted">{user.roles.join(" / ")}</div>
                   </div>
                   <Button
                     type="text"

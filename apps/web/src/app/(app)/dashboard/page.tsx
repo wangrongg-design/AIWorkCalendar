@@ -563,23 +563,12 @@ export default function DashboardPage() {
             </ul>
           </div>
 
-          <div className="ai-copilot-section">
+          <div className="ai-copilot-action-bar">
             <div className="ai-copilot-section-title">AI 建议操作</div>
             <div className="ai-copilot-actions">
               {copilotActions.map((action) => (
                 <button key={action.label} type="button" onClick={() => runCopilotPrompt(action.prompt)} disabled={calendarChat.isPending}>
                   {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="ai-copilot-section">
-            <div className="ai-copilot-section-title">快速追问</div>
-            <div className="ai-copilot-pills">
-              {quickQuestions.map((item) => (
-                <button key={item} type="button" onClick={() => runCopilotPrompt(item)} disabled={calendarChat.isPending}>
-                  {item}
                 </button>
               ))}
             </div>
@@ -600,20 +589,32 @@ export default function DashboardPage() {
             ) : null}
           </div>
 
-          <div className="ai-copilot-input">
-            <Input.TextArea
-              value={chatInput}
-              rows={2}
-              placeholder="询问团队风险、项目进展、人员投入情况…"
-              onChange={(event) => setChatInput(event.target.value)}
-              onPressEnter={(event) => {
-                if (!event.shiftKey) {
-                  event.preventDefault();
-                  submitCalendarChat();
-                }
-              }}
-            />
-            <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()} />
+          <div className="ai-copilot-compose">
+            <div className="ai-copilot-input">
+              <Input.TextArea
+                value={chatInput}
+                rows={2}
+                placeholder="询问团队风险、项目进展、人员投入情况…"
+                onChange={(event) => setChatInput(event.target.value)}
+                onPressEnter={(event) => {
+                  if (!event.shiftKey) {
+                    event.preventDefault();
+                    submitCalendarChat();
+                  }
+                }}
+              />
+              <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()} />
+            </div>
+            <div className="ai-copilot-prompt-bar">
+              <span>快速追问</span>
+              <div className="ai-copilot-pills">
+                {quickQuestions.map((item) => (
+                  <button key={item} type="button" onClick={() => runCopilotPrompt(item)} disabled={calendarChat.isPending}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </Drawer>

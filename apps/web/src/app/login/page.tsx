@@ -3,8 +3,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Form, Input, Modal, Typography, message } from "antd";
 import { useRouter } from "next/navigation";
-import { CalendarCheck2, Quote } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, CalendarCheck2, CheckCircle2, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser } from "@/lib/types";
@@ -19,15 +19,17 @@ type PasswordResetRequestResponse = {
   resetToken?: string;
 };
 
-const leaderQuotes = [
-  { text: "关注客户，而不是竞争对手。", name: "Jeff Bezos" },
-  { text: "在不得不改变之前，先主动改变。", name: "Jack Welch" },
-  { text: "风险来自你不知道自己在做什么。", name: "Warren Buffett" },
-  { text: "创新区分领导者和追随者。", name: "Steve Jobs" },
-  { text: "行业尊重创新，而不是传统。", name: "Satya Nadella" },
-  { text: "把复杂留给系统，把简单交给用户。", name: "Bill Gates" },
-  { text: "伟大的公司先解决真实问题。", name: "Elon Musk" },
-  { text: "长期主义，是商业最稳定的复利。", name: "Indra Nooyi" }
+const aiCapabilities = [
+  "AI 自动生成日报、周报、月报",
+  "AI 自动分析团队风险和项目阻塞",
+  "管理者可在日历中查看团队状态",
+  "工作记录自动沉淀为企业知识"
+];
+
+const loginInsights = [
+  "本周团队填报率较上周提升 18%",
+  "研发项目存在 1 个延期风险",
+  "AI 已为团队生成本周工作摘要"
 ];
 
 export default function LoginPage() {
@@ -37,12 +39,6 @@ export default function LoginPage() {
   const [confirmResetForm] = Form.useForm();
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
-  const [quoteIndex, setQuoteIndex] = useState(0);
-  const selectedQuote = leaderQuotes[quoteIndex];
-
-  useEffect(() => {
-    setQuoteIndex(Math.floor(Math.random() * leaderQuotes.length));
-  }, []);
 
   const login = useMutation({
     mutationFn: (values: { account: string; password: string; tenantCode?: string }) =>
@@ -84,11 +80,10 @@ export default function LoginPage() {
   });
 
   return (
-    <main className="login-stage flex min-h-screen items-center justify-center overflow-hidden bg-surface px-4">
-      <div className="login-orbit login-orbit-a" />
-      <div className="login-orbit login-orbit-b" />
-      <div className="absolute left-5 top-5 z-10 flex h-8 w-[96px] items-center">
-        <img src="/seven-ai-logo.png" alt="七数AI" className="h-7 w-full object-contain opacity-75" />
+    <main className="login-stage login-product-stage flex min-h-screen items-center justify-center overflow-hidden bg-surface px-4">
+      <div className="login-top-brand">
+        <img src="/seven-ai-logo.png" alt="七数AI" />
+        <span>Work Calendar AI</span>
       </div>
       <div className="login-timeline" aria-hidden="true">
         {Array.from({ length: 9 }).map((_, index) => (
@@ -98,47 +93,79 @@ export default function LoginPage() {
         ))}
       </div>
       <div className="relative z-10 grid w-full max-w-6xl items-center gap-8 px-2 py-16 lg:grid-cols-[1fr_460px]">
-        <section className="hidden min-h-[520px] flex-col justify-between rounded-[28px] bg-white/60 p-8 shadow-sm ring-1 ring-line lg:flex">
+        <section className="login-value-panel hidden min-h-[560px] flex-col justify-between lg:flex">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-surface-container px-4 py-2 text-sm font-medium text-muted">
-              <Quote size={16} />
-              国际商业领袖
+            <div className="login-brand-lockup">
+              <img src="/seven-ai-logo.png" alt="七数AI" />
+              <div>
+                <div>Work Calendar AI</div>
+                <span>企业 AI 工作操作系统</span>
+              </div>
             </div>
-            <Typography.Title className="!mb-5 !mt-8 !max-w-xl !text-[34px] !font-medium !leading-tight">
-              “{selectedQuote.text}”
+            <Typography.Title className="login-value-title">
+              AI 自动理解团队工作，而不只是收集日报。
             </Typography.Title>
-            <Typography.Text className="text-base text-muted">{selectedQuote.name}</Typography.Text>
+            <div className="login-value-english">Your AI-powered team operating system.</div>
+            <Typography.Text className="login-value-copy">
+              让团队的日报、计划、项目进展和风险问题自动沉淀为可分析、可追踪、可复盘的工作数据。
+            </Typography.Text>
+            <div className="login-capability-list">
+              {aiCapabilities.map((item) => (
+                <div key={item}>
+                  <CheckCircle2 size={16} />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="metric-card bg-white">
-              <div className="metric-label">填报闭环</div>
-              <div className="mt-1 text-lg font-medium">日报 / 计划</div>
+          <div className="login-intelligence">
+            <div className="login-ai-status">
+              <div>
+                <span className="login-live-dot" />
+                AI 正在分析今日团队工作…
+              </div>
+              <Sparkles size={18} />
             </div>
-            <div className="metric-card bg-white">
-              <div className="metric-label">管理视图</div>
-              <div className="mt-1 text-lg font-medium">月历看板</div>
+            <div className="login-insight-card">
+              <div className="login-insight-title">AI 今日洞察</div>
+              <div className="login-insight-list">
+                {loginInsights.map((item) => (
+                  <div key={item}>
+                    <CheckCircle2 size={15} />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="metric-card bg-white">
-              <div className="metric-label">AI 输出</div>
-              <div className="mt-1 text-lg font-medium">日报周报</div>
+            <div className="login-signal-grid">
+              {[
+                { label: "日报", value: "可追踪" },
+                { label: "风险", value: "可分析" },
+                { label: "知识", value: "可沉淀" }
+              ].map((item) => (
+                <div key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <Card className="login-card surface-panel w-full border-0" styles={{ body: { padding: 34 } }}>
+        <Card className="login-card login-form-card surface-panel w-full border-0" styles={{ body: { padding: 36 } }}>
           <div className="mb-5 flex items-center justify-center">
             <div className="flex items-center gap-2 rounded-full bg-surface-container px-4 py-2 text-sm font-medium text-muted">
               <CalendarCheck2 size={16} />
-              日报、计划、AI 汇报
+              AI 驱动的团队工作流
             </div>
           </div>
           <Typography.Title level={2} className="!mb-1 !text-center !font-medium">
-            Work Calendar AI
+            进入 Work Calendar AI
           </Typography.Title>
-          <Typography.Text className="block text-center text-muted">企业工作填报与智能汇报</Typography.Text>
+          <Typography.Text className="block text-center text-muted">使用企业账号登录你的 AI 工作空间</Typography.Text>
           {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
           <Form
-            className="mt-6"
+            className="login-form mt-6"
             layout="vertical"
             initialValues={{ tenantCode: "demo", account: "admin@example.com", password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
@@ -152,15 +179,17 @@ export default function LoginPage() {
             <Form.Item name="password" label="密码" rules={[{ required: true }]}>
               <Input.Password placeholder="Passw0rd!" />
             </Form.Item>
-            <Button type="primary" htmlType="submit" block loading={login.isPending}>
-              登录
+            <Button className="login-submit" type="primary" htmlType="submit" block loading={login.isPending}>
+              {login.isPending ? "AI 正在验证企业身份…" : "进入工作空间"}
             </Button>
-            <Button type="link" block onClick={() => setResetModalOpen(true)}>
+            <Button className="login-forgot-link" type="link" block onClick={() => setResetModalOpen(true)}>
               忘记密码
             </Button>
-            <Button className="mt-3" block onClick={() => router.push("/")}>
-              注册新企业，查看价格并免费试用
-            </Button>
+            <button className="login-create-link" type="button" onClick={() => router.push("/")}>
+              <span>没有企业账号？</span>
+              <strong>立即创建 AI 工作空间</strong>
+              <ArrowRight size={15} />
+            </button>
           </Form>
         </Card>
       </div>

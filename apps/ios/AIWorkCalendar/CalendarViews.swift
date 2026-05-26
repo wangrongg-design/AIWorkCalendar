@@ -37,6 +37,17 @@ final class CalendarViewModel: ObservableObject {
         month = DateHelpers.addMonths(to: month, diff: diff)
         await load(auth: auth)
     }
+
+    var dashboardInsights: [String] {
+        let today = days.first(where: { $0.date == DateHelpers.dayKey() })
+        let riskDays = days.filter { $0.riskCount > 0 }.count
+        let lowFillDays = days.filter { $0.fillRate > 0 && $0.fillRate < 60 }.count
+        return [
+            today.map { String(format: "今日填报率 %.1f%%，AI 会优先关注缺填和风险日志。", $0.fillRate) } ?? "今天还没有填报信号，适合先提醒团队完成日报。",
+            riskDays > 0 ? "本月已有 \(riskDays) 天出现风险信号，建议进入红点日期查看阻塞来源。" : "本月暂未发现明显风险日期，继续保持日报完整度。",
+            lowFillDays > 0 ? "\(lowFillDays) 天填报率偏低，可能影响团队进度判断。" : "填报节奏整体稳定，月历可作为团队状态入口。"
+        ]
+    }
 }
 
 struct CalendarDashboardView: View {
@@ -48,19 +59,19 @@ struct CalendarDashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
                     HStack {
                         Button {
                             Task { await viewModel.moveMonth(by: -1, auth: auth) }
                         } label: {
                             Image(systemName: "chevron.left")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderless)
 
                         Spacer()
 
                         Text(viewModel.month)
-                            .font(.title2.weight(.semibold))
+                            .font(AITheme.Typography.pageTitle)
 
                         Spacer()
 
@@ -69,7 +80,7 @@ struct CalendarDashboardView: View {
                         } label: {
                             Image(systemName: "chevron.right")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderless)
                     }
 
                     Picker("范围", selection: $viewModel.scope) {
@@ -89,31 +100,40 @@ struct CalendarDashboardView: View {
                         }
                     }
 
-                    LazyVGrid(columns: columns, spacing: 8) {
-                        ForEach(DateHelpers.weekdays, id: \.self) { weekday in
-                            Text(weekday)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity)
-                        }
+                    AIInsightPanel(title: "AI 月度洞察", insights: viewModel.dashboardInsights)
 
-                        ForEach(viewModel.grid) { item in
-                            if item.isBlank {
-                                Color.clear
-                                    .frame(height: 72)
-                            } else {
-                                NavigationLink {
-                                    DayDetailView(date: item.id, scope: viewModel.scope)
-                                } label: {
-                                    CalendarDayCell(item: item)
+                    BrandedCard {
+                        VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                            CalendarLegend()
+
+                            LazyVGrid(columns: columns, spacing: 8) {
+                                ForEach(DateHelpers.weekdays, id: \.self) { weekday in
+                                    Text(weekday)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(.plain)
+
+                                ForEach(viewModel.grid) { item in
+                                    if item.isBlank {
+                                        Color.clear
+                                            .frame(height: 52)
+                                    } else {
+                                        NavigationLink {
+                                            DayDetailView(date: item.id, scope: viewModel.scope)
+                                        } label: {
+                                            CalendarDayCell(item: item)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                .padding()
+                .padding(AITheme.Spacing.lg)
             }
+            .background(AITheme.ColorToken.appBackground)
             .navigationTitle("月历看板")
             .overlay {
                 if viewModel.isLoading {
@@ -150,46 +170,92 @@ struct CalendarDayCell: View {
     let item: MonthGridItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text("\(item.day ?? 0)")
-                    .font(.callout.weight(item.isToday ? .bold : .medium))
-                Spacer()
-                if (item.data?.riskCount ?? 0) > 0 {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            Text("\(item.day ?? 0)")
+                .font(.callout.weight(item.isToday ? .bold : .regular))
+                .foregroundStyle(item.isToday ? AITheme.ColorToken.brand : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 3) {
+                ForEach(statusDots, id: \.label) { dot in
+                    Circle()
+                        .fill(dot.color)
+                        .frame(width: 6, height: 6)
+                        .accessibilityLabel(dot.label)
                 }
+                Spacer(minLength: 0)
             }
-
-            Text(String(format: "%.0f%%", item.data?.fillRate ?? 0))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("\(item.data?.filledCount ?? 0)/\((item.data?.filledCount ?? 0) + (item.data?.missingCount ?? 0))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
-        .padding(8)
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+        .padding(7)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
         .background(backgroundColor)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(item.isToday ? Color.accentColor : Color.clear, lineWidth: 1.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityLabel(accessibilityText)
     }
 
     private var backgroundColor: Color {
         switch item.tone {
         case .empty:
-            return Color.secondary.opacity(0.08)
+            return AITheme.ColorToken.activeBackground.opacity(0.72)
         case .normal:
-            return Color.blue.opacity(0.12)
+            return Color.blue.opacity(0.10)
         case .good:
-            return Color.green.opacity(0.14)
+            return Color.green.opacity(0.12)
         case .risk:
-            return Color.red.opacity(0.12)
+            return Color.red.opacity(0.10)
+        }
+    }
+
+    private var statusDots: [(color: Color, label: String)] {
+        guard let data = item.data else {
+            return [(Color.orange, "未填报")]
+        }
+        if data.riskCount > 0 {
+            return [(Color.red, "存在风险")]
+        }
+        if data.fillRate >= 80 {
+            return [(Color.green, "已完成")]
+        }
+        if data.fillRate > 0 {
+            return [(AITheme.ColorToken.accentBlue, "部分填报")]
+        }
+        return [(Color.orange, "未填报")]
+    }
+
+    private var accessibilityText: String {
+        guard let data = item.data else {
+            return "\(item.day ?? 0) 日，未填报"
+        }
+        return "\(item.day ?? 0) 日，填报率 \(String(format: "%.0f", data.fillRate))%，风险 \(data.riskCount) 个"
+    }
+}
+
+private struct CalendarLegend: View {
+    private let items: [(String, Color)] = [
+        ("已完成", .green),
+        ("部分填报", AITheme.ColorToken.accentBlue),
+        ("未填报", .orange),
+        ("风险", .red)
+    ]
+
+    var body: some View {
+        HStack(spacing: AITheme.Spacing.sm) {
+            ForEach(items, id: \.0) { item in
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(item.1)
+                        .frame(width: 6, height: 6)
+                    Text(item.0)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }
@@ -226,6 +292,14 @@ struct DayDetailView: View {
     var body: some View {
         List {
             if let detail {
+                Section("AI 今日洞察") {
+                    ForEach(detailInsights(detail), id: \.self) { insight in
+                        Label(insight, systemImage: "sparkles")
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                    }
+                }
+
                 Section("统计") {
                     LabeledContent("应填人数", value: "\(detail.stats.totalEmployees)")
                     LabeledContent("已填", value: "\(detail.stats.filledCount)")
@@ -317,5 +391,25 @@ struct DayDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func detailInsights(_ detail: CalendarDayDetail) -> [String] {
+        let stats = detail.stats
+        var insights: [String] = []
+        if stats.fillRate < 80 {
+            insights.append(String(format: "今日填报率 %.1f%%，团队状态判断可能不完整。", stats.fillRate))
+        } else {
+            insights.append(String(format: "今日填报率 %.1f%%，日报覆盖度较好。", stats.fillRate))
+        }
+        if stats.riskCount > 0 {
+            insights.append("AI 发现 \(stats.riskCount) 个风险信号，建议优先查看红色风险日志。")
+        } else {
+            insights.append("暂未发现显性风险，适合关注未填报成员是否存在隐性阻塞。")
+        }
+        if stats.totalEmployees > 0 {
+            let averageHours = stats.totalHours / Double(max(stats.filledCount, 1))
+            insights.append(String(format: "已填成员平均工时 %.1f 小时，可与近 7 日节奏对比。", averageHours))
+        }
+        return insights
     }
 }

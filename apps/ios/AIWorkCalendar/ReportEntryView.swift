@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 final class ReportEntryViewModel: ObservableObject {
     @Published var messages: [DraftMessage] = [
-        DraftMessage(role: .assistant, content: "告诉我今天做了什么、花了多久，或明天计划做什么。我会整理成日报或计划草稿。")
+        DraftMessage(role: .assistant, content: ReportEntryViewModel.assistantOpening)
     ]
     @Published var chatInput = ""
     @Published var selectedDate = Date()
@@ -19,6 +19,8 @@ final class ReportEntryViewModel: ObservableObject {
     @Published var isSubmitting = false
     @Published var errorMessage: String?
     @Published var successMessage: String?
+
+    fileprivate static let assistantOpening = "今天你完成了什么？告诉我任务、项目、风险或工时，我会整理成可提交的日报。"
 
     func loadProjects(auth: AuthStore) async {
         isLoadingProjects = true
@@ -38,7 +40,7 @@ final class ReportEntryViewModel: ObservableObject {
     func generateDraft(auth: AuthStore) async {
         let input = chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
-            errorMessage = "请输入填报内容"
+            errorMessage = "请先告诉 AI 今天完成了什么"
             return
         }
 
@@ -143,7 +145,7 @@ final class ReportEntryViewModel: ObservableObject {
         savedDraftId = nil
         chatInput = ""
         messages = [
-            DraftMessage(role: .assistant, content: "告诉我今天做了什么、花了多久，或明天计划做什么。我会整理成日报或计划草稿。")
+            DraftMessage(role: .assistant, content: Self.assistantOpening)
         ]
     }
 }
@@ -154,108 +156,39 @@ struct ReportEntryView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
                 if let user = auth.user {
-                    Section {
-                        HStack(spacing: 12) {
-                            Image(systemName: "person.crop.circle")
-                                .font(.title2)
-                                .foregroundStyle(Color.accentColor)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(user.name)
-                                    .font(.headline)
-                                Text([user.tenantName, user.departmentName].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    WorkContextHeader(user: user)
                 }
 
-                Section("AI 草稿") {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(viewModel.messages) { message in
-                                Text(message.content)
-                                    .font(.callout)
-                                    .padding(10)
-                                    .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
-                                    .background(message.role == .user ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.12))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                        }
-                    }
-                    .frame(minHeight: 120)
+                    AIInsightPanel(
+                        title: "AI 今日节奏",
+                        insights: [
+                            viewModel.title.isEmpty ? "先用自然语言描述今天完成的工作，AI 会生成标题、摘要和工时。" : "草稿已生成，请重点检查项目、工时和风险描述。",
+                            viewModel.selectedProjectId.isEmpty ? "关联项目后，团队看板可以更早发现延期和阻塞信号。" : "当前日报会进入项目维度分析，便于后续汇总。",
+                            "提交后，AI 分析会用于日历风险点、项目状态和个人工作画像。"
+                        ]
+                    )
 
-                    TextField("输入今天工作内容或计划", text: $viewModel.chatInput, axis: .vertical)
-                        .lineLimit(2...5)
-                        .submitLabel(.send)
-
-                    Button {
+                    AIDraftComposer(viewModel: viewModel) {
                         Task { await viewModel.generateDraft(auth: auth) }
-                    } label: {
-                        if viewModel.isDrafting {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Label("生成草稿", systemImage: "sparkles")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(viewModel.isDrafting || viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-
-                Section("日报") {
-                    DatePicker("日期", selection: $viewModel.selectedDate, displayedComponents: .date)
-
-                    Picker("项目", selection: $viewModel.selectedProjectId) {
-                        Text("不关联项目").tag("")
-                        ForEach(viewModel.projects) { project in
-                            Text(project.displayName).tag(project.id)
-                        }
                     }
 
-                    TextField("标题", text: $viewModel.title)
-                    TextField("工时", text: $viewModel.hoursText)
-                        .decimalInputTraits()
-                    TextEditor(text: $viewModel.content)
-                        .frame(minHeight: 140)
-                        .accessibilityLabel("日报内容")
-                }
+                    DailyDraftEditor(viewModel: viewModel)
 
-                Section {
-                    Button {
+                    ReportActionPanel(viewModel: viewModel) {
                         Task { await viewModel.saveDraft(auth: auth) }
-                    } label: {
-                        if viewModel.isSavingDraft {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Label("保存草稿", systemImage: "tray.and.arrow.down")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(viewModel.isSavingDraft || viewModel.isSubmitting)
-
-                    Button {
+                    } onSubmit: {
                         Task { await viewModel.submit(auth: auth) }
-                    } label: {
-                        if viewModel.isSubmitting {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Label("提交填报", systemImage: "paperplane.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(viewModel.isSubmitting || viewModel.isSavingDraft)
-
-                    Button("清空", role: .destructive) {
+                    } onClear: {
                         viewModel.clearForm()
                     }
                 }
+                .padding(AITheme.Spacing.lg)
             }
-            .navigationTitle("工作填报")
+            .background(AITheme.ColorToken.appBackground)
+            .navigationTitle("今日工作")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -303,6 +236,122 @@ struct ReportEntryView: View {
             if !isPresented {
                 viewModel.errorMessage = nil
             }
+        }
+    }
+}
+
+private struct WorkContextHeader: View {
+    let user: AuthUser
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            Text("你好，\(user.name)")
+                .font(AITheme.Typography.pageTitle)
+            Text([user.tenantName, user.departmentName].compactMap { $0 }.joined(separator: " · "))
+                .font(AITheme.Typography.support)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct AIDraftComposer: View {
+    @ObservedObject var viewModel: ReportEntryViewModel
+    let onGenerate: () -> Void
+
+    var body: some View {
+        BrandedCard {
+            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                SectionTitle("今天你完成了什么？", subtitle: "不用写格式，像和助理说话一样描述即可。")
+
+                VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+                    ForEach(viewModel.messages.suffix(3)) { message in
+                        Text(message.content)
+                            .font(AITheme.Typography.support)
+                            .foregroundStyle(message.role == .user ? .primary : .secondary)
+                            .padding(AITheme.Spacing.sm)
+                            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+                            .background(message.role == .user ? AITheme.ColorToken.brand.opacity(0.10) : AITheme.ColorToken.activeBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                    }
+                }
+
+                TextField("例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时", text: $viewModel.chatInput, axis: .vertical)
+                    .lineLimit(3...6)
+                    .textFieldStyle(AITextFieldStyle())
+                    .submitLabel(.send)
+
+                PrimaryActionButton(title: "AI 帮我整理日报", systemImage: "sparkles", isLoading: viewModel.isDrafting, action: onGenerate)
+                    .disabled(viewModel.isDrafting || viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.52 : 1)
+            }
+        }
+    }
+}
+
+private struct DailyDraftEditor: View {
+    @ObservedObject var viewModel: ReportEntryViewModel
+
+    var body: some View {
+        BrandedCard {
+            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                SectionTitle("日报草稿", subtitle: "AI 生成后仍可手动校正，提交前请确认工时和项目。")
+
+                DatePicker("日期", selection: $viewModel.selectedDate, displayedComponents: .date)
+
+                Picker("项目", selection: $viewModel.selectedProjectId) {
+                    Text("不关联项目").tag("")
+                    ForEach(viewModel.projects) { project in
+                        Text(project.displayName).tag(project.id)
+                    }
+                }
+
+                TextField("标题", text: $viewModel.title)
+                    .textFieldStyle(AITextFieldStyle())
+
+                TextField("工时", text: $viewModel.hoursText)
+                    .textFieldStyle(AITextFieldStyle())
+                    .decimalInputTraits()
+
+                TextEditor(text: $viewModel.content)
+                    .font(AITheme.Typography.body)
+                    .frame(minHeight: 132)
+                    .padding(AITheme.Spacing.xs)
+                    .background(AITheme.ColorToken.activeBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                    .accessibilityLabel("日报内容")
+            }
+        }
+    }
+}
+
+private struct ReportActionPanel: View {
+    @ObservedObject var viewModel: ReportEntryViewModel
+    let onSave: () -> Void
+    let onSubmit: () -> Void
+    let onClear: () -> Void
+
+    var body: some View {
+        VStack(spacing: AITheme.Spacing.sm) {
+            PrimaryActionButton(title: "提交今日工作", systemImage: "paperplane.fill", isLoading: viewModel.isSubmitting, action: onSubmit)
+                .disabled(viewModel.isSubmitting || viewModel.isSavingDraft)
+
+            Button(action: onSave) {
+                if viewModel.isSavingDraft {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+                } else {
+                    Label("保存为草稿", systemImage: "tray.and.arrow.down")
+                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.isSavingDraft || viewModel.isSubmitting)
+
+            Button("清空") {
+                onClear()
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
     }
 }
