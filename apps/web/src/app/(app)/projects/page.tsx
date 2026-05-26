@@ -42,6 +42,17 @@ function dateText(value?: string | null) {
   return value ? dayjs(value).format("YYYY-MM-DD") : "未设置";
 }
 
+function projectHealth(project: Project) {
+  if (project.status === "ARCHIVED") return { label: "已归档", color: "default" };
+  if (project.status === "PAUSED") return { label: "暂停观察", color: "orange" };
+  if (project.endDate) {
+    const daysLeft = dayjs(project.endDate).startOf("day").diff(dayjs().startOf("day"), "day");
+    if (daysLeft < 0) return { label: "已逾期", color: "red" };
+    if (daysLeft <= 7) return { label: `${daysLeft} 天到期`, color: "gold" };
+  }
+  return { label: "健康", color: "green" };
+}
+
 function toPayload(values: ProjectForm) {
   return {
     code: values.code?.trim() || null,
@@ -153,6 +164,14 @@ export default function ProjectsPage() {
       title: "负责人",
       width: 160,
       render: (_, record) => record.owner?.name ?? "未设置"
+    },
+    {
+      title: "健康度",
+      width: 120,
+      render: (_, record) => {
+        const health = projectHealth(record);
+        return <Tag color={health.color}>{health.label}</Tag>;
+      }
     },
     {
       title: "周期",

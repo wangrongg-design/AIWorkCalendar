@@ -124,6 +124,11 @@ export default function ReportsPage() {
   const columns: ColumnsType<Report> = [
     { title: "报告", dataIndex: "title", width: 220 },
     {
+      title: "周期",
+      width: 190,
+      render: (_, record) => `${dayjs(record.periodStart).format("YYYY-MM-DD")} 至 ${dayjs(record.periodEnd).format("YYYY-MM-DD")}`
+    },
+    {
       title: "状态",
       dataIndex: "status",
       width: 100,
@@ -160,6 +165,7 @@ export default function ReportsPage() {
         );
       }
     },
+    { title: "生成时间", dataIndex: "createdAt", width: 150, render: (value: string) => dayjs(value).format("MM-DD HH:mm") },
     {
       title: "操作",
       width: 140,
@@ -177,17 +183,24 @@ export default function ReportsPage() {
 
   return (
     <div className="page-stack">
-      <div>
-        <Typography.Title level={3} className="page-title">
-          智能汇报
-        </Typography.Title>
-        <Typography.Text className="page-subtitle">生成个人日报/周报和部门日报/周报，完成后可下载 Word 文档。</Typography.Text>
+      <div className="page-header">
+        <div>
+          <Typography.Title level={3} className="page-title">
+            AI 汇报
+          </Typography.Title>
+          <Typography.Text className="page-subtitle">用 AI 把日报、计划、风险和工时整理成可复盘的团队汇报。</Typography.Text>
+        </div>
       </div>
 
-      <div className="toolbar-panel flex flex-wrap items-center justify-between gap-3">
+      <div className="surface-panel report-guide">
+        <div className="report-guide-copy">
+          <div className="section-title">生成报告向导</div>
+          <div className="section-subtitle">选择报告类型、时间范围和部门后，AI 会生成摘要、已完成工作、风险问题、后续计划和工时统计。</div>
+        </div>
         <Form
           form={form}
           layout="inline"
+          className="report-guide-form"
           initialValues={{
             type: "PERSONAL_DAILY",
             range: [dayjs(), dayjs()],
@@ -228,7 +241,7 @@ export default function ReportsPage() {
         loading={reports.isFetching}
         dataSource={reports.data ?? []}
         columns={columns}
-        locale={{ emptyText: <Empty description="暂无报告，先生成一份日报或周报" /> }}
+        locale={{ emptyText: <Empty description="暂无报告，先按上方向导生成一份日报或周报" /> }}
         pagination={{ pageSize: 6 }}
       />
     </div>

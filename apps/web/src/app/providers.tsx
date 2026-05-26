@@ -13,27 +13,26 @@ export function Providers({ children }: { children: ReactNode }) {
       locale={zhCN}
       theme={{
         token: {
-          colorPrimary: "#0b57d0",
-          colorInfo: "#0b57d0",
-          colorSuccess: "#0f766e",
-          colorWarning: "#b06000",
-          colorError: "#b3261e",
-          colorText: "#1f1f1f",
-          colorTextSecondary: "#5f6368",
-          colorBorder: "#dadce0",
-          colorBgLayout: "#f8fafd",
+          colorPrimary: "#0B57D0",
+          colorInfo: "#0B57D0",
+          colorSuccess: "#16A34A",
+          colorWarning: "#D97706",
+          colorError: "#DC2626",
+          colorText: "#111827",
+          colorTextSecondary: "#6B7280",
+          colorBorder: "#E5E7EB",
+          colorBgLayout: "#F8FAFC",
           colorBgContainer: "#ffffff",
-          colorFillSecondary: "#eef3f8",
-          borderRadius: 12,
+          colorFillSecondary: "#F3F6FA",
+          borderRadius: 10,
           controlHeight: 40,
           fontFamily:
-            '"Google Sans", Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
-          boxShadow:
-            "0 1px 2px rgba(60, 64, 67, 0.18), 0 1px 3px 1px rgba(60, 64, 67, 0.08)"
+            '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)"
         },
         components: {
           Button: {
-            borderRadius: 20,
+            borderRadius: 10,
             controlHeight: 40,
             primaryShadow: "none"
           },
@@ -42,44 +41,44 @@ export function Providers({ children }: { children: ReactNode }) {
             boxShadowTertiary: "none"
           },
           Input: {
-            borderRadius: 12,
+            borderRadius: 10,
             controlHeight: 40
           },
           InputNumber: {
-            borderRadius: 12,
+            borderRadius: 10,
             controlHeight: 40
           },
           Select: {
-            borderRadius: 12,
+            borderRadius: 10,
             controlHeight: 40
           },
           DatePicker: {
-            borderRadius: 12,
+            borderRadius: 10,
             controlHeight: 40
           },
           Modal: {
             borderRadiusLG: 20
           },
           Table: {
-            borderColor: "#e6e9ef",
-            headerBg: "#f8fafd",
-            headerColor: "#5f6368",
-            rowHoverBg: "#f1f6ff"
+            borderColor: "#E5E7EB",
+            headerBg: "#F8FAFC",
+            headerColor: "#6B7280",
+            rowHoverBg: "#EEF5FF"
           },
           Tabs: {
-            itemSelectedColor: "#0b57d0",
-            inkBarColor: "#0b57d0"
+            itemSelectedColor: "#0B57D0",
+            inkBarColor: "#0B57D0"
           },
           Tag: {
             borderRadiusSM: 999
           },
-          Layout: { headerBg: "#ffffff", siderBg: "#f8fafd" },
+          Layout: { headerBg: "#ffffff", siderBg: "#F8FAFC" },
           Menu: {
             itemBg: "transparent",
-            itemSelectedBg: "#d3e3fd",
-            itemSelectedColor: "#041e49",
-            itemHoverBg: "#eef3f8",
-            itemBorderRadius: 999
+            itemSelectedBg: "rgba(11, 87, 208, 0.08)",
+            itemSelectedColor: "#0B57D0",
+            itemHoverBg: "#F3F6FA",
+            itemBorderRadius: 10
           }
         }
       }}

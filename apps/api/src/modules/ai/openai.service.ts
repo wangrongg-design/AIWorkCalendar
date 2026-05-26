@@ -1,5 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import OpenAI from "openai";
+import { AuditService } from "../../common/audit/audit.service";
+import { PrismaService } from "../../common/prisma.service";
+import { AiRedactionService, AiRedactionStats } from "./ai-redaction.service";
 import { CALENDAR_CHAT_SYSTEM_PROMPT, REPORT_GENERATION_SYSTEM_PROMPT, WORK_LOG_ANALYSIS_SYSTEM_PROMPT, WORK_LOG_DRAFT_SYSTEM_PROMPT } from "./prompts";
 import {
   reportJsonSchema,
@@ -11,6 +14,16 @@ import {
 } from "./schemas/analysis.schema";
 
 type AiProvider = "mock" | "openai" | "deepseek";
+
+type AiCallContext = {
+  tenantId: string;
+  userId?: string | null;
+  operation: "work_log_analysis" | "report_generation" | "calendar_chat" | "work_log_draft";
+  targetType?: string;
+  targetId?: string | null;
+  containsAttachments?: boolean;
+  containsImages?: boolean;
+};
 
 type ReportInput = {
   reportType: string;
@@ -100,7 +113,11 @@ export class OpenAiService {
   private readonly openAiClient: OpenAI | null;
   private readonly deepSeekClient: OpenAI | null;
 
-  constructor() {
+  constructor(
+    private readonly redaction: AiRedactionService,
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService
+  ) {
     this.provider = this.resolveProvider();
     this.openAiClient = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
     this.deepSeekClient = process.env.DEEPSEEK_API_KEY
@@ -111,56 +128,76 @@ export class OpenAiService {
       : null;
   }
 
-  async analyzeWorkLog(input: WorkLogAnalysisInput): Promise<WorkLogAnalysisResult> {
+  async analyzeWorkLog(input: WorkLogAnalysisInput, context?: AiCallContext): Promise<WorkLogAnalysisResult> {
+    const safe = this.redaction.buildSafeAiPayload(input);
+    const activeProvider = this.activeProvider();
+    let result: WorkLogAnalysisResult;
     if (this.provider === "deepseek" && this.deepSeekClient) {
-      return this.analyzeWorkLogWithDeepSeek(input);
+      result = await this.analyzeWorkLogWithDeepSeek(safe.payload);
+    } else if (this.provider === "openai" && this.openAiClient) {
+      result = await this.analyzeWorkLogWithOpenAi(safe.payload);
+    } else {
+      if (this.provider !== "mock") {
+        this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+      }
+      result = this.localWorkLogAnalysis(input);
     }
-    if (this.provider === "openai" && this.openAiClient) {
-      return this.analyzeWorkLogWithOpenAi(input);
-    }
-    if (this.provider !== "mock") {
-      this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
-    }
-    return this.localWorkLogAnalysis(input);
+    await this.logAiCall(context, activeProvider, safe.stats);
+    return safe.restore(result);
   }
 
-  async generateReport(input: ReportInput): Promise<ReportResult> {
+  async generateReport(input: ReportInput, context?: AiCallContext): Promise<ReportResult> {
+    const safe = this.redaction.buildSafeAiPayload(input);
+    const activeProvider = this.activeProvider();
+    let result: ReportResult;
     if (this.provider === "deepseek" && this.deepSeekClient) {
-      return this.generateReportWithDeepSeek(input);
+      result = await this.generateReportWithDeepSeek(safe.payload);
+    } else if (this.provider === "openai" && this.openAiClient) {
+      result = await this.generateReportWithOpenAi(safe.payload);
+    } else {
+      if (this.provider !== "mock") {
+        this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+      }
+      result = this.localReport(input);
     }
-    if (this.provider === "openai" && this.openAiClient) {
-      return this.generateReportWithOpenAi(input);
-    }
-    if (this.provider !== "mock") {
-      this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
-    }
-    return this.localReport(input);
+    await this.logAiCall(context, activeProvider, safe.stats);
+    return safe.restore(result);
   }
 
-  async chatWithCalendarContext(input: CalendarChatInput): Promise<string> {
+  async chatWithCalendarContext(input: CalendarChatInput, context?: AiCallContext): Promise<string> {
+    const safe = this.redaction.buildSafeAiPayload(this.compactCalendarChatInput(input));
+    const activeProvider = this.activeProvider();
+    let result: string;
     if (this.provider === "deepseek" && this.deepSeekClient) {
-      return this.chatWithCalendarContextDeepSeek(input);
+      result = await this.chatWithCalendarContextDeepSeek(safe.payload);
+    } else if (this.provider === "openai" && this.openAiClient) {
+      result = await this.chatWithCalendarContextOpenAi(safe.payload);
+    } else {
+      if (this.provider !== "mock") {
+        this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+      }
+      result = this.localCalendarChat(input);
     }
-    if (this.provider === "openai" && this.openAiClient) {
-      return this.chatWithCalendarContextOpenAi(input);
-    }
-    if (this.provider !== "mock") {
-      this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
-    }
-    return this.localCalendarChat(input);
+    await this.logAiCall(context, activeProvider, safe.stats);
+    return safe.restore(result);
   }
 
-  async draftWorkLog(input: DraftWorkLogInput): Promise<WorkLogDraftResult> {
+  async draftWorkLog(input: DraftWorkLogInput, context?: AiCallContext): Promise<WorkLogDraftResult> {
+    const safe = this.redaction.buildSafeAiPayload(input);
+    const activeProvider = this.activeProvider();
+    let result: WorkLogDraftResult;
     if (this.provider === "deepseek" && this.deepSeekClient) {
-      return this.normalizeDraft(await this.draftWorkLogWithDeepSeek(input), input);
+      result = this.normalizeDraft(await this.draftWorkLogWithDeepSeek(safe.payload), input);
+    } else if (this.provider === "openai" && this.openAiClient) {
+      result = this.normalizeDraft(await this.draftWorkLogWithOpenAi(safe.payload), input);
+    } else {
+      if (this.provider !== "mock") {
+        this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+      }
+      result = this.localWorkLogDraft(input);
     }
-    if (this.provider === "openai" && this.openAiClient) {
-      return this.normalizeDraft(await this.draftWorkLogWithOpenAi(input), input);
-    }
-    if (this.provider !== "mock") {
-      this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
-    }
-    return this.localWorkLogDraft(input);
+    await this.logAiCall(context, activeProvider, safe.stats);
+    return safe.restore(result);
   }
 
   private resolveProvider(): AiProvider {
@@ -175,6 +212,61 @@ export class OpenAiService {
       return "openai";
     }
     return "mock";
+  }
+
+  private activeProvider(): AiProvider {
+    if (this.provider === "deepseek" && this.deepSeekClient) return "deepseek";
+    if (this.provider === "openai" && this.openAiClient) return "openai";
+    return "mock";
+  }
+
+  private modelName(provider: AiProvider) {
+    if (provider === "openai") return process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+    if (provider === "deepseek") return process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
+    return "local-mock";
+  }
+
+  private async logAiCall(context: AiCallContext | undefined, provider: AiProvider, redaction: AiRedactionStats) {
+    if (!context?.tenantId) return;
+    const metadata = {
+      targetType: context.targetType ?? null,
+      targetId: context.targetId ?? null,
+      redaction,
+      containsAttachments: Boolean(context.containsAttachments),
+      containsImages: Boolean(context.containsImages),
+      zeroDataRetentionRequired: process.env.AI_ZDR_REQUIRED === "true"
+    };
+    try {
+      await this.prisma.aiUsageLog.create({
+        data: {
+          tenantId: context.tenantId,
+          userId: context.userId ?? null,
+          provider,
+          model: this.modelName(provider),
+          operation: context.operation,
+          metadata
+        }
+      });
+      await this.audit.log({
+        tenantId: context.tenantId,
+        actorUserId: context.userId ?? null,
+        action: "AI_CALL",
+        targetType: context.targetType ?? null,
+        targetId: context.targetId ?? null,
+        metadata: {
+          operation: context.operation,
+          provider,
+          model: this.modelName(provider),
+          redactedFields: redaction.total,
+          redactionByKind: redaction.byKind,
+          containsAttachments: Boolean(context.containsAttachments),
+          containsImages: Boolean(context.containsImages),
+          removedImages: redaction.removedImages
+        }
+      });
+    } catch (error) {
+      this.logger.warn(`AI usage log write failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
   }
 
   private async analyzeWorkLogWithOpenAi(input: WorkLogAnalysisInput): Promise<WorkLogAnalysisResult> {

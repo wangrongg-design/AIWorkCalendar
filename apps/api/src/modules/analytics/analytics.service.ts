@@ -74,12 +74,14 @@ export class AnalyticsService {
       const filledCount = filledUserIds.size;
       const totalCount = users.length;
       const riskTotal = dayLogs.reduce((sum, item) => sum + riskCount(item.aiAnalysis?.risks), 0);
+      const totalHours = dayLogs.reduce((sum, item) => sum + Number(item.hours), 0);
       days.push({
         date: key,
         filledCount,
         missingCount: Math.max(totalCount - filledCount, 0),
         fillRate: totalCount === 0 ? 0 : Number(((filledCount / totalCount) * 100).toFixed(1)),
-        riskCount: riskTotal
+        riskCount: riskTotal,
+        totalHours: Number(totalHours.toFixed(2))
       });
     }
 

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Avatar, Badge, Button, Dropdown, Layout, Menu, Tooltip, Typography } from "antd";
+import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
-import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, Home, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -13,9 +13,9 @@ import { Notification } from "@/lib/types";
 const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
-  { key: "/dashboard", icon: <CalendarDays size={19} />, label: "工作台" },
-  { key: "/calendar", icon: <CalendarDays size={19} />, label: "日历" },
-  { key: "/work-logs", icon: <ClipboardList size={19} />, label: "日报" },
+  { key: "/dashboard", icon: <Home size={19} />, label: "工作台" },
+  { key: "/calendar", icon: <CalendarDays size={19} />, label: "AI日历" },
+  { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报" },
   { key: "/reports", icon: <FileText size={19} />, label: "AI汇报" }
 ];
 
@@ -24,20 +24,40 @@ const adminNavItems: MenuProps["items"] = [
   { key: "/org", icon: <Users size={19} />, label: "团队" }
 ];
 
+const roleLabels: Record<string, string> = {
+  SUPER_ADMIN: "平台超管",
+  COMPANY_ADMIN: "企业管理员",
+  DEPARTMENT_MANAGER: "部门经理",
+  EMPLOYEE: "员工"
+};
+
 export function AppShell({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
+  const storedHasHydrated = useAuthStore((state) => state.hasHydrated);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const [persistReady, setPersistReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const authReady = persistReady || storedHasHydrated;
 
   useEffect(() => {
-    if (!token) {
+    setPersistReady(useAuthStore.persist.hasHydrated());
+    const unsubscribe = useAuthStore.persist.onFinishHydration(() => {
+      useAuthStore.getState().setHasHydrated(true);
+      setPersistReady(true);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (authReady && !token) {
       router.replace("/login");
     }
-  }, [router, token]);
+  }, [authReady, router, token]);
 
   const notifications = useQuery({
     queryKey: ["notifications"],
@@ -83,12 +103,27 @@ export function AppShell({ children }: { children: ReactNode }) {
         ]
       : [];
 
+  if (!authReady) {
+    return (
+      <div className="auth-loading">
+        <div className="auth-loading-mark">Work Calendar AI</div>
+        <div className="auth-loading-copy">正在进入工作空间…</div>
+      </div>
+    );
+  }
+
   if (!token || !user) {
     return null;
   }
 
   const canUseAdminMenu = user.roles.includes("COMPANY_ADMIN") || user.roles.includes("SUPER_ADMIN");
   const selectedKeys = [pathname];
+  const mobileNavItems = [...(dailyNavItems ?? []), ...(canUseAdminMenu ? (adminNavItems ?? []) : [])];
+  const roleText = user.roles.map((role) => roleLabels[role] ?? role).join(" / ");
+  const navigateTo = (key: string) => {
+    router.push(key);
+    setMobileNavOpen(false);
+  };
 
   return (
     <Layout className="min-h-screen">
@@ -191,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium leading-5 text-ink">{user.name}</div>
-                    <div className="app-sidebar-subtext text-xs leading-4 text-muted">{user.roles.join(" / ")}</div>
+                    <div className="app-sidebar-subtext text-xs leading-4 text-muted">{roleText}</div>
                   </div>
                   <Button
                     type="text"
@@ -237,7 +272,70 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </Sider>
       <Layout>
-        <Content className="px-6 py-5">
+        <div className="mobile-app-bar">
+          <Button type="text" shape="circle" icon={<MenuIcon size={18} />} onClick={() => setMobileNavOpen(true)} />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-ink">Work Calendar AI</div>
+            <div className="truncate text-xs text-muted">{user.tenantName}</div>
+          </div>
+          <Dropdown
+            menu={{
+              items: notificationMenu.length ? notificationMenu : [{ key: "empty", label: "暂无通知" }],
+              onClick: ({ key }) => {
+                if (key === "empty") return;
+                if (key === "read-all") {
+                  markAllNotifications.mutate();
+                  return;
+                }
+                markNotification.mutate(String(key));
+              }
+            }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
+            <Button
+              type="text"
+              shape="circle"
+              icon={
+                <Badge size="small" count={unreadCount}>
+                  <Bell size={18} />
+                </Badge>
+              }
+            />
+          </Dropdown>
+        </div>
+        <Drawer
+          title="工作空间"
+          open={mobileNavOpen}
+          onClose={() => setMobileNavOpen(false)}
+          placement="left"
+          width={300}
+          className="mobile-nav-drawer"
+        >
+          <div className="mb-4 rounded-2xl bg-surface-container-low p-3">
+            <div className="text-sm font-semibold text-ink">{user.name}</div>
+            <div className="mt-1 text-xs text-muted">{roleText}</div>
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={selectedKeys}
+            items={mobileNavItems}
+            onClick={(item) => navigateTo(item.key)}
+            className="material-nav border-r-0 bg-transparent"
+          />
+          <Button
+            className="mt-4"
+            block
+            icon={<LogOut size={16} />}
+            onClick={() => {
+              clearSession();
+              router.replace("/login");
+            }}
+          >
+            退出登录
+          </Button>
+        </Drawer>
+        <Content className="app-content px-6 py-5">
           <div className="mx-auto max-w-[1440px]">{children}</div>
         </Content>
       </Layout>

@@ -4,6 +4,7 @@ enum WorkLogListFilter: String, CaseIterable, Identifiable {
     case all
     case draft
     case submitted
+    case risk
 
     var id: String { rawValue }
 
@@ -15,6 +16,8 @@ enum WorkLogListFilter: String, CaseIterable, Identifiable {
             return "草稿"
         case .submitted:
             return "已提交"
+        case .risk:
+            return "有风险"
         }
     }
 }
@@ -36,6 +39,8 @@ final class WorkLogsViewModel: ObservableObject {
                 return log.status == .draft
             case .submitted:
                 return log.status == .submitted
+            case .risk:
+                return log.hasAIRisk
             }
         }
 
@@ -123,12 +128,13 @@ struct WorkLogsView: View {
                             } label: {
                                 Label("提交", systemImage: "paperplane")
                             }
-                            .tint(.blue)
+                            .tint(AITheme.ColorToken.primary)
                         }
                     }
                 }
             }
             .navigationTitle("填报记录")
+            .compactNavigationTitle()
             .searchable(text: $viewModel.searchText, prompt: "搜索标题、内容或项目")
             .overlay {
                 if viewModel.isLoading {
@@ -164,29 +170,37 @@ struct WorkLogRow: View {
     let log: WorkLog
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(log.title)
                     .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 StatusBadge(title: log.status.title, systemImage: nil, tint: log.status.badgeTint)
             }
-            Text(log.date.prefix(10))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let project = log.project {
-                Text(project.displayName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+            HStack(spacing: AITheme.Spacing.sm) {
+                Text(String(log.date.prefix(10)))
+                Text("\(log.hoursText)h")
+                if let project = log.project {
+                    Text(project.displayName)
+                        .lineLimit(1)
+                }
             }
+            .font(.caption)
+            .foregroundStyle(AITheme.ColorToken.textSecondary)
+
             Text(log.content)
                 .font(.callout)
-                .lineLimit(2)
-            Text("\(log.hoursText) 小时")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if log.hasAIRisk {
+                Label("AI 发现风险或阻塞", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AITheme.ColorToken.danger)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -211,16 +225,26 @@ struct WorkLogDetailView: View {
             if let analysis = log.aiAnalysis {
                 Section("AI 分析") {
                     if let summary = analysis.summary, !summary.isEmpty {
-                        Text(summary)
+                        LabeledContent("建议", value: summary)
                     }
                     if !analysis.achievements.isEmpty {
                         LabeledContent("成果", value: analysis.achievements.joined(separator: "；"))
                     }
                     if !analysis.risks.isEmpty {
-                        LabeledContent("风险", value: analysis.risks.joined(separator: "；"))
+                        LabeledContent {
+                            Text(analysis.risks.joined(separator: "；"))
+                                .foregroundStyle(AITheme.ColorToken.danger)
+                        } label: {
+                            Text("风险")
+                        }
                     }
                     if !analysis.blockers.isEmpty {
-                        LabeledContent("阻塞", value: analysis.blockers.joined(separator: "；"))
+                        LabeledContent {
+                            Text(analysis.blockers.joined(separator: "；"))
+                                .foregroundStyle(AITheme.ColorToken.warning)
+                        } label: {
+                            Text("阻塞")
+                        }
                     }
                     if !analysis.keywords.isEmpty {
                         LabeledContent("关键词", value: analysis.keywords.joined(separator: "，"))
@@ -229,6 +253,7 @@ struct WorkLogDetailView: View {
             }
         }
         .navigationTitle(log.title)
+        .compactNavigationTitle()
     }
 }
 
@@ -236,30 +261,39 @@ struct WorkLogDetailView: View {
 final class ProjectsViewModel: ObservableObject {
     @Published var projects: [Project] = []
     @Published var searchText = ""
+    @Published var riskOnly = false
     @Published var isLoading = false
     @Published var errorMessage: String?
 
     var filteredProjects: [Project] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let source = riskOnly ? projects.filter(\.hasProjectRisk) : projects
         guard !query.isEmpty else {
-            return projects
+            return source
         }
-        return projects.filter { project in
+        return source.filter { project in
             project.displayName.lowercased().contains(query)
                 || (project.description?.lowercased().contains(query) ?? false)
                 || (project.owner?.name.lowercased().contains(query) ?? false)
         }
     }
 
-    var projectInsights: [String] {
+    var projectConclusion: String {
+        let active = projects.filter { $0.status == .active }.count
+        return active > 0 ? "\(active) 个项目进行中" : "当前没有进行中项目"
+    }
+
+    var projectRiskText: String {
         let paused = projects.filter { $0.status == .paused }.count
         let missingOwner = projects.filter { $0.owner == nil }.count
-        let active = projects.filter { $0.status == .active }.count
-        return [
-            active > 0 ? "\(active) 个项目处于进行中，建议优先关注临近结束日期的项目。" : "当前没有进行中的项目，项目看板处于低活跃状态。",
-            paused > 0 ? "\(paused) 个项目已暂停，AI 建议确认是否存在跨团队阻塞。" : "暂无暂停项目，整体推进状态稳定。",
-            missingOwner > 0 ? "\(missingOwner) 个项目缺少负责人，风险归属可能不清晰。" : "项目负责人信息完整，有利于后续风险追踪。"
-        ]
+        let risks = projects.filter(\.hasProjectRisk).count
+        if risks > 0 {
+            return "\(risks) 个项目需要关注，包含暂停、临期或负责人缺失。"
+        }
+        if paused > 0 || missingOwner > 0 {
+            return "存在项目状态不完整，建议补齐负责人和周期。"
+        }
+        return "项目状态整体稳定，继续关注临近截止日期。"
     }
 
     func load(auth: AuthStore) async {
@@ -281,7 +315,14 @@ struct ProjectsView: View {
         NavigationStack {
             List {
                 if !viewModel.projects.isEmpty {
-                    AIInsightPanel(title: "AI 项目雷达", insights: viewModel.projectInsights)
+                    CompactAIActionPanel(
+                        conclusion: viewModel.projectConclusion,
+                        risk: viewModel.projectRiskText,
+                        actionTitle: viewModel.riskOnly ? "查看全部项目" : "只看异常项目",
+                        systemImage: "scope"
+                    ) {
+                        viewModel.riskOnly.toggle()
+                    }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
@@ -304,6 +345,7 @@ struct ProjectsView: View {
                 }
             }
             .navigationTitle("项目")
+            .compactNavigationTitle()
             .scrollContentBackground(.hidden)
             .background(AITheme.ColorToken.appBackground)
             .searchable(text: $viewModel.searchText, prompt: "搜索项目、负责人")
@@ -352,10 +394,10 @@ struct ProjectRow: View {
 
             HStack(spacing: AITheme.Spacing.sm) {
                 Label(project.owner?.name ?? "未设置负责人", systemImage: "person")
-                Label(project.timelineText, systemImage: "clock")
+                Label(project.dueText, systemImage: "clock")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AITheme.ColorToken.textSecondary)
 
             Label(project.aiRiskHint, systemImage: "sparkles")
                 .font(.caption)
@@ -371,6 +413,10 @@ struct ProjectDetailView: View {
 
     var body: some View {
         List {
+            ProjectDetailHeader(project: project)
+                .listRowInsets(EdgeInsets(top: AITheme.Spacing.md, leading: AITheme.Spacing.lg, bottom: AITheme.Spacing.md, trailing: AITheme.Spacing.lg))
+                .listRowBackground(Color.clear)
+
             Section("AI 项目判断") {
                 Label(project.aiRiskHint, systemImage: "sparkles")
                     .foregroundStyle(project.aiRiskTint)
@@ -411,7 +457,36 @@ struct ProjectDetailView: View {
                 LabeledContent("结束", value: project.endDate.map { String($0.prefix(10)) } ?? "未设置")
             }
         }
-        .navigationTitle(project.displayName)
+        .navigationTitle("项目详情")
+        .compactNavigationTitle()
+    }
+}
+
+private struct ProjectDetailHeader: View {
+    let project: Project
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            Text(project.name)
+                .font(AITheme.Typography.pageTitle)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let code = project.code, !code.isEmpty {
+                Text(code)
+                    .font(AITheme.Typography.support)
+                    .foregroundStyle(AITheme.ColorToken.textSecondary)
+            }
+            HStack(spacing: AITheme.Spacing.xs) {
+                StatusBadge(title: project.status.title, systemImage: nil, tint: project.status.badgeTint)
+                FlatTag(title: project.dueText, systemImage: "clock", tint: project.aiRiskTint)
+            }
+        }
+    }
+}
+
+private extension WorkLog {
+    var hasAIRisk: Bool {
+        !(aiAnalysis?.risks.isEmpty ?? true) || !(aiAnalysis?.blockers.isEmpty ?? true)
     }
 }
 
@@ -427,6 +502,33 @@ private extension Project {
         default:
             return "周期未设置"
         }
+    }
+
+    var dueText: String {
+        guard let endDate,
+              let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) else {
+            return "无截止"
+        }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
+        if days < 0 {
+            return "已逾期 \(abs(days)) 天"
+        }
+        if days == 0 {
+            return "今天截止"
+        }
+        return "\(days) 天后截止"
+    }
+
+    var hasProjectRisk: Bool {
+        if status == .paused || owner == nil {
+            return true
+        }
+        if let endDate,
+           let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
+            let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
+            return days <= 7
+        }
+        return false
     }
 
     var aiRiskHint: String {
@@ -454,15 +556,15 @@ private extension Project {
 
     var aiRiskTint: Color {
         if status == .paused || owner == nil {
-            return .orange
+            return AITheme.ColorToken.warning
         }
         if let endDate,
            let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
             let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
             if days <= 7 {
-                return days < 0 ? .red : .orange
+                return days < 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.warning
             }
         }
-        return AITheme.ColorToken.brand
+        return AITheme.ColorToken.ai
     }
 }

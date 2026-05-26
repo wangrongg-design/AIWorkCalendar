@@ -94,34 +94,43 @@ export class AiService {
       take: 160
     });
     const today = dateKey(new Date());
-    const answer = await this.openAi.chatWithCalendarContext({
-      question: dto.question,
-      periodLabel: period.label,
-      scopeName: this.scopeName(scope.scope, department?.name ?? null, user.name),
-      logs: logs.map((log) => {
-        const logDate = dateKey(log.date);
-        return {
-          userName: log.user.name,
-          departmentName: log.user.department?.name ?? null,
-          projectName: log.project?.name ?? null,
-          date: logDate,
-          kind: logDate > today ? "计划" : "日报",
-          title: log.title,
-          content: log.content,
-          hours: Number(log.hours),
-          analysis: log.aiAnalysis
-            ? {
-                achievements: log.aiAnalysis.achievements,
-                risks: log.aiAnalysis.risks,
-                blockers: log.aiAnalysis.blockers,
-                summary: log.aiAnalysis.summary,
-                tags: log.aiAnalysis.tags,
-                keywords: log.aiAnalysis.keywords
-              }
-            : null
-        };
-      })
-    });
+    const answer = await this.openAi.chatWithCalendarContext(
+      {
+        question: dto.question,
+        periodLabel: period.label,
+        scopeName: this.scopeName(scope.scope, department?.name ?? null, user.name),
+        logs: logs.map((log) => {
+          const logDate = dateKey(log.date);
+          return {
+            userName: log.user.name,
+            departmentName: log.user.department?.name ?? null,
+            projectName: log.project?.name ?? null,
+            date: logDate,
+            kind: logDate > today ? "计划" : "日报",
+            title: log.title,
+            content: log.content,
+            hours: Number(log.hours),
+            analysis: log.aiAnalysis
+              ? {
+                  achievements: log.aiAnalysis.achievements,
+                  risks: log.aiAnalysis.risks,
+                  blockers: log.aiAnalysis.blockers,
+                  summary: log.aiAnalysis.summary,
+                  tags: log.aiAnalysis.tags,
+                  keywords: log.aiAnalysis.keywords
+                }
+              : null
+          };
+        })
+      },
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        operation: "calendar_chat",
+        targetType: "calendar",
+        targetId: period.label
+      }
+    );
 
     return {
       answer,
@@ -135,13 +144,21 @@ export class AiService {
   }
 
   async draftWorkLog(user: CurrentUser, dto: WorkLogDraftDto) {
-    return this.openAi.draftWorkLog({
-      currentDate: dto.currentDate ?? dateKey(new Date()),
-      messages: dto.messages.slice(-12).map((message) => ({
-        role: message.role,
-        content: message.content
-      }))
-    });
+    return this.openAi.draftWorkLog(
+      {
+        currentDate: dto.currentDate ?? dateKey(new Date()),
+        messages: dto.messages.slice(-12).map((message) => ({
+          role: message.role,
+          content: message.content
+        }))
+      },
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        operation: "work_log_draft",
+        targetType: "work_log"
+      }
+    );
   }
 
   private scopeName(scope: string, departmentName: string | null, userName: string) {

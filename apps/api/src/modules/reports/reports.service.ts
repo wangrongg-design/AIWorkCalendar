@@ -21,6 +21,12 @@ function reportTitle(type: ReportType, start: string, end: string) {
   return `${label[type]} ${start === end ? start : `${start} 至 ${end}`}`;
 }
 
+const MAX_REPORT_PERIOD_DAYS = 31;
+
+function daysBetween(start: Date, end: Date) {
+  return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -31,6 +37,14 @@ export class ReportsService {
   ) {}
 
   async generate(user: CurrentUser, dto: GenerateReportDto) {
+    const periodStart = parseDateOnly(dto.periodStart);
+    const periodEnd = parseDateOnly(dto.periodEnd);
+    if (periodEnd < periodStart) {
+      throw new BadRequestException("Report periodEnd must be after periodStart");
+    }
+    if (daysBetween(periodStart, periodEnd) > MAX_REPORT_PERIOD_DAYS) {
+      throw new BadRequestException(`Report period cannot exceed ${MAX_REPORT_PERIOD_DAYS} days`);
+    }
     const isDepartmentReport = dto.type === ReportType.DEPARTMENT_DAILY || dto.type === ReportType.DEPARTMENT_WEEKLY;
     let departmentId = dto.departmentId ?? null;
     if (isDepartmentReport) {
@@ -55,8 +69,8 @@ export class ReportsService {
         departmentId,
         type: dto.type,
         title: reportTitle(dto.type, dto.periodStart, dto.periodEnd),
-        periodStart: parseDateOnly(dto.periodStart),
-        periodEnd: parseDateOnly(dto.periodEnd)
+        periodStart,
+        periodEnd
       }
     });
     await this.aiQueue.enqueueReportGeneration(user.tenantId, report.id, user.id);
@@ -78,4 +92,3 @@ export class ReportsService {
     });
   }
 }
-

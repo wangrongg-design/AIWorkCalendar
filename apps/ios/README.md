@@ -9,6 +9,21 @@ SwiftUI iOS client for the existing Work Calendar AI API.
 - Implements login, AI-assisted work-log drafting, draft saving, work-log submission, monthly calendar dashboard, day detail, work-log search, project search and project detail.
 - Uses native SwiftUI navigation, tab bars, forms, segmented controls, searchable lists, pull-to-refresh, empty states and swipe actions.
 
+## iOS VI and design system
+
+All new iOS UI should use `AITheme` in `AIWorkCalendar/AppDesign.swift` instead of hard-coded colors, radii or typography.
+
+- Primary actions, selected tabs and key links use Primary Blue `#0B57D0`.
+- AI insight, smart suggestions and privacy/safety messaging use AI Teal `#0F766E`.
+- Submitted/completed/healthy states use Success `#16A34A`.
+- Missing reports, near deadlines and attention states use Warning `#D97706`.
+- Real risks, blockers, failures and destructive actions use Danger `#DC2626`.
+- Page background is Surface `#F8FAFC`; main panels are white in light mode and dark panels in dark mode.
+- Body and secondary copy must stay readable; do not use text lighter than the `textSecondary` token for normal explanatory text.
+- Cards use 16pt radius, buttons and inputs use 12pt radius, tags use capsule styling.
+- AI modules should present a conclusion, evidence/risk and an available action when the page has a clear next step.
+- Keep the iOS app native: use SwiftUI navigation, bottom tabs, SF Symbols, system fonts, semantic colors, Dynamic Type, safe areas and standard iOS search/filter patterns.
+
 ## Run
 
 Open `apps/ios/AIWorkCalendar.xcodeproj` in Xcode and run the `AIWorkCalendar` target.
@@ -34,9 +49,10 @@ Default local API URL is configured in `AIWorkCalendar/Info.plist` as `AIWCAPIBa
 
 3. Login with the local demo seed account:
 
-   - Tenant code: `demo`
    - Account: `admin@example.com`
    - Password: `Passw0rd!`
+
+   The login page does not require a tenant code by default. If the API reports that the account exists in multiple companies, expand `高级选项` and enter tenant code `demo`.
 
 4. Smoke-test the first version:
 

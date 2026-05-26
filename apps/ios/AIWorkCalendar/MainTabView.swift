@@ -24,12 +24,12 @@ struct MainTabView: View {
         TabView {
             ReportEntryView()
                 .tabItem {
-                    Label("填报", systemImage: "square.and.pencil")
+                    Label("今日", systemImage: "checklist")
                 }
 
             CalendarDashboardView()
                 .tabItem {
-                    Label("月历", systemImage: "calendar")
+                    Label("日历", systemImage: "calendar")
                 }
 
             WorkLogsView()
@@ -47,6 +47,7 @@ struct MainTabView: View {
                     Label("我的", systemImage: "person.crop.circle")
                 }
         }
+        .tint(AITheme.ColorToken.primary)
     }
 }
 
@@ -58,37 +59,43 @@ struct ProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
-                if let user = auth.user {
-                    ProfileHeader(user: user)
+                    if let user = auth.user {
+                        ProfileHeader(user: user)
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.sm) {
-                        MetricTile(title: "今日填报", value: "\(viewModel.todayLogs.count)", systemImage: "doc.text", tint: AITheme.ColorToken.brand)
-                        MetricTile(title: "今日工时", value: "\(viewModel.todayHoursText)h", systemImage: "clock", tint: .blue)
-                        MetricTile(title: "风险信号", value: "\(viewModel.todayRiskCount)", systemImage: "exclamationmark.triangle", tint: viewModel.todayRiskCount > 0 ? .orange : .green)
-                        MetricTile(title: "近 7 日", value: "\(viewModel.weeklyHoursText)h", systemImage: "chart.line.uptrend.xyaxis", tint: .purple)
-                    }
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.sm) {
+                            MetricTile(title: "今日填报", value: "\(viewModel.todayLogs.count)", systemImage: "doc.text", tint: AITheme.ColorToken.primary)
+                            MetricTile(title: "今日工时", value: "\(viewModel.todayHoursText)h", systemImage: "clock", tint: AITheme.ColorToken.primaryHover)
+                            MetricTile(title: "风险信号", value: "\(viewModel.todayRiskCount)", systemImage: "exclamationmark.triangle", tint: viewModel.todayRiskCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.success)
+                            MetricTile(title: "近 7 日", value: "\(viewModel.weeklyHoursText)h", systemImage: "chart.line.uptrend.xyaxis", tint: AITheme.ColorToken.ai)
+                        }
 
-                    AIInsightPanel(title: "AI 工作画像", insights: viewModel.workProfileInsights)
+                        CompactAIActionPanel(
+                            conclusion: viewModel.profileConclusion,
+                            risk: viewModel.profileRiskText,
+                            systemImage: "person.text.rectangle"
+                        )
 
-                    BrandedCard {
-                        VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                            SectionTitle("账号信息", subtitle: "用于企业内的日报归属和权限范围。")
-                            LabeledContent("企业", value: user.tenantName)
-                            LabeledContent("企业代码", value: user.tenantCode)
-                            if let departmentName = user.departmentName {
-                                LabeledContent("部门", value: departmentName)
+                        BrandedCard {
+                            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                                SectionTitle("企业与权限", subtitle: "用于日报归属、团队范围和管理权限。")
+                                LabeledContent("企业", value: user.tenantName)
+                                LabeledContent("企业代码", value: user.tenantCode)
+                                if let departmentName = user.departmentName {
+                                    LabeledContent("部门", value: departmentName)
+                                }
+                                if let email = user.email {
+                                    LabeledContent("邮箱", value: email)
+                                }
+                                LabeledContent("角色", value: user.roles.map(\.title).joined(separator: "、"))
                             }
-                            if let email = user.email {
-                                LabeledContent("邮箱", value: email)
-                            }
-                            LabeledContent("角色", value: user.roles.map(\.rawValue).joined(separator: "、"))
                         }
                     }
-                }
 
                     BrandedCard {
                         VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                            SectionTitle("系统", subtitle: "接口地址由 iOS 配置文件管理。")
+                            SectionTitle("账号安全")
+                            LabeledContent("登录状态", value: "已登录")
+                            LabeledContent("通知设置", value: "跟随系统")
                             LabeledContent("API", value: auth.apiBaseURL)
                         }
                     }
@@ -102,6 +109,7 @@ struct ProfileView: View {
             }
             .background(AITheme.ColorToken.appBackground)
             .navigationTitle("我的")
+            .compactNavigationTitle()
             .overlay {
                 if viewModel.isLoading {
                     ProgressView()
@@ -156,12 +164,18 @@ final class ProfileViewModel: ObservableObject {
         formatHours(weeklyHours)
     }
 
-    var workProfileInsights: [String] {
-        [
-            todayLogs.isEmpty ? "今天还没有提交工作信号，AI 无法形成今日摘要。" : "今日已记录 \(todayLogs.count) 条工作，合计 \(todayHoursText) 小时。",
-            todayRiskCount > 0 ? "AI 发现 \(todayRiskCount) 个风险或阻塞，建议在项目页确认影响范围。" : "今日暂无明显风险信号，适合保持当前节奏。",
-            weeklyHours > 0 ? "近 7 日累计 \(weeklyHoursText) 小时，可作为个人工作节奏画像。" : "近 7 日暂无工时记录，画像会在持续填报后更准确。"
-        ]
+    var profileConclusion: String {
+        todayLogs.isEmpty ? "今天还没有工作摘要" : "今日 \(todayLogs.count) 条记录，\(todayHoursText) 小时"
+    }
+
+    var profileRiskText: String {
+        if todayRiskCount > 0 {
+            return "AI 发现 \(todayRiskCount) 个风险或阻塞，建议回到项目页确认影响范围。"
+        }
+        if weeklyHours > 0 {
+            return "近 7 日累计 \(weeklyHoursText) 小时，工作画像会随持续填报更准确。"
+        }
+        return "连续填报后，这里会形成个人节奏、风险和效率画像。"
     }
 
     func load(auth: AuthStore) async {
@@ -183,6 +197,21 @@ final class ProfileViewModel: ObservableObject {
     }
 }
 
+private extension RoleCode {
+    var title: String {
+        switch self {
+        case .superAdmin:
+            return "平台超管"
+        case .companyAdmin:
+            return "企业管理员"
+        case .departmentManager:
+            return "部门经理"
+        case .employee:
+            return "员工"
+        }
+    }
+}
+
 private struct ProfileHeader: View {
     let user: AuthUser
 
@@ -192,7 +221,7 @@ private struct ProfileHeader: View {
                 .font(AITheme.Typography.pageTitle)
             Text([user.tenantName, user.departmentName].compactMap { $0 }.joined(separator: " · "))
                 .font(AITheme.Typography.support)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
         }
     }
 }

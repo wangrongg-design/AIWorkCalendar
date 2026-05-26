@@ -6,7 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
 import { Bot, Download, Edit2, Paperclip, Plus, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { Project, WorkLog, WorkLogAttachment, WorkLogDraft } from "@/lib/types";
@@ -79,6 +79,7 @@ export default function WorkLogsPage() {
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(null);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "DRAFT" | "SUBMITTED">("ALL");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
+  const initialOpenHandled = useRef(false);
   const [aiInput, setAiInput] = useState("");
   const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
     {
@@ -264,11 +265,18 @@ export default function WorkLogsPage() {
     draftLog.mutate(nextMessages);
   };
 
-  const openCreate = () => {
+  const openCreate = (dateValue = dayjs()) => {
+    const dateKey = dateValue.format("YYYY-MM-DD");
+    const isFuture = dateKey > dayjs().format("YYYY-MM-DD");
     setEditing(null);
     setPendingAttachments([]);
     form.resetFields();
-    form.setFieldsValue({ date: dayjs(), hours: 1 });
+    form.setFieldsValue({
+      date: dateValue,
+      title: isFuture ? "工作计划" : "工作日报",
+      content: "",
+      hours: isFuture ? 0 : 1
+    });
     setAiInput("");
     setAiMessages([
       {
@@ -278,6 +286,17 @@ export default function WorkLogsPage() {
     ]);
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (initialOpenHandled.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") !== "1") return;
+    initialOpenHandled.current = true;
+    const dateParam = params.get("date");
+    const parsedDate = dateParam && dayjs(dateParam).isValid() ? dayjs(dateParam) : dayjs();
+    openCreate(parsedDate);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const openEdit = (record: WorkLog) => {
     setEditing(record);
@@ -304,38 +323,42 @@ export default function WorkLogsPage() {
   const columns: ColumnsType<WorkLog> = [
     { title: "日期", dataIndex: "date", width: 110, render: (value: string) => dayjs(value).format("YYYY-MM-DD") },
     {
-      title: "标题与内容",
+      title: "标题",
+      width: 260,
       render: (_, record) => (
-        <div>
+        <div className="min-w-0">
           <Button type="link" className="!h-auto !p-0 !text-left font-medium" onClick={() => setDetailRecord(record)}>
             {record.title}
           </Button>
-          {record.project ? <Tag className="mt-2" color="blue">{record.project.code ? `${record.project.code} · ${record.project.name}` : record.project.name}</Tag> : null}
-          <div className="mt-1 max-w-3xl text-sm text-muted">{record.content}</div>
+          <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{record.content}</div>
           {record.attachments?.length ? (
-            <Space className="mt-2" wrap>
-              <Tag icon={<Paperclip size={13} />}>附件 {record.attachments.length}</Tag>
-              {record.attachments.slice(0, 3).map((attachment) => (
-                <Tag key={attachment.id}>{attachment.fileName}</Tag>
-              ))}
-            </Space>
-          ) : null}
-          {record.aiAnalysis ? (
-            <Space className="mt-2" wrap>
-              <Tag color="green">{record.aiAnalysis.category}</Tag>
-              {record.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-              {record.aiAnalysis.risks?.map((risk) => <Tag color="red" key={risk}>{risk}</Tag>)}
-            </Space>
+            <Tag className="mt-2" icon={<Paperclip size={13} />}>
+              附件 {record.attachments.length}
+            </Tag>
           ) : null}
         </div>
       )
     },
+    {
+      title: "项目",
+      width: 180,
+      render: (_, record) => record.project ? <Tag color="blue">{record.project.code ? `${record.project.code} · ${record.project.name}` : record.project.name}</Tag> : "未关联"
+    },
+    { title: "人员", width: 120, render: (_, record) => record.user?.name ?? "-" },
     { title: "工时", dataIndex: "hours", width: 90, render: (value: string | number) => `${Number(value).toFixed(1)}h` },
     {
       title: "状态",
       dataIndex: "status",
       width: 110,
       render: (value: string) => <Tag color={value === "SUBMITTED" ? "green" : "default"}>{value === "SUBMITTED" ? "已提交" : "草稿"}</Tag>
+    },
+    {
+      title: "风险",
+      width: 100,
+      render: (_, record) => {
+        const count = (record.aiAnalysis?.risks?.length ?? 0) + (record.aiAnalysis?.blockers?.length ?? 0);
+        return <Tag color={count ? "red" : "default"}>{count ? `${count} 条` : "无"}</Tag>;
+      }
     },
     {
       title: "操作",
@@ -363,7 +386,7 @@ export default function WorkLogsPage() {
           </Typography.Title>
           <Typography.Text className="page-subtitle">每天可填写多条工作记录，提交后自动进入 AI 分析队列。</Typography.Text>
         </div>
-        <Button type="primary" icon={<Plus size={16} />} onClick={openCreate}>
+        <Button type="primary" icon={<Plus size={16} />} onClick={() => openCreate()}>
           新增填报
         </Button>
       </div>
@@ -464,15 +487,12 @@ export default function WorkLogsPage() {
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Form.Item name="date" label="日期" rules={[{ required: true }]}>
               <DatePicker className="w-full" />
             </Form.Item>
             <Form.Item name="hours" label="工时" rules={[{ required: true }]}>
               <InputNumber className="w-full" min={0} max={24} step={0.5} />
-            </Form.Item>
-            <Form.Item name="projectId" label="关联项目">
-              <Select allowClear placeholder="选择项目" loading={projects.isFetching} options={projectOptions} />
             </Form.Item>
             <Form.Item name="startTime" label="开始时间">
               <TimePicker className="w-full" format="HH:mm" />
@@ -481,9 +501,14 @@ export default function WorkLogsPage() {
               <TimePicker className="w-full" format="HH:mm" />
             </Form.Item>
           </div>
-          <Form.Item name="title" label="标题" rules={[{ required: true, min: 2 }]}>
-            <Input />
-          </Form.Item>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <Form.Item className="md:col-span-3" name="title" label="标题" rules={[{ required: true, min: 2 }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
+              <Select allowClear placeholder="选择项目" loading={projects.isFetching} options={projectOptions} />
+            </Form.Item>
+          </div>
           <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
             <Input.TextArea rows={6} />
           </Form.Item>
@@ -578,11 +603,24 @@ export default function WorkLogsPage() {
                   <Bot size={16} />
                   AI 分析
                 </div>
-                <div className="text-sm leading-6 text-muted">{detailRecord.aiAnalysis.summary}</div>
-                <Space className="mt-3" wrap>
-                  <Tag color="green">{detailRecord.aiAnalysis.category}</Tag>
+                <div className="mb-4 rounded-[12px] bg-surface-container-low p-3 text-sm leading-6 text-muted">{detailRecord.aiAnalysis.summary}</div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-muted">成果</div>
+                    <Space wrap>{detailRecord.aiAnalysis.achievements?.length ? detailRecord.aiAnalysis.achievements.map((item) => <Tag color="green" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-muted">风险</div>
+                    <Space wrap>{detailRecord.aiAnalysis.risks?.length ? detailRecord.aiAnalysis.risks.map((item) => <Tag color="red" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-muted">阻塞</div>
+                    <Space wrap>{detailRecord.aiAnalysis.blockers?.length ? detailRecord.aiAnalysis.blockers.map((item) => <Tag color="orange" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
+                  </div>
+                </div>
+                <Space className="mt-4" wrap>
+                  <Tag color="blue">{detailRecord.aiAnalysis.category}</Tag>
                   {detailRecord.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-                  {detailRecord.aiAnalysis.risks?.map((risk) => <Tag color="red" key={risk}>{risk}</Tag>)}
                 </Space>
               </div>
             ) : null}

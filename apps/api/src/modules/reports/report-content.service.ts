@@ -7,6 +7,16 @@ function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+const MAX_REPORT_LOGS = 120;
+const MAX_WORK_LOG_CONTENT_CHARS = 800;
+const MAX_ATTACHMENT_TEXT_CHARS = 500;
+const MAX_ATTACHMENT_PER_LOG = 3;
+
+function truncateText(value: string | null | undefined, limit: number) {
+  if (!value) return null;
+  return value.length > limit ? `${value.slice(0, limit)}...` : value;
+}
+
 @Injectable()
 export class ReportContentService {
   constructor(
@@ -15,9 +25,9 @@ export class ReportContentService {
     private readonly openAi: OpenAiService
   ) {}
 
-  async generateAndSave(reportId: string) {
+  async generateAndSave(reportId: string, tenantId?: string) {
     const report = await this.prisma.report.findFirst({
-      where: { id: reportId, deletedAt: null },
+      where: { id: reportId, tenantId, deletedAt: null },
       include: {
         requester: { include: { department: true } },
         department: true
@@ -51,45 +61,58 @@ export class ReportContentService {
           aiAnalysis: true,
           attachments: {
             where: { deletedAt: null },
-            orderBy: [{ createdAt: "asc" }]
+            orderBy: [{ createdAt: "asc" }],
+            take: MAX_ATTACHMENT_PER_LOG
           }
         },
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }]
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+        take: MAX_REPORT_LOGS
       });
 
       const scopeName = isPersonal
         ? report.requester.name
         : report.department?.name ?? report.requester.department?.name ?? "部门";
-      const content = await this.openAi.generateReport({
-        reportType: report.type,
-        periodStart: dateKey(report.periodStart),
-        periodEnd: dateKey(report.periodEnd),
-        scopeName,
-        workLogs: workLogs.map((item) => ({
-          userName: item.user.name,
-          projectName: item.project?.name ?? null,
-          date: dateKey(item.date),
-          title: item.title,
-          content: item.content,
-          hours: Number(item.hours),
-          attachments: item.attachments.map((attachment) => ({
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            kind: attachment.kind,
-            fileSize: attachment.fileSize,
-            textContent: attachment.textContent,
-            aiSummary: attachment.aiSummary
-          })),
-          analysis: item.aiAnalysis
-            ? {
-                achievements: item.aiAnalysis.achievements,
-                risks: item.aiAnalysis.risks,
-                blockers: item.aiAnalysis.blockers,
-                summary: item.aiAnalysis.summary
-              }
-            : null
-        }))
-      });
+      const content = await this.openAi.generateReport(
+        {
+          reportType: report.type,
+          periodStart: dateKey(report.periodStart),
+          periodEnd: dateKey(report.periodEnd),
+          scopeName,
+          workLogs: workLogs.map((item) => ({
+            userName: item.user.name,
+            projectName: item.project?.name ?? null,
+            date: dateKey(item.date),
+            title: item.title,
+            content: truncateText(item.aiAnalysis?.summary ?? item.content, MAX_WORK_LOG_CONTENT_CHARS) ?? "",
+            hours: Number(item.hours),
+            attachments: item.attachments.map((attachment) => ({
+              fileName: attachment.fileName,
+              mimeType: attachment.mimeType,
+              kind: attachment.kind,
+              fileSize: attachment.fileSize,
+              textContent: attachment.aiSummary ? null : truncateText(attachment.textContent, MAX_ATTACHMENT_TEXT_CHARS),
+              aiSummary: truncateText(attachment.aiSummary, MAX_ATTACHMENT_TEXT_CHARS)
+            })),
+            analysis: item.aiAnalysis
+              ? {
+                  achievements: item.aiAnalysis.achievements,
+                  risks: item.aiAnalysis.risks,
+                  blockers: item.aiAnalysis.blockers,
+                  summary: item.aiAnalysis.summary
+                }
+              : null
+          }))
+        },
+        {
+          tenantId: report.tenantId,
+          userId: report.requesterId,
+          operation: "report_generation",
+          targetType: "report",
+          targetId: report.id,
+          containsAttachments: workLogs.some((item) => item.attachments.length > 0),
+          containsImages: workLogs.some((item) => item.attachments.some((attachment) => attachment.kind === "IMAGE"))
+        }
+      );
 
       const updated = await this.prisma.report.update({
         where: { id: report.id },

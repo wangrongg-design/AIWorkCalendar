@@ -38,15 +38,36 @@ final class CalendarViewModel: ObservableObject {
         await load(auth: auth)
     }
 
-    var dashboardInsights: [String] {
+    var monthFillRate: Double {
+        guard !days.isEmpty else { return 0 }
+        return days.reduce(0) { $0 + $1.fillRate } / Double(days.count)
+    }
+
+    var riskDayCount: Int {
+        days.filter { $0.riskCount > 0 }.count
+    }
+
+    var missingCount: Int {
+        days.reduce(0) { $0 + $1.missingCount }
+    }
+
+    var firstRiskDay: CalendarDay? {
+        days.first { $0.riskCount > 0 }
+    }
+
+    var dashboardConclusion: String {
         let today = days.first(where: { $0.date == DateHelpers.dayKey() })
-        let riskDays = days.filter { $0.riskCount > 0 }.count
-        let lowFillDays = days.filter { $0.fillRate > 0 && $0.fillRate < 60 }.count
-        return [
-            today.map { String(format: "今日填报率 %.1f%%，AI 会优先关注缺填和风险日志。", $0.fillRate) } ?? "今天还没有填报信号，适合先提醒团队完成日报。",
-            riskDays > 0 ? "本月已有 \(riskDays) 天出现风险信号，建议进入红点日期查看阻塞来源。" : "本月暂未发现明显风险日期，继续保持日报完整度。",
-            lowFillDays > 0 ? "\(lowFillDays) 天填报率偏低，可能影响团队进度判断。" : "填报节奏整体稳定，月历可作为团队状态入口。"
-        ]
+        return today.map { String(format: "今日填报率 %.1f%%", $0.fillRate) } ?? "今天还没有填报信号"
+    }
+
+    var dashboardRisk: String {
+        if riskDayCount > 0 {
+            return "\(riskDayCount) 天出现风险，优先进入风险日期确认阻塞来源。"
+        }
+        if missingCount > 0 {
+            return "\(missingCount) 条缺填记录会影响团队状态判断。"
+        }
+        return "暂无明显风险，继续保持日报完整度。"
     }
 }
 
@@ -93,14 +114,13 @@ struct CalendarDashboardView: View {
                         Task { await viewModel.load(auth: auth) }
                     }
 
-                    HStack(spacing: 12) {
-                        MetricTile(title: "应填人数", value: "\(viewModel.totalEmployees)", systemImage: "person.2", tint: .blue)
-                        if let today = viewModel.days.first(where: { $0.date == DateHelpers.dayKey() }) {
-                            MetricTile(title: "今日填报率", value: String(format: "%.1f%%", today.fillRate), systemImage: "chart.pie", tint: .green)
-                        }
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.xs) {
+                        CompactMetric(title: "本月填报", value: String(format: "%.0f%%", viewModel.monthFillRate), tint: AITheme.ColorToken.success)
+                        CompactMetric(title: "风险天数", value: "\(viewModel.riskDayCount)", tint: viewModel.riskDayCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success)
+                        CompactMetric(title: "缺填", value: "\(viewModel.missingCount)", tint: viewModel.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.success)
                     }
 
-                    AIInsightPanel(title: "AI 月度洞察", insights: viewModel.dashboardInsights)
+                    CalendarAIActionPanel(viewModel: viewModel)
 
                     BrandedCard {
                         VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
@@ -110,7 +130,7 @@ struct CalendarDashboardView: View {
                                 ForEach(DateHelpers.weekdays, id: \.self) { weekday in
                                     Text(weekday)
                                         .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
                                         .frame(maxWidth: .infinity)
                                 }
 
@@ -134,7 +154,8 @@ struct CalendarDashboardView: View {
                 .padding(AITheme.Spacing.lg)
             }
             .background(AITheme.ColorToken.appBackground)
-            .navigationTitle("月历看板")
+            .navigationTitle("日历")
+            .compactNavigationTitle()
             .overlay {
                 if viewModel.isLoading {
                     ProgressView()
@@ -166,6 +187,51 @@ struct CalendarDashboardView: View {
     }
 }
 
+private struct CompactMetric: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
+            Text(value)
+                .font(.headline)
+                .foregroundStyle(tint)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AITheme.Spacing.sm)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+    }
+}
+
+private struct CalendarAIActionPanel: View {
+    let viewModel: CalendarViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            CompactAIActionPanel(
+                conclusion: viewModel.dashboardConclusion,
+                risk: viewModel.dashboardRisk,
+                systemImage: viewModel.riskDayCount > 0 ? "exclamationmark.triangle" : "sparkles"
+            )
+
+            if let riskDay = viewModel.firstRiskDay {
+                NavigationLink {
+                    DayDetailView(date: riskDay.date, scope: viewModel.scope)
+                } label: {
+                    Label("进入风险日期 \(String(riskDay.date.suffix(5)))", systemImage: "arrow.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.danger)
+                }
+            }
+        }
+    }
+}
+
 struct CalendarDayCell: View {
     let item: MonthGridItem
 
@@ -173,19 +239,22 @@ struct CalendarDayCell: View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
             Text("\(item.day ?? 0)")
                 .font(.callout.weight(item.isToday ? .bold : .regular))
-                .foregroundStyle(item.isToday ? AITheme.ColorToken.brand : .primary)
+                .foregroundStyle(item.isToday ? AITheme.ColorToken.primary : AITheme.ColorToken.ink800)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 3) {
-                ForEach(statusDots, id: \.label) { dot in
-                    Circle()
-                        .fill(dot.color)
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel(dot.label)
-                }
+            HStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(statusColor)
+                    .frame(width: 18, height: 4)
+                    .accessibilityLabel(statusLabel)
                 Spacer(minLength: 0)
+                if (item.data?.riskCount ?? 0) > 0 {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(AITheme.ColorToken.danger)
+                }
             }
         }
         .padding(7)
@@ -193,7 +262,7 @@ struct CalendarDayCell: View {
         .background(backgroundColor)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(item.isToday ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                .stroke(item.isToday ? AITheme.ColorToken.primaryHover : Color.clear, lineWidth: 1.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel(accessibilityText)
@@ -204,28 +273,44 @@ struct CalendarDayCell: View {
         case .empty:
             return AITheme.ColorToken.activeBackground.opacity(0.72)
         case .normal:
-            return Color.blue.opacity(0.10)
+            return AITheme.ColorToken.primarySurface
         case .good:
-            return Color.green.opacity(0.12)
+            return AITheme.ColorToken.successSurface
         case .risk:
-            return Color.red.opacity(0.10)
+            return AITheme.ColorToken.dangerSurface
         }
     }
 
-    private var statusDots: [(color: Color, label: String)] {
+    private var statusColor: Color {
         guard let data = item.data else {
-            return [(Color.orange, "未填报")]
+            return AITheme.ColorToken.warning
         }
         if data.riskCount > 0 {
-            return [(Color.red, "存在风险")]
+            return AITheme.ColorToken.danger
         }
         if data.fillRate >= 80 {
-            return [(Color.green, "已完成")]
+            return AITheme.ColorToken.success
         }
         if data.fillRate > 0 {
-            return [(AITheme.ColorToken.accentBlue, "部分填报")]
+            return AITheme.ColorToken.primaryHover
         }
-        return [(Color.orange, "未填报")]
+        return AITheme.ColorToken.warning
+    }
+
+    private var statusLabel: String {
+        guard let data = item.data else {
+            return "未填报"
+        }
+        if data.riskCount > 0 {
+            return "存在风险"
+        }
+        if data.fillRate >= 80 {
+            return "已完成"
+        }
+        if data.fillRate > 0 {
+            return "部分填报"
+        }
+        return "未填报"
     }
 
     private var accessibilityText: String {
@@ -238,10 +323,10 @@ struct CalendarDayCell: View {
 
 private struct CalendarLegend: View {
     private let items: [(String, Color)] = [
-        ("已完成", .green),
-        ("部分填报", AITheme.ColorToken.accentBlue),
-        ("未填报", .orange),
-        ("风险", .red)
+        ("已完成", AITheme.ColorToken.success),
+        ("部分填报", AITheme.ColorToken.primaryHover),
+        ("未填报", AITheme.ColorToken.warning),
+        ("风险", AITheme.ColorToken.danger)
     ]
 
     var body: some View {
@@ -253,7 +338,7 @@ private struct CalendarLegend: View {
                         .frame(width: 6, height: 6)
                     Text(item.0)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
                 }
             }
         }
@@ -268,26 +353,31 @@ struct StatPill: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
             Text(value)
                 .font(.headline)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.10))
+        .background(AITheme.ColorToken.activeBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
 struct DayDetailView: View {
     @EnvironmentObject private var auth: AuthStore
-    let date: String
+    @State private var currentDate: String
     let scope: Scope
 
     @State private var detail: CalendarDayDetail?
     @State private var isLoading = false
     @State private var errorMessage: String?
+
+    init(date: String, scope: Scope) {
+        _currentDate = State(initialValue: date)
+        self.scope = scope
+    }
 
     var body: some View {
         List {
@@ -296,7 +386,7 @@ struct DayDetailView: View {
                     ForEach(detailInsights(detail), id: \.self) { insight in
                         Label(insight, systemImage: "sparkles")
                             .font(.callout)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(insightTint(insight))
                     }
                 }
 
@@ -309,7 +399,51 @@ struct DayDetailView: View {
                     LabeledContent("风险数", value: "\(detail.stats.riskCount)")
                 }
 
-                ForEach(detail.filledEmployees) { employee in
+                if !detail.missingEmployees.isEmpty {
+                    Section("缺填成员") {
+                        ForEach(detail.missingEmployees) { employee in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(employee.name)
+                                if let departmentName = employee.departmentName {
+                                    Text(departmentName)
+                                        .font(.caption)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ForEach(riskEmployees(detail)) { employee in
+                    Section("风险 · \(employee.name)") {
+                        ForEach(employee.logs) { log in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(log.title)
+                                    .font(.headline)
+                                if let project = log.project {
+                                    Label(project.displayName, systemImage: "folder")
+                                        .font(.caption)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                                }
+                                Text(log.content)
+                                    .font(.body)
+                                if let summary = log.aiAnalysis?.summary, !summary.isEmpty {
+                                    Text(summary)
+                                        .font(.callout)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                                }
+                                if let risks = log.aiAnalysis?.risks, !risks.isEmpty {
+                                    Label(risks.joined(separator: "；"), systemImage: "exclamationmark.triangle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(AITheme.ColorToken.danger)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+
+                ForEach(normalEmployees(detail)) { employee in
                     Section(employee.name) {
                         ForEach(employee.logs) { log in
                             VStack(alignment: .leading, spacing: 8) {
@@ -318,43 +452,37 @@ struct DayDetailView: View {
                                 if let project = log.project {
                                     Label(project.displayName, systemImage: "folder")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
                                 }
                                 Text(log.content)
                                     .font(.body)
-                                if let summary = log.aiAnalysis?.summary, !summary.isEmpty {
-                                    Text(summary)
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if let risks = log.aiAnalysis?.risks, !risks.isEmpty {
-                                    Label(risks.joined(separator: "；"), systemImage: "exclamationmark.triangle.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.red)
-                                }
+                                    .lineLimit(3)
                             }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
-
-                if !detail.missingEmployees.isEmpty {
-                    Section("未填报") {
-                        ForEach(detail.missingEmployees) { employee in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(employee.name)
-                                if let departmentName = employee.departmentName {
-                                    Text(departmentName)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                            .padding(.vertical, 2)
                         }
                     }
                 }
             }
         }
-        .navigationTitle(date)
+        .navigationTitle(currentDate)
+        .compactNavigationTitle()
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    Task { await moveDay(by: -1) }
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .accessibilityLabel("前一天")
+
+                Button {
+                    Task { await moveDay(by: 1) }
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .accessibilityLabel("后一天")
+            }
+        }
         .overlay {
             if isLoading {
                 ProgressView()
@@ -387,10 +515,19 @@ struct DayDetailView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            detail = try await auth.client().request("/analytics/calendar/day?date=\(date)&scope=\(scope.rawValue)")
+            detail = try await auth.client().request("/analytics/calendar/day?date=\(currentDate)&scope=\(scope.rawValue)")
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func moveDay(by diff: Int) async {
+        guard let date = DateHelpers.dayFormatter.date(from: currentDate),
+              let next = Calendar.current.date(byAdding: .day, value: diff, to: date) else {
+            return
+        }
+        currentDate = DateHelpers.dayKey(next)
+        await load()
     }
 
     private func detailInsights(_ detail: CalendarDayDetail) -> [String] {
@@ -411,5 +548,34 @@ struct DayDetailView: View {
             insights.append(String(format: "已填成员平均工时 %.1f 小时，可与近 7 日节奏对比。", averageHours))
         }
         return insights
+    }
+
+    private func insightTint(_ insight: String) -> Color {
+        if insight.contains("暂未") || insight.contains("较好") {
+            return AITheme.ColorToken.ai
+        }
+        if insight.contains("风险") || insight.contains("阻塞") {
+            return AITheme.ColorToken.danger
+        }
+        if insight.contains("缺填") || insight.contains("低") || insight.contains("不完整") {
+            return AITheme.ColorToken.warning
+        }
+        return AITheme.ColorToken.ai
+    }
+
+    private func riskEmployees(_ detail: CalendarDayDetail) -> [FilledEmployee] {
+        detail.filledEmployees.filter { employee in
+            employee.logs.contains(where: hasRisk)
+        }
+    }
+
+    private func normalEmployees(_ detail: CalendarDayDetail) -> [FilledEmployee] {
+        detail.filledEmployees.filter { employee in
+            !employee.logs.contains(where: hasRisk)
+        }
+    }
+
+    private func hasRisk(_ log: WorkLog) -> Bool {
+        !(log.aiAnalysis?.risks.isEmpty ?? true) || !(log.aiAnalysis?.blockers.isEmpty ?? true)
     }
 }

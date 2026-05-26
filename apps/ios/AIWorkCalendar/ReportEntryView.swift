@@ -11,6 +11,7 @@ final class ReportEntryViewModel: ObservableObject {
     @Published var content = ""
     @Published var hoursText = "1"
     @Published var projects: [Project] = []
+    @Published var workLogs: [WorkLog] = []
     @Published var selectedProjectId = ""
     @Published var savedDraftId: String?
     @Published var isLoadingProjects = false
@@ -22,7 +23,55 @@ final class ReportEntryViewModel: ObservableObject {
 
     fileprivate static let assistantOpening = "今天你完成了什么？告诉我任务、项目、风险或工时，我会整理成可提交的日报。"
 
-    func loadProjects(auth: AuthStore) async {
+    var hasDraftContent: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var todayLogs: [WorkLog] {
+        workLogs.filter { String($0.date.prefix(10)) == DateHelpers.dayKey() }
+    }
+
+    var todaySubmittedCount: Int {
+        todayLogs.filter { $0.status == .submitted }.count
+    }
+
+    var todayHoursText: String {
+        let hours = todayLogs.reduce(0) { $0 + $1.hours.value }
+        let rounded = (hours * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return "\(Int(rounded))"
+        }
+        return String(format: "%.1f", rounded)
+    }
+
+    var todayRiskCount: Int {
+        todayLogs.reduce(0) { total, log in
+            total + (log.aiAnalysis?.risks.count ?? 0) + (log.aiAnalysis?.blockers.count ?? 0)
+        }
+    }
+
+    var todayConclusion: String {
+        if todaySubmittedCount > 0 {
+            return "今天已提交 \(todaySubmittedCount) 条日报"
+        }
+        if hasDraftContent {
+            return "日报草稿已准备，等待确认提交"
+        }
+        return "今天还未完成填报"
+    }
+
+    var todayRiskText: String {
+        if todayRiskCount > 0 {
+            return "AI 发现 \(todayRiskCount) 个风险或阻塞，提交前建议补充处理动作。"
+        }
+        if todaySubmittedCount > 0 {
+            return "暂无明显风险，今日工作信号已进入团队看板。"
+        }
+        return "先用一句话描述今天完成的事，AI 会整理标题、内容和工时。"
+    }
+
+    func load(auth: AuthStore) async {
         isLoadingProjects = true
         defer { isLoadingProjects = false }
         do {
@@ -32,9 +81,14 @@ final class ReportEntryViewModel: ObservableObject {
             if !selectedProjectId.isEmpty, !projects.contains(where: { $0.id == selectedProjectId }) {
                 selectedProjectId = ""
             }
+            workLogs = try await client.request("/work-logs")
         } catch {
             projects = []
         }
+    }
+
+    func loadProjects(auth: AuthStore) async {
+        await load(auth: auth)
     }
 
     func generateDraft(auth: AuthStore) async {
@@ -77,6 +131,7 @@ final class ReportEntryViewModel: ObservableObject {
             let workLog = try await upsertDraft(auth: auth, payload: payload)
             let _: WorkLog = try await auth.client().request("/work-logs/\(workLog.id)/submit", method: .post)
             clearForm()
+            await load(auth: auth)
             successMessage = "已提交"
         } catch {
             errorMessage = error.localizedDescription
@@ -93,6 +148,7 @@ final class ReportEntryViewModel: ObservableObject {
         do {
             let workLog = try await upsertDraft(auth: auth, payload: payload)
             savedDraftId = workLog.id
+            await load(auth: auth)
             successMessage = "草稿已保存"
         } catch {
             errorMessage = error.localizedDescription
@@ -157,25 +213,20 @@ struct ReportEntryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
-                if let user = auth.user {
-                    WorkContextHeader(user: user)
-                }
+                VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                    if let user = auth.user {
+                        WorkContextHeader(user: user)
+                    }
 
-                    AIInsightPanel(
-                        title: "AI 今日节奏",
-                        insights: [
-                            viewModel.title.isEmpty ? "先用自然语言描述今天完成的工作，AI 会生成标题、摘要和工时。" : "草稿已生成，请重点检查项目、工时和风险描述。",
-                            viewModel.selectedProjectId.isEmpty ? "关联项目后，团队看板可以更早发现延期和阻塞信号。" : "当前日报会进入项目维度分析，便于后续汇总。",
-                            "提交后，AI 分析会用于日历风险点、项目状态和个人工作画像。"
-                        ]
-                    )
+                    TodayStatusPanel(viewModel: viewModel)
 
                     AIDraftComposer(viewModel: viewModel) {
                         Task { await viewModel.generateDraft(auth: auth) }
                     }
 
-                    DailyDraftEditor(viewModel: viewModel)
+                    if viewModel.hasDraftContent {
+                        DailyDraftEditor(viewModel: viewModel)
+                    }
 
                     ReportActionPanel(viewModel: viewModel) {
                         Task { await viewModel.saveDraft(auth: auth) }
@@ -188,11 +239,12 @@ struct ReportEntryView: View {
                 .padding(AITheme.Spacing.lg)
             }
             .background(AITheme.ColorToken.appBackground)
-            .navigationTitle("今日工作")
+            .navigationTitle("今日")
+            .compactNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        Task { await viewModel.loadProjects(auth: auth) }
+                        Task { await viewModel.load(auth: auth) }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -201,10 +253,10 @@ struct ReportEntryView: View {
                 }
             }
             .task {
-                await viewModel.loadProjects(auth: auth)
+                await viewModel.load(auth: auth)
             }
             .refreshable {
-                await viewModel.loadProjects(auth: auth)
+                await viewModel.load(auth: auth)
             }
             .alert("提示", isPresented: successBinding) {
                 Button("知道了", role: .cancel) {}
@@ -246,11 +298,24 @@ private struct WorkContextHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
             Text("你好，\(user.name)")
-                .font(AITheme.Typography.pageTitle)
+                .font(.title3.weight(.semibold))
             Text([user.tenantName, user.departmentName].compactMap { $0 }.joined(separator: " · "))
                 .font(AITheme.Typography.support)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
         }
+    }
+}
+
+private struct TodayStatusPanel: View {
+    @ObservedObject var viewModel: ReportEntryViewModel
+
+    var body: some View {
+        CompactAIActionPanel(
+            conclusion: viewModel.todayConclusion,
+            risk: viewModel.todayRiskText,
+            actionTitle: nil,
+            systemImage: viewModel.todaySubmittedCount > 0 ? "checkmark.circle" : "sparkles"
+        )
     }
 }
 
@@ -260,29 +325,30 @@ private struct AIDraftComposer: View {
 
     var body: some View {
         BrandedCard {
-            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                SectionTitle("今天你完成了什么？", subtitle: "不用写格式，像和助理说话一样描述即可。")
+            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+                SectionTitle("今天你完成了什么？", subtitle: "一句话即可，AI 会整理成日报。")
 
-                VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                    ForEach(viewModel.messages.suffix(3)) { message in
-                        Text(message.content)
-                            .font(AITheme.Typography.support)
-                            .foregroundStyle(message.role == .user ? .primary : .secondary)
-                            .padding(AITheme.Spacing.sm)
-                            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
-                            .background(message.role == .user ? AITheme.ColorToken.brand.opacity(0.10) : AITheme.ColorToken.activeBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                if viewModel.messages.count > 1 {
+                    VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+                        ForEach(viewModel.messages.suffix(3)) { message in
+                            Text(message.content)
+                                .font(AITheme.Typography.support)
+                                .foregroundStyle(message.role == .user ? .primary : AITheme.ColorToken.textSecondary)
+                                .padding(AITheme.Spacing.sm)
+                                .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+                                .background(message.role == .user ? AITheme.ColorToken.primarySurface : AITheme.ColorToken.activeBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                        }
                     }
                 }
 
                 TextField("例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时", text: $viewModel.chatInput, axis: .vertical)
-                    .lineLimit(3...6)
+                    .lineLimit(2...4)
                     .textFieldStyle(AITextFieldStyle())
                     .submitLabel(.send)
 
                 PrimaryActionButton(title: "AI 帮我整理日报", systemImage: "sparkles", isLoading: viewModel.isDrafting, action: onGenerate)
                     .disabled(viewModel.isDrafting || viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .opacity(viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.52 : 1)
             }
         }
     }
@@ -293,7 +359,7 @@ private struct DailyDraftEditor: View {
 
     var body: some View {
         BrandedCard {
-            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
                 SectionTitle("日报草稿", subtitle: "AI 生成后仍可手动校正，提交前请确认工时和项目。")
 
                 DatePicker("日期", selection: $viewModel.selectedDate, displayedComponents: .date)
@@ -344,14 +410,21 @@ private struct ReportActionPanel: View {
                         .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
                 }
             }
-            .buttonStyle(.borderless)
+            .font(.headline)
+            .foregroundStyle(AITheme.ColorToken.primary)
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 1)
+            }
             .disabled(viewModel.isSavingDraft || viewModel.isSubmitting)
 
             Button("清空") {
                 onClear()
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AITheme.ColorToken.textSecondary)
         }
     }
 }

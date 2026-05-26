@@ -5,20 +5,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#1f1f1f",
-        muted: "#5f6368",
-        line: "#dadce0",
-        surface: "#f8fafd",
-        "surface-container": "#eef3f8",
+        ink: "#111827",
+        text: "#374151",
+        muted: "#6B7280",
+        placeholder: "#9CA3AF",
+        line: "#E5E7EB",
+        surface: "#F8FAFC",
+        page: "#F8FAFC",
+        "surface-container": "#F3F6FA",
         "surface-high": "#ffffff",
-        primary: "#0b57d0",
-        "primary-container": "#d3e3fd",
-        "on-primary-container": "#041e49",
-        secondary: "#0f766e",
-        "secondary-container": "#ccfbf1",
-        warning: "#b06000",
-        danger: "#b3261e",
-        accent: "#0b57d0"
+        panel: "#ffffff",
+        primary: "#0B57D0",
+        "primary-hover": "#1A73E8",
+        "primary-container": "#D3E3FD",
+        "on-primary-container": "#0B57D0",
+        secondary: "#0F766E",
+        "secondary-hover": "#14A39A",
+        "secondary-container": "#CCFBF1",
+        warning: "#D97706",
+        danger: "#DC2626",
+        accent: "#0B57D0"
       }
     }
   },

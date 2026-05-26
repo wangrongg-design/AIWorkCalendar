@@ -252,6 +252,7 @@ export type CalendarDay = {
   missingCount: number;
   fillRate: number;
   riskCount: number;
+  totalHours?: number;
 };
 
 export type CalendarResponse = {

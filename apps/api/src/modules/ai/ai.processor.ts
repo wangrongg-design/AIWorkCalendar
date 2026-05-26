@@ -41,9 +41,9 @@ export class AiProcessor extends WorkerHost {
 
     try {
       if (job.name === "work-log-analysis") {
-        await this.processWorkLogAnalysis(task.id, task.workLogId);
+        await this.processWorkLogAnalysis(task.id, task.tenantId, task.workLogId);
       } else if (job.name === "report-generation") {
-        await this.processReportGeneration(task.id, task.reportId);
+        await this.processReportGeneration(task.id, task.tenantId, task.reportId);
       }
       await this.prisma.aiTask.update({
         where: { id: task.id },
@@ -60,12 +60,12 @@ export class AiProcessor extends WorkerHost {
     }
   }
 
-  private async processWorkLogAnalysis(taskId: string, workLogId: string | null) {
+  private async processWorkLogAnalysis(taskId: string, tenantId: string, workLogId: string | null) {
     if (!workLogId) {
       throw new Error("AI task missing workLogId");
     }
     const workLog = await this.prisma.workLog.findFirst({
-      where: { id: workLogId, deletedAt: null },
+      where: { id: workLogId, tenantId, deletedAt: null },
       include: {
         user: true,
         attachments: {
@@ -78,28 +78,41 @@ export class AiProcessor extends WorkerHost {
       throw new Error("Work log not found for AI analysis");
     }
 
-    const result = await this.openAi.analyzeWorkLog({
-      title: workLog.title,
-      content: workLog.content,
-      date: workLog.date,
-      hours: Number(workLog.hours),
-      startTime: workLog.startTime,
-      endTime: workLog.endTime,
-      attachments: await Promise.all(
-        workLog.attachments.map(async (attachment) => {
-          const canInlineImage = attachment.kind === WorkLogAttachmentKind.IMAGE && attachment.fileSize <= INLINE_IMAGE_MAX_BYTES;
-          return {
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            kind: attachment.kind,
-            fileSize: attachment.fileSize,
-            textContent: attachment.textContent,
-            aiSummary: attachment.aiSummary,
-            dataUrl: canInlineImage ? await this.readAttachmentDataUrl(attachment.storagePath, attachment.mimeType) : null
-          };
-        })
-      )
-    });
+    const attachments = await Promise.all(
+      workLog.attachments.map(async (attachment) => {
+        const canInlineImage = attachment.kind === WorkLogAttachmentKind.IMAGE && attachment.fileSize <= INLINE_IMAGE_MAX_BYTES;
+        return {
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          kind: attachment.kind,
+          fileSize: attachment.fileSize,
+          textContent: attachment.textContent,
+          aiSummary: attachment.aiSummary,
+          dataUrl: canInlineImage ? await this.readAttachmentDataUrl(attachment.storagePath, attachment.mimeType) : null
+        };
+      })
+    );
+
+    const result = await this.openAi.analyzeWorkLog(
+      {
+        title: workLog.title,
+        content: workLog.content,
+        date: workLog.date,
+        hours: Number(workLog.hours),
+        startTime: workLog.startTime,
+        endTime: workLog.endTime,
+        attachments
+      },
+      {
+        tenantId: workLog.tenantId,
+        userId: workLog.userId,
+        operation: "work_log_analysis",
+        targetType: "work_log",
+        targetId: workLog.id,
+        containsAttachments: attachments.length > 0,
+        containsImages: attachments.some((attachment) => attachment.kind === WorkLogAttachmentKind.IMAGE)
+      }
+    );
 
     await this.prisma.aiAnalysis.upsert({
       where: { workLogId },
@@ -154,10 +167,10 @@ export class AiProcessor extends WorkerHost {
     }
   }
 
-  private async processReportGeneration(_taskId: string, reportId: string | null) {
+  private async processReportGeneration(_taskId: string, tenantId: string, reportId: string | null) {
     if (!reportId) {
       throw new Error("AI task missing reportId");
     }
-    await this.reportContent.generateAndSave(reportId);
+    await this.reportContent.generateAndSave(reportId, tenantId);
   }
 }
