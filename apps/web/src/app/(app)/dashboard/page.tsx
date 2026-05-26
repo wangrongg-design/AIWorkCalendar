@@ -5,7 +5,7 @@ import { Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Sp
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, MessageCircle, Paperclip, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
+import { Bot, CalendarPlus, CheckCircle2, MessageCircle, Paperclip, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -46,7 +46,7 @@ type CalendarChatResponse = {
   };
 };
 
-const quickQuestions = ["总结本月团队重点", "今天有哪些风险？", "未来计划怎么安排？"];
+const quickQuestions = ["本周风险", "项目进度", "人员负载", "异常工时"];
 const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
 
 function fileToBase64(file: File) {
@@ -78,6 +78,7 @@ function monthCells(month: Dayjs) {
 }
 
 const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
+const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 function monthSummary(days: CalendarDay[]) {
   const filled = days.reduce((sum, day) => sum + day.filledCount, 0);
@@ -96,6 +97,11 @@ function dateKind(date: string) {
   const today = dayjs().format("YYYY-MM-DD");
   if (date === today) return "today";
   return date > today ? "future" : "past";
+}
+
+function chineseDateLabel(date: string) {
+  const value = dayjs(date);
+  return `${value.format("YYYY年M月D日")} · ${weekdayLabels[value.day()]}`;
 }
 
 function toQuickFillPayload(date: string, values: QuickFillForm) {
@@ -194,6 +200,30 @@ export default function DashboardPage() {
   const cells = useMemo(() => monthCells(month), [month]);
   const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
+  const detailStats = dayDetail.data?.stats;
+  const selectedDateKind = selectedDate ? dateKind(selectedDate) : "today";
+  const detailTitle = selectedDateKind === "future" ? "团队计划情况" : "今日团队填报情况";
+  const aiObservations = useMemo(() => {
+    if (!selectedDate) return [];
+    if (dayDetail.isFetching) return ["AI 正在分析团队日报…"];
+    const stats = dayDetail.data?.stats;
+    if (!stats) return ["等待团队数据同步后生成洞察。"];
+    if (stats.filledCount === 0) {
+      return [selectedDateKind === "future" ? "这一天还没有团队成员提交计划。" : "今天还没有团队成员提交日报。"];
+    }
+    const observations = [
+      stats.missingCount > 0
+        ? `${stats.missingCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，可优先提醒。`
+        : `团队${selectedDateKind === "future" ? "计划" : "日报"}已全部提交。`,
+      stats.riskCount > 0 ? `发现 ${stats.riskCount} 条风险信号，建议先查看异常记录。` : "暂未发现明显风险信号。",
+      stats.totalHours > 0 ? `当前记录工时合计 ${stats.totalHours}h，可继续按项目核对投入。` : "当前暂无可分析工时。"
+    ];
+    const firstProject = dayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).find((log) => log.project)?.project?.name;
+    if (firstProject) {
+      observations.push(`${firstProject} 已出现在今日记录中，可进一步询问项目进展。`);
+    }
+    return observations;
+  }, [dayDetail.data, dayDetail.isFetching, selectedDate, selectedDateKind]);
   const quickUploadFiles: UploadFile[] = useMemo(
     () =>
       quickAttachments.map((item) => ({
@@ -359,9 +389,9 @@ export default function DashboardPage() {
       <div className="page-header dashboard-calendar-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            日历看板
+            AI 工作日历
           </Typography.Title>
-          <Typography.Text className="page-subtitle">按月查看每日填报人数、缺失人数、填报率和风险数量。</Typography.Text>
+          <Typography.Text className="page-subtitle">让 AI 基于日报、计划、风险和工时，帮你理解团队真实状态。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel dashboard-calendar-toolbar">
           <DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} allowClear={false} />
@@ -533,18 +563,19 @@ export default function DashboardPage() {
       </Drawer>
 
       <Modal
-        title={selectedDate ? `${selectedDate} ${dateKind(selectedDate) === "future" ? "计划详情" : "填报详情"}` : "填报详情"}
+        title={null}
         open={Boolean(selectedDate)}
         onCancel={() => setSelectedDate(null)}
         footer={null}
         width={1180}
+        className="workday-detail-modal"
       >
         {selectedDate ? (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-surface-container px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Typography.Text className="text-muted">
-                {dateKind(selectedDate) === "future" ? "为未来日期预先填写计划。" : "为已发生日期补充或提交日报。"}
-              </Typography.Text>
+          <div className="workday-detail-hero">
+            <div>
+              <div className="workday-product">AI 工作日历</div>
+              <div className="workday-date">{chineseDateLabel(selectedDate)}</div>
+              <div className="workday-subtitle">{detailTitle}</div>
             </div>
             <Space>
               <Button type="primary" icon={<CalendarPlus size={16} />} onClick={() => openQuickFill(selectedDate)}>
@@ -553,96 +584,118 @@ export default function DashboardPage() {
             </Space>
           </div>
         ) : null}
-        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="metric-card">
-            <div className="metric-label">{selectedDate && dateKind(selectedDate) === "future" ? "已计划" : "已填报"}</div>
-            <div className="metric-value">{dayDetail.data?.stats.filledCount ?? 0}</div>
+        <div className="workday-metrics">
+          <div className="workday-metric is-filled">
+            <div className="workday-metric-label">{selectedDate && dateKind(selectedDate) === "future" ? "已计划" : "已填报"}</div>
+            <div className="workday-metric-value">{detailStats?.filledCount ?? 0}</div>
           </div>
-          <div className="metric-card">
-            <div className="metric-label">{selectedDate && dateKind(selectedDate) === "future" ? "未计划" : "未填报"}</div>
-            <div className="metric-value">{dayDetail.data?.stats.missingCount ?? 0}</div>
+          <div className="workday-metric is-missing">
+            <div className="workday-metric-label">{selectedDate && dateKind(selectedDate) === "future" ? "未计划" : "未填报"}</div>
+            <div className="workday-metric-value">{detailStats?.missingCount ?? 0}</div>
           </div>
-          <div className="metric-card">
-            <div className="metric-label">工时合计</div>
-            <div className="metric-value">{dayDetail.data?.stats.totalHours ?? 0}</div>
+          <div className="workday-metric is-hours">
+            <div className="workday-metric-label">工时合计</div>
+            <div className="workday-metric-value">{detailStats?.totalHours ?? 0}h</div>
           </div>
-          <div className="metric-card">
-            <div className="metric-label">风险数量</div>
-            <div className="metric-value flex items-center gap-2 text-danger">
-              <AlertTriangle size={20} /> {dayDetail.data?.stats.riskCount ?? 0}
+          <div className="workday-metric is-risk">
+            <div className="workday-metric-label">风险数量</div>
+            <div className="workday-metric-value">{detailStats?.riskCount ?? 0}</div>
+          </div>
+        </div>
+        <div className="workday-focus-row">
+          <div className={`workday-risk-panel ${(detailStats?.riskCount ?? 0) > 0 ? "has-risk" : ""}`}>
+            <div className="workday-section-kicker">异常 / 风险</div>
+            <div className="workday-risk-title">
+              {(detailStats?.riskCount ?? 0) > 0 ? `发现 ${detailStats?.riskCount ?? 0} 条风险信号` : "暂未发现明显风险"}
+            </div>
+            <div className="workday-risk-copy">
+              {(detailStats?.missingCount ?? 0) > 0
+                ? `${detailStats?.missingCount ?? 0} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
+                : "团队提交状态正常，可以继续查看具体记录。"}
+            </div>
+          </div>
+          <div className="workday-ai-panel">
+            <div className="workday-ai-header">
+              <div>
+                <div className="workday-section-kicker">AI 工作洞察</div>
+                <div className="workday-ai-title">AI 今日观察</div>
+              </div>
+              {calendarChat.isPending || dayDetail.isFetching ? <span className="ai-shimmer">AI 正在分析团队日报…</span> : null}
+            </div>
+            <ul className="workday-ai-list">
+              {aiObservations.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <div className="workday-ai-pills">
+              {["本周风险", "项目进度", "人员负载", "异常工时"].map((item) => (
+                <button key={item} type="button" className="workday-ai-pill" onClick={() => submitCalendarChat(item)}>
+                  {item}
+                </button>
+              ))}
+            </div>
+            <div className="workday-ai-chat">
+              <div className="workday-ai-messages">
+                {chatMessages.slice(-4).map((item) => (
+                  <div key={item.id} className={`workday-ai-message ${item.role}`}>
+                    <span>{item.role === "assistant" ? "AI" : user?.name ?? "我"}</span>
+                    <p>{item.content}</p>
+                  </div>
+                ))}
+                {calendarChat.isPending ? <div className="workday-ai-message assistant is-loading">AI 正在分析团队日报…</div> : null}
+              </div>
+              <div className="workday-ai-input">
+                <Input.TextArea
+                  value={chatInput}
+                  rows={2}
+                  placeholder="询问团队风险、项目进展、人员投入情况…"
+                  onChange={(event) => setChatInput(event.target.value)}
+                  onPressEnter={(event) => {
+                    if (!event.shiftKey) {
+                      event.preventDefault();
+                      submitCalendarChat();
+                    }
+                  }}
+                />
+                <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()}>
+                  发送
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-        <Typography.Title level={5}>{selectedDate && dateKind(selectedDate) === "future" ? "已填写计划" : "已填报员工"}</Typography.Title>
-        <Table
-          rowKey="id"
-          size="small"
-          loading={dayDetail.isFetching}
-          dataSource={dayDetail.data?.filledEmployees ?? []}
-          columns={filledColumns}
-          pagination={false}
-        />
-        <Typography.Title level={5} className="!mt-5">
-          {selectedDate && dateKind(selectedDate) === "future" ? "未填写计划" : "未填报员工"}
-        </Typography.Title>
-        <Space wrap>
-          {(dayDetail.data?.missingEmployees ?? []).map((item) => (
-            <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
-          ))}
-        </Space>
-        <div className="mt-6 rounded-[8px] border border-line bg-surface-container-low">
-          <div className="border-b border-line px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink">
-              <Bot size={17} />
-              问 AI
-            </div>
-            <div className="mt-1 text-xs text-muted">
-              当前上下文：{selectedDate ? `${selectedDate} 单日` : `${month.format("YYYY-MM")} 整月`} · {scope === "self" ? "只看自己" : scope === "department" ? "本部门" : "全公司"}
-            </div>
-          </div>
-          <div className="max-h-72 space-y-3 overflow-y-auto px-4 py-4">
-            {chatMessages.map((item) => (
-              <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[86%] rounded-[16px] px-4 py-3 text-sm leading-6 ${item.role === "user" ? "bg-primary text-white" : "bg-white text-ink"}`}>
-                  <div className={`mb-1 flex items-center gap-2 text-xs font-medium ${item.role === "user" ? "text-white/80" : "text-muted"}`}>
-                    {item.role === "assistant" ? <Bot size={14} /> : <MessageCircle size={14} />}
-                    {item.role === "assistant" ? "AI 助手" : user?.name ?? "我"}
-                    {typeof item.contextCount === "number" ? <span>· 参考 {item.contextCount} 条记录</span> : null}
-                  </div>
-                  <div className="whitespace-pre-wrap">{item.content}</div>
-                </div>
+        {(detailStats?.filledCount ?? 0) === 0 && !dayDetail.isFetching ? (
+          <div className="workday-empty-state">
+            <div>
+              <div className="workday-empty-title">
+                {selectedDateKind === "future" ? "这一天还没有团队成员提交计划" : "今天还没有团队成员提交日报"}
               </div>
-            ))}
-            {calendarChat.isPending ? (
-              <div className="rounded-[16px] bg-white px-4 py-3 text-sm text-muted">正在基于当前详情生成回答...</div>
-            ) : null}
-          </div>
-          <div className="border-t border-line bg-white p-4">
-            <Input.TextArea
-              value={chatInput}
-              rows={3}
-              placeholder="例如：这一天有哪些风险？谁还没有填？这些计划是否合理？"
-              onChange={(event) => setChatInput(event.target.value)}
-              onPressEnter={(event) => {
-                if (!event.shiftKey) {
-                  event.preventDefault();
-                  submitCalendarChat();
-                }
-              }}
-            />
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <Space wrap>
-                {quickQuestions.map((item) => (
-                  <Button key={item} size="small" onClick={() => submitCalendarChat(item)} disabled={calendarChat.isPending}>
-                    {item}
-                  </Button>
-                ))}
-              </Space>
-              <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()}>
-                发送
-              </Button>
+              <div className="workday-empty-copy">提醒员工填写后，AI 会自动生成团队观察和风险提示。</div>
             </div>
+            <Button type="primary" onClick={() => message.success("已生成提醒动作，后续可接入通知发送。")}>
+              提醒员工填写
+            </Button>
           </div>
+        ) : (
+          <div className="workday-detail-data">
+            <div className="workday-section-heading">{selectedDateKind === "future" ? "计划记录" : "日报记录"}</div>
+            <Table
+              rowKey="id"
+              size="small"
+              loading={dayDetail.isFetching}
+              dataSource={dayDetail.data?.filledEmployees ?? []}
+              columns={filledColumns}
+              pagination={false}
+            />
+          </div>
+        )}
+        <div className="workday-missing-row">
+          <div className="workday-section-heading">{selectedDateKind === "future" ? "未提交计划" : "未提交日报"}</div>
+          <Space wrap>
+            {(dayDetail.data?.missingEmployees ?? []).map((item) => (
+              <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
+            ))}
+          </Space>
         </div>
       </Modal>
 

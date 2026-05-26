@@ -13,14 +13,15 @@ import { Notification } from "@/lib/types";
 const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
-  { key: "/dashboard", icon: <CalendarDays size={18} />, label: "日历看板" },
-  { key: "/work-logs", icon: <ClipboardList size={18} />, label: "工作填报" },
-  { key: "/reports", icon: <FileText size={18} />, label: "智能汇报" }
+  { key: "/dashboard", icon: <CalendarDays size={19} />, label: "工作台" },
+  { key: "/calendar", icon: <CalendarDays size={19} />, label: "日历" },
+  { key: "/work-logs", icon: <ClipboardList size={19} />, label: "日报" },
+  { key: "/reports", icon: <FileText size={19} />, label: "AI汇报" }
 ];
 
 const adminNavItems: MenuProps["items"] = [
-  { key: "/projects", icon: <FolderKanban size={18} />, label: "项目管理" },
-  { key: "/org", icon: <Users size={18} />, label: "企业管理" }
+  { key: "/projects", icon: <FolderKanban size={19} />, label: "项目" },
+  { key: "/org", icon: <Users size={19} />, label: "团队" }
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
