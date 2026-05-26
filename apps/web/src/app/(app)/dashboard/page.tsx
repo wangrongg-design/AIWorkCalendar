@@ -5,8 +5,9 @@ import { Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Sp
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { Bot, CalendarPlus, CheckCircle2, MessageCircle, Paperclip, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
+import { Bot, CalendarPlus, CheckCircle2, Paperclip, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { useMemo, useState } from "react";
+import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment } from "@/lib/types";
@@ -47,6 +48,11 @@ type CalendarChatResponse = {
 };
 
 const quickQuestions = ["本周风险", "项目进度", "人员负载", "异常工时"];
+const copilotActions = [
+  { label: "提醒未填报员工", prompt: "帮我整理今天未填报员工，并给出提醒话术。" },
+  { label: "生成本周总结", prompt: "基于当前可见日报和计划，生成本周管理总结。" },
+  { label: "查看风险项目", prompt: "列出当前范围内存在风险或阻塞的项目，并说明原因。" }
+];
 const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
 
 function fileToBase64(file: File) {
@@ -224,6 +230,32 @@ export default function DashboardPage() {
     }
     return observations;
   }, [dayDetail.data, dayDetail.isFetching, selectedDate, selectedDateKind]);
+  const copilotObservations = useMemo(() => {
+    if (selectedDate) {
+      return aiObservations;
+    }
+    if (calendar.isFetching) {
+      return ["AI 正在分析当前月历数据…"];
+    }
+    if (!summary.filled && !summary.missing) {
+      return ["当前月历暂无可分析日报或计划。"];
+    }
+    return [
+      summary.rate < 80 ? `本月填报率为 ${summary.rate}%，建议优先关注未填报人员。` : `本月填报率为 ${summary.rate}%，团队提交节奏稳定。`,
+      summary.risks > 0 ? `本月累计出现 ${summary.risks} 条风险信号，建议查看风险日期和项目。` : "本月暂未出现明显风险信号。",
+      summary.filled > 0 ? `当前范围累计 ${summary.filled} 条已提交记录，可继续追问项目进展和人员投入。` : "还没有足够记录支撑深入分析。"
+    ];
+  }, [aiObservations, calendar.isFetching, selectedDate, summary.filled, summary.missing, summary.rate, summary.risks]);
+  const copilotContext = useMemo(
+    () => [
+      selectedDate ? chineseDateLabel(selectedDate) : month.format("YYYY年M月"),
+      scope === "self" ? user?.name ?? "我" : scope === "department" ? "本部门" : "全公司",
+      "日历看板",
+      "日报数据",
+      "工作计划"
+    ],
+    [month, scope, selectedDate, user?.name]
+  );
   const quickUploadFiles: UploadFile[] = useMemo(
     () =>
       quickAttachments.map((item) => ({
@@ -331,6 +363,11 @@ export default function DashboardPage() {
     calendarChat.mutate(normalized);
   };
 
+  const runCopilotPrompt = (question: string) => {
+    setChatOpen(true);
+    submitCalendarChat(question);
+  };
+
   const openQuickFill = (date: string) => {
     const kind = dateKind(date);
     quickForm.resetFields();
@@ -422,8 +459,8 @@ export default function DashboardPage() {
           <Button onClick={() => calendar.refetch()} loading={calendar.isFetching}>
             刷新
           </Button>
-          <Button type="primary" icon={<MessageCircle size={16} />} onClick={() => setChatOpen(true)}>
-            AI 对话
+          <Button type="primary" icon={<Bot size={16} />} onClick={() => setChatOpen(true)}>
+            AI 洞察
           </Button>
         </Space>
       </div>
@@ -494,56 +531,80 @@ export default function DashboardPage() {
 
       <Drawer
         title={
-          <Space>
+          <div className="copilot-title">
             <Bot size={18} />
-            <span>AI 日历问答</span>
-          </Space>
+            <span>AI 工作助手</span>
+          </div>
         }
-        extra={<Tag color="blue">{selectedDate ?? month.format("YYYY-MM")}</Tag>}
         open={chatOpen}
         onClose={() => setChatOpen(false)}
-        width={460}
-        styles={{ body: { padding: 0 } }}
+        width="min(400px, calc(100vw - 24px))"
+        zIndex={1200}
+        className="ai-copilot-drawer"
+        styles={{ body: { padding: 0 }, header: { borderBottom: 0, padding: "18px 18px 8px" } }}
       >
-        <div className="flex h-full flex-col">
-          <div className="border-b border-line bg-surface-container-low px-4 py-3">
-            <div className="mb-3 text-sm text-muted">
-              当前上下文：{selectedDate ? `${selectedDate} 单日` : `${month.format("YYYY-MM")} 整月`} · {scope === "self" ? "只看自己" : scope === "department" ? "本部门" : "全公司"}
-            </div>
-            <Space wrap>
-              {quickQuestions.map((item) => (
-                <Button key={item} size="small" onClick={() => submitCalendarChat(item)} disabled={calendarChat.isPending}>
-                  {item}
-                </Button>
+        <div className="ai-copilot">
+          <div className="ai-copilot-context">
+            <div className="ai-copilot-kicker">AI 正在分析</div>
+            <div className="ai-copilot-context-title">当前分析范围</div>
+            <div className="ai-copilot-context-list">
+              {copilotContext.map((item) => (
+                <span key={item}>{item}</span>
               ))}
-            </Space>
+            </div>
           </div>
 
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          <div className="ai-copilot-section">
+            <div className="ai-copilot-section-title">{selectedDate ? "AI 今日洞察" : "AI 月度洞察"}</div>
+            <ul className="ai-copilot-insights">
+              {copilotObservations.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="ai-copilot-section">
+            <div className="ai-copilot-section-title">AI 建议操作</div>
+            <div className="ai-copilot-actions">
+              {copilotActions.map((action) => (
+                <button key={action.label} type="button" onClick={() => runCopilotPrompt(action.prompt)} disabled={calendarChat.isPending}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="ai-copilot-section">
+            <div className="ai-copilot-section-title">快速追问</div>
+            <div className="ai-copilot-pills">
+              {quickQuestions.map((item) => (
+                <button key={item} type="button" onClick={() => runCopilotPrompt(item)} disabled={calendarChat.isPending}>
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="ai-copilot-thread">
             {chatMessages.map((item) => (
-              <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[88%] rounded-[18px] px-4 py-3 text-sm leading-6 shadow-sm ${item.role === "user" ? "bg-primary text-white" : "bg-surface-container text-ink"}`}>
-                  <div className={`mb-1 flex items-center gap-2 text-xs font-medium ${item.role === "user" ? "text-white/80" : "text-muted"}`}>
-                    {item.role === "assistant" ? <Bot size={14} /> : <MessageCircle size={14} />}
-                    {item.role === "assistant" ? "AI 助手" : user?.name ?? "我"}
-                    {typeof item.contextCount === "number" ? <span>· 参考 {item.contextCount} 条记录</span> : null}
-                  </div>
-                  <div className="whitespace-pre-wrap">{item.content}</div>
+              <div key={item.id} className={`ai-copilot-message ${item.role}`}>
+                <div className="ai-copilot-message-meta">
+                  {item.role === "assistant" ? "AI 助手" : user?.name ?? "我"}
+                  {typeof item.contextCount === "number" ? <span> · 参考 {item.contextCount} 条记录</span> : null}
                 </div>
+                <div>{item.content}</div>
               </div>
             ))}
             {calendarChat.isPending ? (
-              <div className="flex justify-start">
-                <div className="rounded-[18px] bg-surface-container px-4 py-3 text-sm text-muted shadow-sm">正在基于可见日报和计划生成回答...</div>
-              </div>
+              <div className="ai-copilot-message assistant is-loading">AI 正在结合当前页面上下文分析…</div>
             ) : null}
           </div>
 
-          <div className="border-t border-line bg-white p-4">
+          <div className="ai-copilot-input">
             <Input.TextArea
               value={chatInput}
-              rows={3}
-              placeholder="输入问题，例如：本周有哪些风险？未来计划中有什么延期风险？"
+              rows={2}
+              placeholder="询问团队风险、项目进展、人员投入情况…"
               onChange={(event) => setChatInput(event.target.value)}
               onPressEnter={(event) => {
                 if (!event.shiftKey) {
@@ -552,12 +613,7 @@ export default function DashboardPage() {
                 }
               }}
             />
-            <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs text-muted">Enter 发送，Shift + Enter 换行</span>
-              <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()}>
-                发送
-              </Button>
-            </div>
+            <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()} />
           </div>
         </div>
       </Drawer>
@@ -629,38 +685,16 @@ export default function DashboardPage() {
             </ul>
             <div className="workday-ai-pills">
               {["本周风险", "项目进度", "人员负载", "异常工时"].map((item) => (
-                <button key={item} type="button" className="workday-ai-pill" onClick={() => submitCalendarChat(item)}>
+                <button key={item} type="button" className="workday-ai-pill" onClick={() => runCopilotPrompt(item)}>
                   {item}
                 </button>
               ))}
             </div>
-            <div className="workday-ai-chat">
-              <div className="workday-ai-messages">
-                {chatMessages.slice(-4).map((item) => (
-                  <div key={item.id} className={`workday-ai-message ${item.role}`}>
-                    <span>{item.role === "assistant" ? "AI" : user?.name ?? "我"}</span>
-                    <p>{item.content}</p>
-                  </div>
-                ))}
-                {calendarChat.isPending ? <div className="workday-ai-message assistant is-loading">AI 正在分析团队日报…</div> : null}
-              </div>
-              <div className="workday-ai-input">
-                <Input.TextArea
-                  value={chatInput}
-                  rows={2}
-                  placeholder="询问团队风险、项目进展、人员投入情况…"
-                  onChange={(event) => setChatInput(event.target.value)}
-                  onPressEnter={(event) => {
-                    if (!event.shiftKey) {
-                      event.preventDefault();
-                      submitCalendarChat();
-                    }
-                  }}
-                />
-                <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()}>
-                  发送
-                </Button>
-              </div>
+            <div className="workday-ai-copilot-link">
+              <span>需要继续追问时，AI 会带着当前日期和团队填报上下文打开右侧助手。</span>
+              <Button type="text" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
+                打开 AI 工作助手
+              </Button>
             </div>
           </div>
         </div>
@@ -737,13 +771,7 @@ export default function DashboardPage() {
             {selectedWorkLog.attachments?.length ? (
               <div className="rounded-[8px] border border-line p-4">
                 <div className="mb-2 text-sm font-medium text-ink">附件</div>
-                <Space wrap>
-                  {selectedWorkLog.attachments.map((attachment) => (
-                    <Tag key={attachment.id} icon={<Paperclip size={13} />}>
-                      {attachment.fileName}
-                    </Tag>
-                  ))}
-                </Space>
+                <WorkLogAttachmentViewer workLogId={selectedWorkLog.id} attachments={selectedWorkLog.attachments} />
               </div>
             ) : null}
             {selectedWorkLog.aiAnalysis ? (
