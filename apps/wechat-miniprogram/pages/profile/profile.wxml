@@ -23,14 +23,18 @@
     </view>
   </view>
 
-  <view class="ai-profile-panel">
-    <view class="ai-kicker">AI 工作画像</view>
-    <view class="ai-title">{{profileConclusion}}</view>
-    <view class="ai-desc">{{profileRiskText}}</view>
+  <view class="ai-action-card ai-profile-panel">
+    <view class="ai-action-icon">AI</view>
+    <view class="ai-action-copy">
+      <view class="ai-action-kicker">AI 工作画像</view>
+      <view class="ai-action-title">{{profileConclusion}}</view>
+      <view class="ai-action-desc">{{profileRiskText}}</view>
+    </view>
   </view>
 
   <view class="surface profile-section">
     <view class="section-title">企业与权限</view>
+    <view class="section-desc">用于日报归属、团队范围和管理权限。</view>
     <view class="info-row">
       <text>企业</text>
       <text>{{user.tenantName}}</text>
@@ -50,6 +54,22 @@
     <view class="info-row">
       <text>角色</text>
       <text>{{rolesText}}</text>
+    </view>
+  </view>
+
+  <view class="surface profile-section">
+    <view class="section-title">账号安全</view>
+    <view class="info-row">
+      <text>登录状态</text>
+      <text>已登录</text>
+    </view>
+    <view class="info-row">
+      <text>通知设置</text>
+      <text>跟随系统</text>
+    </view>
+    <view class="info-row">
+      <text>API</text>
+      <text>{{apiBaseURL}}</text>
     </view>
   </view>
 

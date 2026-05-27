@@ -1,4 +1,6 @@
-import { IsEmail, IsOptional, IsString, MinLength } from "class-validator";
+import { Transform } from "class-transformer";
+import { IsEmail, IsOptional, IsString, Matches, MinLength } from "class-validator";
+import { normalizeOptionalUnifiedSocialCreditCode, unifiedSocialCreditCodePattern } from "../../../common/unified-social-credit-code";
 
 export class PasswordResetRequestDto {
   @IsEmail()
@@ -6,6 +8,8 @@ export class PasswordResetRequestDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => normalizeOptionalUnifiedSocialCreditCode(value))
+  @Matches(unifiedSocialCreditCodePattern, { message: "请输入 18 位营业执照统一社会信用代码" })
   tenantCode?: string;
 }
 

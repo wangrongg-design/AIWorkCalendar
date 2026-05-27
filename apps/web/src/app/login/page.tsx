@@ -2,8 +2,8 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Form, Input, Modal, Typography, message } from "antd";
+import { ArrowRight, CalendarCheck2, Home, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarCheck2, CheckCircle2, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -18,19 +18,6 @@ type PasswordResetRequestResponse = {
   ok: boolean;
   resetToken?: string;
 };
-
-const aiCapabilities = [
-  "AI 自动生成日报、周报、月报",
-  "AI 自动分析团队风险和项目阻塞",
-  "管理者可在日历中查看团队状态",
-  "工作记录自动沉淀为企业知识"
-];
-
-const loginInsights = [
-  "本周团队填报率较上周提升 18%",
-  "研发项目存在 1 个延期风险",
-  "AI 已为团队生成本周工作摘要"
-];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -80,125 +67,64 @@ export default function LoginPage() {
   });
 
   return (
-    <main className="login-stage login-product-stage flex min-h-screen items-center justify-center overflow-hidden bg-surface px-4">
-      <div className="login-top-brand">
-        <img src="/seven-ai-logo.png" alt="七数AI" />
-        <span>Work Calendar AI</span>
-      </div>
-      <div className="login-timeline" aria-hidden="true">
-        {Array.from({ length: 9 }).map((_, index) => (
-          <div key={index} className={index === 4 ? "is-today" : ""}>
-            <span>{index + 12}</span>
-          </div>
-        ))}
-      </div>
-      <div className="relative z-10 grid w-full max-w-6xl items-center gap-8 px-2 py-16 lg:grid-cols-[1fr_460px]">
-        <section className="login-value-panel hidden min-h-[560px] flex-col justify-between lg:flex">
-          <div>
-            <div className="login-brand-lockup">
-              <img src="/seven-ai-logo.png" alt="七数AI" />
-              <div>
-                <div>Work Calendar AI</div>
-                <span>企业 AI 工作操作系统</span>
-              </div>
-            </div>
-            <Typography.Title className="login-value-title">
-              AI 自动理解团队工作，而不只是收集日报。
-            </Typography.Title>
-            <div className="login-value-english">Your AI-powered team operating system.</div>
-            <Typography.Text className="login-value-copy">
-              让团队的日报、计划、项目进展和风险问题自动沉淀为可分析、可追踪、可复盘的工作数据。
-            </Typography.Text>
-            <div className="login-capability-list">
-              {aiCapabilities.map((item) => (
-                <div key={item}>
-                  <CheckCircle2 size={16} />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="login-intelligence">
-            <div className="login-ai-status">
-              <div>
-                <span className="login-live-dot" />
-                AI 正在分析今日团队工作…
-              </div>
-              <Sparkles size={18} />
-            </div>
-            <div className="login-insight-card">
-              <div className="login-insight-title">AI 今日洞察</div>
-              <div className="login-insight-list">
-                {loginInsights.map((item) => (
-                  <div key={item}>
-                    <CheckCircle2 size={15} />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="login-signal-grid">
-              {[
-                { label: "日报", value: "可追踪" },
-                { label: "风险", value: "可分析" },
-                { label: "知识", value: "可沉淀" }
-              ].map((item) => (
-                <div key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+    <main className="system-login-page min-h-screen">
+      <header className="system-login-header">
+        <button type="button" className="system-login-brand" onClick={() => router.push("/")}>
+          <img src="/seven-ai-logo.png" alt="七数AI" />
+          <span>Work Calendar AI</span>
+        </button>
+        <Button icon={<Home size={16} />} onClick={() => router.push("/")}>
+          官网首页
+        </Button>
+      </header>
 
-        <Card className="login-card login-form-card surface-panel w-full border-0" styles={{ body: { padding: 36 } }}>
-          <div className="mb-5 flex items-center justify-center">
-            <div className="flex items-center gap-2 rounded-full bg-surface-container px-4 py-2 text-sm font-medium text-muted">
-              <CalendarCheck2 size={16} />
-              AI 驱动的团队工作流
+      <section className="system-login-shell">
+        <Card className="system-login-card" styles={{ body: { padding: 0 } }}>
+          <div className="system-login-card-inner">
+            <div className="system-login-mark">
+              <CalendarCheck2 size={22} />
+            </div>
+            <Typography.Title level={1} className="system-login-title">
+              登录系统
+            </Typography.Title>
+            <Typography.Text className="system-login-subtitle">进入 Work Calendar AI 工作台</Typography.Text>
+
+            {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
+            <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
+              <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
+                <Input placeholder="请输入邮箱或手机号" />
+              </Form.Item>
+              <Form.Item name="password" label="密码" rules={[{ required: true }]}>
+                <Input.Password placeholder="请输入密码" />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" block icon={<LogIn size={16} />} loading={login.isPending}>
+                {login.isPending ? "正在验证身份…" : "进入工作台"}
+              </Button>
+            </Form>
+
+            <div className="system-login-links">
+              <Button type="link" onClick={() => setResetModalOpen(true)}>
+                忘记密码
+              </Button>
+              <button type="button" onClick={() => router.push("/")}>
+                <span>没有企业账号？</span>
+                <strong>免费创建企业</strong>
+                <ArrowRight size={15} />
+              </button>
             </div>
           </div>
-          <Typography.Title level={2} className="!mb-1 !text-center !font-medium">
-            进入 Work Calendar AI
-          </Typography.Title>
-          <Typography.Text className="block text-center text-muted">使用企业账号登录你的 AI 工作空间</Typography.Text>
-          {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
-          <Form
-            className="login-form mt-6"
-            layout="vertical"
-            onFinish={(values) => login.mutate(values)}
-          >
-            <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
-              <Input placeholder="请输入邮箱或手机号" />
-            </Form.Item>
-            <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-              <Input.Password placeholder="请输入密码" />
-            </Form.Item>
-            <Button className="login-submit" type="primary" htmlType="submit" block loading={login.isPending}>
-              {login.isPending ? "AI 正在验证企业身份…" : "进入工作空间"}
-            </Button>
-            <Button className="login-forgot-link" type="link" block onClick={() => setResetModalOpen(true)}>
-              忘记密码
-            </Button>
-            <button className="login-create-link" type="button" onClick={() => router.push("/")}>
-              <span>没有企业账号？</span>
-              <strong>立即创建 AI 工作空间</strong>
-              <ArrowRight size={15} />
-            </button>
-          </Form>
         </Card>
-      </div>
-      <footer className="absolute bottom-5 left-0 right-0 z-10 px-4 text-center text-xs leading-6 text-muted">
-        <div>北京七数智联科技有限公司</div>
-        <div>企业数据均保密，管理员可随时导出备份。</div>
+        <div className="system-login-note">
+          <strong>系统入口</strong>
+          <span>官网负责产品介绍与免费试用，登录页仅用于已有账号进入工作台。</span>
+        </div>
+      </section>
+
+      <footer className="system-login-footer">
+        北京七数智联科技有限公司 · 企业数据按租户隔离，管理员可导出数据备份
       </footer>
-      <Modal
-        title="重置密码"
-        open={resetModalOpen}
-        onCancel={() => setResetModalOpen(false)}
-        footer={null}
-      >
+
+      <Modal title="重置密码" open={resetModalOpen} onCancel={() => setResetModalOpen(false)} footer={null}>
         {requestPasswordReset.error ? <Alert className="mb-4" type="error" showIcon message={(requestPasswordReset.error as Error).message} /> : null}
         {confirmPasswordReset.error ? <Alert className="mb-4" type="error" showIcon message={(confirmPasswordReset.error as Error).message} /> : null}
         <Form form={resetForm} layout="vertical" onFinish={(values) => requestPasswordReset.mutate(values)}>
@@ -210,13 +136,7 @@ export default function LoginPage() {
           </Button>
         </Form>
         {devResetToken ? (
-          <Alert
-            className="my-4"
-            type="info"
-            showIcon
-            message="本地演示重置令牌"
-            description={devResetToken}
-          />
+          <Alert className="my-4" type="info" showIcon message="本地演示重置令牌" description={devResetToken} />
         ) : null}
         <Form form={confirmResetForm} layout="vertical" onFinish={(values) => confirmPasswordReset.mutate(values)}>
           <Form.Item name="token" label="重置令牌" rules={[{ required: true }]}>

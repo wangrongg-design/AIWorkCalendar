@@ -1,0 +1,106 @@
+.analysis-page {
+  padding-top: 22rpx;
+}
+
+.analysis-header {
+  margin-bottom: 18rpx;
+}
+
+.period-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 20rpx;
+}
+
+.metric {
+  min-width: 0;
+  border: 1rpx solid #E6E6E6;
+  border-radius: 28rpx;
+  background: #FFFFFF;
+  padding: 18rpx 16rpx;
+}
+
+.metric-value {
+  overflow: hidden;
+  color: #0B57D0;
+  font-size: 33rpx;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-value.warning {
+  color: #D97706;
+}
+
+.metric-value.risk {
+  color: #EE3B2B;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  color: #737373;
+  font-size: 22rpx;
+}
+
+.insight-section {
+  margin-top: 18rpx;
+  padding: 26rpx;
+}
+
+.insight-section.primary {
+  border-color: #CCFBF1;
+  background: #ECFDF9;
+}
+
+.section-kicker {
+  color: #0F766E;
+  font-size: 23rpx;
+  font-weight: 900;
+}
+
+.section-kicker.warning {
+  color: #D97706;
+}
+
+.section-body {
+  margin-top: 10rpx;
+  color: #1A1A1A;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.inline-action {
+  width: 190rpx;
+  height: 66rpx;
+  margin-top: 18rpx;
+  border-radius: 20rpx;
+  background: #FEF2F2;
+  color: #EE3B2B;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 66rpx;
+}
+
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-top: 22rpx;
+}
+
+.loading {
+  margin-top: 20rpx;
+  color: #737373;
+  font-size: 24rpx;
+  text-align: center;
+}

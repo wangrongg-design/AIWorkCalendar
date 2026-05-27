@@ -7,6 +7,7 @@ import { PrismaService } from "../../common/prisma.service";
 import { SubscriptionService } from "../../common/subscription/subscription.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
+import { normalizeUnifiedSocialCreditCode } from "../../common/unified-social-credit-code";
 import { CreateDepartmentDto, UpdateDepartmentDto } from "./dto/department.dto";
 import { CreateTenantDto } from "./dto/tenant.dto";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
@@ -78,9 +79,10 @@ export class OrgService {
     if (!this.access.isSuperAdmin(user)) {
       throw new BadRequestException("Only super admin can create tenants");
     }
-    const existing = await this.prisma.tenant.findUnique({ where: { code: dto.code } });
+    const code = normalizeUnifiedSocialCreditCode(dto.code);
+    const existing = await this.prisma.tenant.findUnique({ where: { code } });
     if (existing && !existing.deletedAt) {
-      throw new BadRequestException("Tenant code already exists");
+      throw new BadRequestException("该统一社会信用代码已注册");
     }
     const adminEmail = normalizeEmail(dto.adminEmail);
     if (!adminEmail) {
@@ -98,9 +100,9 @@ export class OrgService {
 
     return this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.upsert({
-        where: { code: dto.code },
+        where: { code },
         update: { name: dto.name, logoUrl, deletedAt: null },
-        create: { name: dto.name, code: dto.code, logoUrl }
+        create: { name: dto.name, code, logoUrl }
       });
       const periodEnd = new Date();
       periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);

@@ -24,9 +24,14 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            CalendarDashboardView {
-                selectedTab = .entry
-            }
+            CalendarDashboardView(
+                onCreateReport: {
+                    selectedTab = .entry
+                },
+                onOpenProjects: {
+                    selectedTab = .projects
+                }
+            )
                 .tabItem {
                     Label("AI日历", systemImage: "calendar")
                 }

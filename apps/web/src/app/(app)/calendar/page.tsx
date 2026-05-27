@@ -306,6 +306,14 @@ export default function CalendarPage() {
   const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
   const todayStats = todayDetail.data?.stats;
+  const todayFilledNames = useMemo(
+    () => (todayDetail.data?.filledEmployees ?? []).map((employee) => employee.name).slice(0, 6),
+    [todayDetail.data?.filledEmployees]
+  );
+  const todayMissingNames = useMemo(
+    () => (todayDetail.data?.missingEmployees ?? []).map((employee) => employee.name).slice(0, 6),
+    [todayDetail.data?.missingEmployees]
+  );
   const todayReferenceCount = useMemo(
     () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
     [todayDetail.data?.filledEmployees]
@@ -316,8 +324,8 @@ export default function CalendarPage() {
     if (todayStats.filledCount === 0) return "今天还没有提交记录，建议先提醒团队完成日报或计划。";
     if (todayStats.riskCount > 0) return `今日发现 ${todayStats.riskCount} 条风险/阻塞，建议优先查看风险记录并同步负责人。`;
     if (todayStats.missingCount > 0) return `今日 ${todayStats.missingCount} 位成员未填报，整体填报率 ${todayStats.fillRate}%。`;
-    return `今日填报已完成，团队合计 ${todayStats.totalHours}h，本月填报率 ${summary.rate}%。`;
-  }, [calendar.isFetching, summary.rate, todayDetail.isFetching, todayStats]);
+    return `今日填报已完成，团队合计 ${todayStats.totalHours}h，可以继续查看具体记录。`;
+  }, [calendar.isFetching, todayDetail.isFetching, todayStats]);
   const detailStats = dayDetail.data?.stats;
   const detailFilledEmployees = dayDetail.data?.filledEmployees ?? [];
   const detailMissingEmployees = dayDetail.data?.missingEmployees ?? [];
@@ -472,7 +480,7 @@ export default function CalendarPage() {
           <Typography.Title level={3} className="page-title">
             AI日历
           </Typography.Title>
-          <Typography.Text className="page-subtitle">月度看板、团队填报率、风险日期和日期详情集中在这里。</Typography.Text>
+          <Typography.Text className="page-subtitle">进入后先看今天、最近日期、填报状态和风险提醒。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel dashboard-calendar-toolbar">
           <DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} allowClear={false} />
@@ -518,127 +526,121 @@ export default function CalendarPage() {
         </Space>
       </div>
 
-      <div className="workbench-hero">
-        <div className="workbench-ai">
-          <div className="workbench-ai-kicker">
-            <Bot size={16} />
-            AI 今日摘要
-          </div>
-          <div className="workbench-ai-title">{todayAiSummary}</div>
-          <div className="workbench-ai-evidence">
-            <span>范围：{scope === "company" ? "全公司" : scope === "department" ? "本部门" : "只看自己"}</span>
-            <span>日期：{today}</span>
-            <span>参考：{todayReferenceCount} 条记录</span>
-          </div>
-        </div>
-        <div className="workbench-actions">
-          <button type="button" onClick={() => setSelectedDate(today)} className="workbench-action">
-            <CalendarPlus size={18} />
-            <span>查看今日详情</span>
-          </button>
-          <button type="button" onClick={() => setChatOpen(true)} className="workbench-action">
-            <Bot size={18} />
-            <span>打开AI洞察</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="workbench-metrics">
-        <div className="metric-card">
-          <div className="metric-label">今日填报率</div>
-          <div className="metric-value">{todayStats?.fillRate ?? 0}%</div>
-          <Progress percent={todayStats?.fillRate ?? 0} showInfo={false} strokeColor="var(--color-primary)" />
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">已填 / 应填</div>
-          <div className="metric-value">
-            {todayStats?.filledCount ?? 0}/{todayStats?.totalEmployees ?? 0}
-          </div>
-          <div className="metric-hint">按当前权限范围统计</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">今日风险</div>
-          <div className="metric-value text-danger">{todayStats?.riskCount ?? 0}</div>
-          <div className="metric-hint">{(todayStats?.riskCount ?? 0) > 0 ? "需要优先处理" : "暂无明显风险"}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">本月趋势</div>
-          <div className="metric-value">{summary.rate}%</div>
-          <div className="metric-hint">风险 {summary.risks} · {summary.totalHours}h</div>
-        </div>
-      </div>
-
-      <div className="calendar-summary-strip">
-        <div className="calendar-summary-item">
-          <span className="calendar-summary-label">本月填报率</span>
-          <span className="calendar-summary-value">{summary.rate}%</span>
-        </div>
-        <div className="calendar-summary-item">
-          <span className="calendar-summary-label">累计已填报</span>
-          <span className="calendar-summary-value">{summary.filled}</span>
-        </div>
-        <div className="calendar-summary-item">
-          <span className="calendar-summary-label">累计未填报</span>
-          <span className="calendar-summary-value">{summary.missing}</span>
-        </div>
-        <div className="calendar-summary-item">
-          <span className="calendar-summary-label">风险日期</span>
-          <span className="calendar-summary-value text-danger">{(calendar.data?.days ?? []).filter((day) => day.riskCount > 0).length}</span>
-        </div>
-        <div className="calendar-summary-item">
-          <span className="calendar-summary-label">工时合计</span>
-          <span className="calendar-summary-value">{summary.totalHours}h</span>
-        </div>
-        <div className="calendar-summary-item">
-          <span className="calendar-summary-label">风险数量</span>
-          <span className="calendar-summary-value text-danger">{summary.risks}</span>
-        </div>
-      </div>
-
-      <div className="surface-panel dashboard-calendar-grid calendar-board-scroll">
-        {weekLabels.map((label) => (
-          <div key={label} className="dashboard-week-label border-b border-line bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
-            周{label}
-          </div>
-        ))}
-        {cells.map((cell, index) => {
-          if (!cell) {
-            return <div key={`empty-${index}`} className="calendar-empty-cell" />;
-          }
-          const key = cell.format("YYYY-MM-DD");
-          const day = dayMap.get(key);
-          const kind = dateKind(key);
-          const isToday = kind === "today";
-          const isFuture = kind === "future";
-          return (
-            <button
-              key={key}
-              type="button"
-              className={`calendar-cell text-left ${isToday ? "is-today" : ""} ${isFuture ? "is-future" : "is-past"}`}
-              onClick={() => setSelectedDate(key)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{cell.date()}</span>
-                </div>
-                {day?.riskCount ? <Tag className="calendar-risk-tag" color="red">风险 {day.riskCount}</Tag> : null}
+      <section className="calendar-main-panel calendar-main-panel-full">
+          <div className="workbench-hero">
+            <div className="workbench-ai">
+              <div className="workbench-ai-kicker">
+                <Bot size={16} />
+                AI 今日摘要
               </div>
-              <div className="calendar-cell-body mt-4 grid grid-cols-2 gap-2 text-xs">
-                <div className="calendar-count flex items-center gap-1 text-ink">
-                  <CheckCircle2 size={14} /> {isFuture ? "已计划" : "已填"} {day?.filledCount ?? 0}
-                </div>
-                <div className="calendar-count muted flex items-center gap-1 text-muted">
-                  <UsersRound size={14} /> {isFuture ? "未计划" : "未填"} {day?.missingCount ?? 0}
-                </div>
-                <div className="calendar-rate-track col-span-2">
-                  <div className="calendar-rate-fill" style={{ width: `${day?.fillRate ?? 0}%` }} />
-                </div>
-                <div className="calendar-rate-label col-span-2 text-muted">{isFuture ? "计划率" : "填报率"} {day?.fillRate ?? 0}%</div>
+              <div className="workbench-ai-title">{todayAiSummary}</div>
+              <div className="workbench-ai-evidence">
+                <span>范围：{scope === "company" ? "全公司" : scope === "department" ? "本部门" : "只看自己"}</span>
+                <span>今天：{today}</span>
+                <span>参考：{todayReferenceCount} 条记录</span>
               </div>
-            </button>
-          );
-        })}
-      </div>
+            </div>
+            <div className="workbench-actions">
+              <button type="button" onClick={() => setSelectedDate(today)} className="workbench-action">
+                <CalendarPlus size={18} />
+                <span>查看今日详情</span>
+              </button>
+              <button type="button" onClick={() => setChatOpen(true)} className="workbench-action">
+                <Bot size={18} />
+                <span>打开AI洞察</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="workbench-metrics is-today-only">
+            <div className="metric-card">
+              <div className="metric-label">今日填报率</div>
+              <div className="metric-value">{todayStats?.fillRate ?? 0}%</div>
+              <Progress percent={todayStats?.fillRate ?? 0} showInfo={false} strokeColor="var(--color-primary)" />
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">已填 / 应填</div>
+              <div className="metric-value">
+                {todayStats?.filledCount ?? 0}/{todayStats?.totalEmployees ?? 0}
+              </div>
+              <div className="metric-hint">按当前权限范围统计</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">今日风险</div>
+              <div className="metric-value text-danger">{todayStats?.riskCount ?? 0}</div>
+              <div className="metric-hint">{(todayStats?.riskCount ?? 0) > 0 ? "需要优先处理" : "暂无明显风险"}</div>
+            </div>
+          </div>
+
+          <div className="calendar-today-people-panel">
+            <div>
+              <div className="calendar-today-people-title">今日信息</div>
+              <div className="calendar-today-people-copy">
+                {todayStats?.missingCount ? `今天还有 ${todayStats.missingCount} 人未填报，需要补日报。` : "今天没有缺填成员，可以继续查看具体日报。"}
+              </div>
+            </div>
+            <div className="calendar-today-people-list">
+              <div>
+                <span>已填</span>
+                <strong>{todayFilledNames.length ? todayFilledNames.join("、") : "暂无"}</strong>
+              </div>
+              <div>
+                <span>未填</span>
+                <strong>{todayMissingNames.length ? todayMissingNames.join("、") : "暂无"}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="surface-panel dashboard-calendar-grid calendar-board-scroll">
+            {weekLabels.map((label) => (
+              <div key={label} className="dashboard-week-label border-b border-line bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
+                周{label}
+              </div>
+            ))}
+            {cells.map((cell, index) => {
+              if (!cell) {
+                return <div key={`empty-${index}`} className="calendar-empty-cell" />;
+              }
+              const key = cell.format("YYYY-MM-DD");
+              const day = dayMap.get(key);
+              const kind = dateKind(key);
+              const isToday = kind === "today";
+              const isFuture = kind === "future";
+              const filledCount = day?.filledCount ?? 0;
+              const missingCount = day?.missingCount ?? 0;
+              const totalCount = filledCount + missingCount;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={`calendar-cell text-left ${isToday ? "is-today" : ""} ${isFuture ? "is-future" : "is-past"}`}
+                  onClick={() => setSelectedDate(key)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{cell.date()}</span>
+                    </div>
+                    {day?.riskCount ? <Tag className="calendar-risk-tag" color="red">风险 {day.riskCount}</Tag> : null}
+                  </div>
+                  <div className="calendar-cell-body mt-4 text-xs">
+                    <div className="calendar-count flex items-center gap-1 text-ink">
+                      <CheckCircle2 size={14} /> {isFuture ? "计划" : "填报"} {filledCount}/{totalCount}
+                    </div>
+                    {missingCount > 0 ? (
+                      <div className="calendar-count muted flex items-center gap-1 text-muted">
+                        <UsersRound size={14} /> {isFuture ? "未计划" : "未填"} {missingCount}
+                      </div>
+                    ) : null}
+                    <div className="calendar-rate-track">
+                      <div className="calendar-rate-fill" style={{ width: `${day?.fillRate ?? 0}%` }} />
+                    </div>
+                    <div className="calendar-rate-label text-muted">{isFuture ? "计划率" : "填报率"} {day?.fillRate ?? 0}%</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+      </section>
 
       <Modal
         title="新增填报"

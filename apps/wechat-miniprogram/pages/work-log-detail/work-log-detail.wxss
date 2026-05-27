@@ -27,41 +27,38 @@
 }
 
 .detail-subtitle text {
-  border-radius: 999rpx;
+  border-radius: 18rpx;
   background: #F6F6F6;
   padding: 6rpx 14rpx;
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rpx;
-  overflow: hidden;
-  padding: 0;
-}
-
-.metric {
-  background: #FFFFFF;
-  padding: 22rpx 10rpx;
-  text-align: center;
-}
-
-.metric-value {
-  color: #1A1A1A;
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.metric-label {
-  margin-top: 7rpx;
-  color: #737373;
-  font-size: 21rpx;
 }
 
 .detail-section,
 .ai-detail-section {
   margin-top: 20rpx;
-  padding: 28rpx;
+  padding: 32rpx;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+  border-top: 1rpx solid #E6E6E6;
+  padding-top: 20rpx;
+  margin-top: 20rpx;
+  color: #424242;
+  font-size: 26rpx;
+  line-height: 1.45;
+}
+
+.info-row text:first-child {
+  flex-shrink: 0;
+  color: #737373;
+}
+
+.info-row text:last-child {
+  min-width: 0;
+  text-align: right;
+  word-break: break-all;
 }
 
 .content-text {
@@ -126,12 +123,16 @@
 }
 
 .keyword-row text {
-  border-radius: 999rpx;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 18rpx;
   background: #FFFFFF;
   padding: 6rpx 14rpx;
   color: #0F766E;
   font-size: 22rpx;
   font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attachment-list {
@@ -146,9 +147,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 18rpx;
-  border-radius: 20rpx;
+  border-radius: 16rpx;
   background: #F6F6F6;
   padding: 18rpx 20rpx;
+}
+
+.attachment-item > view:first-child {
+  min-width: 0;
+  flex: 1 1 0;
 }
 
 .attachment-name {

@@ -2,6 +2,7 @@
   "pages": [
     "pages/login/login",
     "pages/calendar/calendar",
+    "pages/ai-analysis/ai-analysis",
     "pages/report/report",
     "pages/work-logs/work-logs",
     "pages/work-log-detail/work-log-detail",
@@ -11,7 +12,7 @@
     "pages/day-detail/day-detail"
   ],
   "window": {
-    "navigationBarTitleText": "Work Calendar AI",
+    "navigationBarTitleText": "AIWorkCalendar",
     "navigationBarBackgroundColor": "#F6F6F6",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#F6F6F6",
@@ -44,17 +45,6 @@
         "text": "我的"
       }
     ]
-  },
-  "permission": {
-    "scope.record": {
-      "desc": "用于语音识别快速填写工作日报和计划"
-    }
-  },
-  "plugins": {
-    "WechatSI": {
-      "version": "0.3.5",
-      "provider": "wx069ba97219f66d99"
-    }
   },
   "style": "v2",
   "lazyCodeLoading": "requiredComponents"

@@ -1,50 +1,34 @@
-.risk-toggle {
-  flex-shrink: 0;
-  width: 156rpx;
-  height: 72rpx;
-  border-radius: 999rpx;
-  background: #FFFFFF;
-  color: #0B57D0;
-  font-size: 24rpx;
-  font-weight: 800;
+.projects-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
 }
 
-.risk-toggle.active {
+.project-ai-panel {
+  margin-top: 0;
+}
+
+.project-ai-action {
+  width: 196rpx;
+  height: 64rpx;
+  margin-top: 18rpx;
+  border-radius: 20rpx;
+  background: #0F766E;
+  color: #FFFFFF;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 64rpx;
+}
+
+.project-ai-action.active {
   background: #FEF2F2;
   color: #EE3B2B;
 }
 
-.ai-project-panel {
-  border: 1rpx solid #E6E6E6;
-  border-radius: 28rpx;
-  background: #ECFDF9;
-  padding: 24rpx;
-}
-
-.ai-project-kicker {
-  color: #0F766E;
-  font-size: 22rpx;
-  font-weight: 800;
-}
-
-.ai-project-title {
-  margin-top: 8rpx;
-  color: #1A1A1A;
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.ai-project-desc {
-  margin-top: 6rpx;
-  color: #424242;
-  font-size: 24rpx;
-  line-height: 1.5;
-}
-
 .search-input {
   width: 100%;
-  height: 86rpx;
-  margin-top: 20rpx;
+  height: 88rpx;
+  border: 1rpx solid #E6E6E6;
   border-radius: 24rpx;
   background: #FFFFFF;
   padding: 0 26rpx;
@@ -52,19 +36,23 @@
   font-size: 27rpx;
 }
 
-.project-list {
+.list-stack {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
-  margin-top: 20rpx;
+  gap: 2rpx;
+  overflow: hidden;
+  border: 1rpx solid #E6E6E6;
+  border-radius: 32rpx;
+  background: #FFFFFF;
 }
 
 .project-row {
-  border: 1rpx solid #E6E6E6;
-  border-radius: 28rpx;
   background: #FFFFFF;
   padding: 24rpx;
-  box-shadow: 0 4rpx 14rpx rgba(60, 64, 67, 0.04);
+}
+
+.project-row + .project-row {
+  border-top: 1rpx solid #E6E6E6;
 }
 
 .project-head {
@@ -86,7 +74,7 @@
 
 .status-badge {
   flex-shrink: 0;
-  border-radius: 999rpx;
+  border-radius: 18rpx;
   background: #F6F6F6;
   padding: 7rpx 14rpx;
   color: #737373;
@@ -130,28 +118,7 @@
   color: #EE3B2B;
 }
 
-.empty-state {
-  margin-top: 24rpx;
-  border-radius: 28rpx;
-  background: #FFFFFF;
-  padding: 46rpx 28rpx;
-  text-align: center;
-}
-
-.empty-title {
-  color: #1A1A1A;
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.empty-desc {
-  margin-top: 8rpx;
-  color: #737373;
-  font-size: 24rpx;
-}
-
 .loading {
-  margin-top: 20rpx;
   color: #737373;
   font-size: 24rpx;
   text-align: center;

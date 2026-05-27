@@ -8,6 +8,9 @@ const today = new Date();
 const todayKey = dateKey(today);
 const yesterdayKey = dateKey(addDays(today, -1));
 const tomorrowKey = dateKey(addDays(today, 1));
+const DEMO_COMPANY_NAME = "北京星澜智能科技有限公司";
+const DEMO_UNIFIED_SOCIAL_CREDIT_CODE = "91110105MA01A1B2X3";
+const UNIFIED_SOCIAL_CREDIT_CODE_PATTERN = /^[0-9A-HJ-NPQRTUWXY]{18}$/;
 const ACTIVE_MEMBER_MONTHLY_PRICE_CENTS = 1900;
 const BILLING_PLANS = [
   {
@@ -23,8 +26,8 @@ const BILLING_PLANS = [
 
 const tenant = {
   id: "tenant-demo",
-  name: "示例科技有限公司",
-  code: "demo",
+  name: DEMO_COMPANY_NAME,
+  code: DEMO_UNIFIED_SOCIAL_CREDIT_CODE,
   logoUrl: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -32,48 +35,16 @@ const tenant = {
 };
 const tenants = [tenant];
 
-const departments = [
-  { id: "dept-engineering", tenantId: tenant.id, name: "研发部", parentId: null },
-  { id: "dept-product", tenantId: tenant.id, name: "产品部", parentId: null }
-];
+const departments = createDemoDepartments();
 
-const projects = [
-  {
-    id: "project-work-calendar",
-    tenantId: tenant.id,
-    code: "WCA",
-    name: "Work Calendar AI 商业化版本",
-    description: "围绕日报、计划、日历看板、AI 汇报和发布准备的核心产品项目。",
-    status: "ACTIVE",
-    ownerUserId: "manager",
-    startDate: dateKey(addDays(today, -14)),
-    endDate: dateKey(addDays(today, 45)),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    deletedAt: null
-  },
-  {
-    id: "project-ai-report",
-    tenantId: tenant.id,
-    code: "AIR",
-    name: "AI 汇报能力优化",
-    description: "优化 AI 分析、问答和日报周报生成质量。",
-    status: "ACTIVE",
-    ownerUserId: "admin",
-    startDate: dateKey(addDays(today, -7)),
-    endDate: dateKey(addDays(today, 30)),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    deletedAt: null
-  }
-];
+const projects = createDemoProjects();
 
 const subscription = {
   id: "sub-demo",
   tenantId: tenant.id,
   plan: "TEAM",
   status: "ACTIVE",
-  seatLimit: 5,
+  seatLimit: 14,
   currentPeriodStart: todayKey,
   currentPeriodEnd: dateKey(addDays(today, 365)),
   trialEndsAt: null,
@@ -87,21 +58,10 @@ const subscription = {
 };
 const subscriptions = new Map([[subscription.tenantId, subscription]]);
 
-const users = [
-  makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD, "13900000001", false),
-  makeUser("admin", "admin@example.com", "企业管理员", null, ["COMPANY_ADMIN"], tenant.id, PASSWORD, "13900000002", false),
-  makeUser("manager", "manager@example.com", "研发经理", "dept-engineering", ["DEPARTMENT_MANAGER"], tenant.id, PASSWORD, "13900000003", true),
-  makeUser("employee", "employee@example.com", "研发员工一", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000004", true),
-  makeUser("employee2", "employee2@example.com", "产品员工一", "dept-product", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000005", true)
-];
+const users = createDemoUsers();
 
 const analyses = new Map();
-const workLogs = [
-  workLog("log-1", "employee", todayKey, "完成日报月历查询", "实现管理驾驶舱的月历查询接口，补充部门权限过滤，并完成接口自测。风险是月末大数据量需要继续压测。", 3.5, "project-work-calendar"),
-  workLog("log-2", "manager", todayKey, "评审 AI 分析提示词", "评审工作填报 AI 分析 Prompt，明确成果、风险、阻塞字段的 JSON 输出结构。明天继续观察失败重试。", 2, "project-ai-report"),
-  workLog("log-3", "employee2", yesterdayKey, "梳理组织权限页面", "梳理企业管理员新增部门和员工的最小闭环，确认第一版不加入审批流。", 3, "project-work-calendar"),
-  workLog("log-4", "employee", tomorrowKey, "发布前联调计划", "计划完成登录、填报、日历详情和 AI 汇报的发布前联调，并检查阿里云生产环境变量。潜在风险是 DeepSeek Key 未配置。", 2, "project-work-calendar")
-];
+const workLogs = createDemoWorkLogs();
 for (const log of workLogs) {
   analyses.set(log.id, createAnalysis(log));
 }
@@ -261,6 +221,98 @@ function workLog(id, userId, date, title, content, hours, projectId = null) {
   };
 }
 
+function createDemoDepartments() {
+  return [
+    { id: "dept-executive", tenantId: tenant.id, name: "总经办", parentId: null },
+    { id: "dept-market", tenantId: tenant.id, name: "市场部", parentId: "dept-executive" },
+    { id: "dept-engineering", tenantId: tenant.id, name: "研发部", parentId: "dept-executive" },
+    { id: "dept-admin", tenantId: tenant.id, name: "行政部", parentId: "dept-executive" }
+  ];
+}
+
+function createDemoUsers() {
+  return [
+    makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD, "13900000001", false),
+    makeUser("admin", "admin@example.com", "林知远", "dept-executive", ["COMPANY_ADMIN"], tenant.id, PASSWORD, "13900000002", true),
+    makeUser("market-manager", "market.manager@example.com", "周婧", "dept-market", ["DEPARTMENT_MANAGER"], tenant.id, PASSWORD, "13900000003", true),
+    makeUser("market-ops", "market.ops@example.com", "陈思琪", "dept-market", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000004", true),
+    makeUser("employee2", "employee2@example.com", "赵一然", "dept-market", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000005", true),
+    makeUser("market-content", "market.content@example.com", "吴佳宁", "dept-market", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000006", true),
+    makeUser("market-growth", "market.growth@example.com", "孙浩", "dept-market", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000007", true),
+    makeUser("manager", "manager@example.com", "唐明远", "dept-engineering", ["DEPARTMENT_MANAGER"], tenant.id, PASSWORD, "13900000008", true),
+    makeUser("employee", "employee@example.com", "李俊辰", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000009", true),
+    makeUser("rd-backend", "rd.backend@example.com", "何宇航", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000010", true),
+    makeUser("rd-frontend", "rd.frontend@example.com", "许嘉言", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000011", true),
+    makeUser("rd-qa", "rd.qa@example.com", "高宁", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000012", true),
+    makeUser("rd-ai", "rd.ai@example.com", "罗子涵", "dept-engineering", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000013", true),
+    makeUser("admin-ops", "admin.ops@example.com", "宋雨", "dept-admin", ["DEPARTMENT_MANAGER"], tenant.id, PASSWORD, "13900000014", true),
+    makeUser("admin-hr", "admin.hr@example.com", "邱雅楠", "dept-admin", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000015", true)
+  ];
+}
+
+function createDemoProjects() {
+  return [
+    {
+      id: "project-growth",
+      tenantId: tenant.id,
+      code: "GROWTH",
+      name: "Q2 重点客户增长计划",
+      description: "围绕重点行业客户线索、渠道活动和转化复盘推进市场增长。",
+      status: "ACTIVE",
+      ownerUserId: "market-manager",
+      startDate: dateKey(addDays(today, -20)),
+      endDate: dateKey(addDays(today, 50)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null
+    },
+    {
+      id: "project-work-calendar",
+      tenantId: tenant.id,
+      code: "AICAL",
+      name: "AI 工作日历产品迭代",
+      description: "持续完善 AI 日历、日报附件、智能汇报和组织权限体验。",
+      status: "ACTIVE",
+      ownerUserId: "manager",
+      startDate: dateKey(addDays(today, -14)),
+      endDate: dateKey(addDays(today, 45)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null
+    },
+    {
+      id: "project-operations",
+      tenantId: tenant.id,
+      code: "OPS",
+      name: "企业运营支持体系",
+      description: "优化入职、办公资产、行政采购和跨部门支持流程。",
+      status: "ACTIVE",
+      ownerUserId: "admin-ops",
+      startDate: dateKey(addDays(today, -10)),
+      endDate: dateKey(addDays(today, 35)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null
+    }
+  ];
+}
+
+function createDemoWorkLogs() {
+  return [
+    workLog("log-ceo-today", "admin", todayKey, "确定二季度重点客户推进节奏", "上午和市场、研发负责人确认 Q2 重点客户推进节奏，要求本周完成 3 家标杆客户方案复盘。需要关注大客户交付排期和售前资源冲突。", 1.5, "project-growth"),
+    workLog("log-market-manager-today", "market-manager", todayKey, "复盘渠道线索转化", "梳理本月渠道线索 42 条，确认 8 条进入销售跟进池。发现华东区域活动转化偏低，明天需要补充客户画像分析。", 2.5, "project-growth"),
+    workLog("log-market-ops-today", "market-ops", todayKey, "整理华东客户回访清单", "完成华东 18 家客户回访清单整理，补充行业、规模、痛点和下一步触达时间，已同步给销售同事。", 3, "project-growth"),
+    workLog("log-rd-manager-today", "manager", todayKey, "评审 AI 日历性能方案", "评审 AI 日历月视图性能优化方案，确认缓存粒度和按部门权限裁剪策略，风险是历史数据量增长后还需要继续压测。", 2, "project-work-calendar"),
+    workLog("log-rd-frontend-today", "employee", todayKey, "完成日报详情附件预览", "完成日报详情中的附件预览和下载入口，照片、PDF、Word 均可在详情区查看，准备联调小程序附件展示。", 3.5, "project-work-calendar"),
+    workLog("log-rd-backend-today", "rd-backend", todayKey, "修复注册计费联调问题", "修复企业注册后订阅初始化和本地演示计费接口，确认专业版按启用成员数计算金额。", 2.5, "project-work-calendar"),
+    workLog("log-admin-ops-today", "admin-ops", todayKey, "更新办公采购和入职物料", "整理本周新员工入职物料和办公采购清单，确认 2 台笔记本到货时间，行政流程暂无阻塞。", 2, "project-operations"),
+    workLog("log-market-content-yesterday", "market-content", yesterdayKey, "完成行业案例初稿", "完成制造业客户案例初稿，突出 AI 日历对日报沉淀和风险发现的价值，等待客户授权截图。", 4, "project-growth"),
+    workLog("log-rd-qa-yesterday", "rd-qa", yesterdayKey, "执行 Web 回归测试", "完成登录、注册、AI 日历、填报、组织权限和订阅页回归测试，发现 2 个视觉细节问题已记录。", 3.5, "project-work-calendar"),
+    workLog("log-admin-hr-yesterday", "admin-hr", yesterdayKey, "完成员工档案核对", "核对市场部和研发部员工档案，补齐手机号和部门归属，准备下周入职培训安排。", 2, "project-operations"),
+    workLog("log-rd-ai-tomorrow", "rd-ai", tomorrowKey, "AI 汇报质量评估计划", "计划抽样 20 条日报评估 AI 汇报结构，重点检查风险、阻塞和建议动作是否可执行。", 2, "project-work-calendar")
+  ];
+}
+
 function createAnalysis(log) {
   const text = `${log.title} ${log.content}`;
   const risks = /风险|问题|阻塞|延迟/i.test(text) ? ["填报内容中提到风险或问题，需要管理者关注。"] : [];
@@ -285,17 +337,18 @@ function createAnalysis(log) {
 
 function login(res, body) {
   const account = normalizeAccount(body.account ?? body.email);
+  const tenantCode = normalizeOptionalUnifiedSocialCreditCode(body.tenantCode);
   const matches = users.filter((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
     return (
       matchesAccount(item, account) &&
       !item.deletedAt &&
       !ownerTenant?.deletedAt &&
-      (!body.tenantCode || ownerTenant?.code === body.tenantCode)
+      (!tenantCode || ownerTenant?.code === tenantCode)
     );
   });
-  if (matches.length > 1 && !body.tenantCode) {
-    return error(res, 400, "该账号存在于多个企业，请填写企业代码");
+  if (matches.length > 1 && !tenantCode) {
+    return error(res, 400, "该账号存在于多个企业，请填写统一社会信用代码");
   }
   const found = matches[0];
   if (!found || !found.isActive || body.password !== (found.password ?? PASSWORD)) {
@@ -310,13 +363,15 @@ function login(res, body) {
 }
 
 function registerTenant(body) {
-  if (tenants.some((item) => item.code === body.tenantCode)) throw httpError(400, "企业代码已被使用");
+  const tenantCode = normalizeUnifiedSocialCreditCode(body.tenantCode);
+  if (!UNIFIED_SOCIAL_CREDIT_CODE_PATTERN.test(tenantCode)) throw httpError(400, "请输入 18 位营业执照统一社会信用代码");
+  if (tenants.some((item) => item.code === tenantCode)) throw httpError(400, "该统一社会信用代码已注册");
   const tenantId = `tenant-${Date.now()}`;
   const logoUrl = normalizeTenantLogoUrl(body.logoUrl);
   const newTenant = {
     id: tenantId,
     name: body.companyName,
-    code: body.tenantCode,
+    code: tenantCode,
     logoUrl,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -343,7 +398,7 @@ function registerTenant(body) {
   });
   const admin = makeUser(`user-${Date.now()}`, body.adminEmail, body.adminName, null, ["COMPANY_ADMIN"], tenantId, body.password, null, false);
   users.push(admin);
-  audit(admin, "TENANT_REGISTERED", "Tenant", tenantId, { tenantCode: newTenant.code, adminEmail: admin.email });
+  audit(admin, "TENANT_REGISTERED", "Tenant", tenantId, { tenantCode, adminEmail: admin.email });
   return {
     accessToken: `local:${admin.id}`,
     user: me(admin),
@@ -355,19 +410,21 @@ function registerTenant(body) {
 function clearLocalData(user) {
   requireRole(user, ["SUPER_ADMIN"]);
   const now = new Date().toISOString();
-  const periodEnd = dateKey(addMonths(today, 1));
 
   tenants.splice(0, tenants.length, {
     ...tenant,
-    name: "示例科技有限公司",
-    code: "demo",
+    name: DEMO_COMPANY_NAME,
+    code: DEMO_UNIFIED_SOCIAL_CREDIT_CODE,
     updatedAt: now,
     deletedAt: null
   });
-  departments.length = 0;
-  projects.length = 0;
-  workLogs.length = 0;
+  departments.splice(0, departments.length, ...createDemoDepartments());
+  projects.splice(0, projects.length, ...createDemoProjects());
+  workLogs.splice(0, workLogs.length, ...createDemoWorkLogs());
   analyses.clear();
+  for (const log of workLogs) {
+    analyses.set(log.id, createAnalysis(log));
+  }
   reports.length = 0;
   notifications.length = 0;
   billingOrders.length = 0;
@@ -378,22 +435,21 @@ function clearLocalData(user) {
   users.splice(
     0,
     users.length,
-    makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD, "13900000001", false),
-    makeUser("admin", "admin@example.com", "企业管理员", null, ["COMPANY_ADMIN"], tenant.id, PASSWORD, "13900000002", false)
+    ...createDemoUsers()
   );
 
   subscriptions.clear();
   subscriptions.set(tenant.id, {
     id: "sub-demo",
     tenantId: tenant.id,
-    plan: "TRIAL",
-    status: "TRIALING",
-    seatLimit: 0,
+    plan: "TEAM",
+    status: "ACTIVE",
+    seatLimit: 14,
     currentPeriodStart: todayKey,
-    currentPeriodEnd: periodEnd,
-    trialEndsAt: periodEnd,
+    currentPeriodEnd: dateKey(addDays(today, 365)),
+    trialEndsAt: null,
     canceledAt: null,
-    provider: "self_service",
+    provider: "manual",
     externalCustomerId: null,
     externalSubscriptionId: null,
     createdAt: now,
@@ -404,7 +460,7 @@ function clearLocalData(user) {
   return {
     ok: true,
     preservedLogin: {
-      tenantCode: "demo",
+      tenantCode: DEMO_UNIFIED_SOCIAL_CREDIT_CODE,
       email: "admin@example.com",
       password: PASSWORD
     },
@@ -424,9 +480,10 @@ function clearLocalData(user) {
 
 function requestPasswordReset(body) {
   const email = normalizeEmail(body.email);
+  const tenantCode = normalizeOptionalUnifiedSocialCreditCode(body.tenantCode);
   const found = users.find((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
-    return item.email === email && (!body.tenantCode || ownerTenant?.code === body.tenantCode);
+    return item.email === email && (!tenantCode || ownerTenant?.code === tenantCode);
   });
   if (!found) return { ok: true };
   const token = `reset-${Date.now()}-${found.id}`;
@@ -507,9 +564,9 @@ function getOrg(user) {
 
 function createTenant(user, body) {
   requireRole(user, ["SUPER_ADMIN"]);
-  const code = String(body.code ?? "").trim().toLowerCase();
-  if (!/^[a-z0-9-]{2,32}$/.test(code)) throw httpError(400, "企业代码格式不正确");
-  if (tenants.some((item) => item.code === code && !item.deletedAt)) throw httpError(400, "Tenant code already exists");
+  const code = normalizeUnifiedSocialCreditCode(body.code);
+  if (!UNIFIED_SOCIAL_CREDIT_CODE_PATTERN.test(code)) throw httpError(400, "请输入 18 位营业执照统一社会信用代码");
+  if (tenants.some((item) => item.code === code && !item.deletedAt)) throw httpError(400, "该统一社会信用代码已注册");
   const adminEmail = normalizeEmail(body.adminEmail);
   if (!adminEmail) throw httpError(400, "Admin email is required");
   const now = new Date().toISOString();
@@ -1488,6 +1545,15 @@ function normalizeAccount(value) {
     email: text.toLowerCase(),
     phone: normalizePhone(text)
   };
+}
+
+function normalizeUnifiedSocialCreditCode(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function normalizeOptionalUnifiedSocialCreditCode(value) {
+  const normalized = normalizeUnifiedSocialCreditCode(value);
+  return normalized || undefined;
 }
 
 function normalizeTenantLogoUrl(value) {

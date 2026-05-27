@@ -17,7 +17,7 @@ const finalVideoPath = path.join(outputDir, "work-calendar-ai-demo.webm");
 
 const account = process.env.DEMO_ACCOUNT ?? "admin@example.com";
 const password = process.env.DEMO_PASSWORD ?? "Passw0rd!";
-const tenantCode = process.env.DEMO_TENANT_CODE ?? "demo";
+const tenantCode = process.env.DEMO_TENANT_CODE ?? "91110105MA01A1B2X3";
 const headless = process.env.DEMO_HEADLESS !== "false";
 const slowMo = Number(process.env.DEMO_SLOWMO ?? (headless ? "180" : "260"));
 
@@ -56,7 +56,10 @@ async function main() {
       await page.getByRole("button", { name: "已有账号登录" }).click();
       await page.waitForURL("**/login");
       await page.waitForLoadState("networkidle");
-      await replaceInput(page.locator("#tenantCode"), tenantCode);
+      const tenantCodeInput = page.locator("#tenantCode");
+      if ((await tenantCodeInput.count()) > 0) {
+        await replaceInput(tenantCodeInput, tenantCode);
+      }
       await replaceInput(page.locator("#account"), account);
       await replaceInput(page.locator("#password"), password);
       await page.locator("form").filter({ hasText: "邮箱或手机号" }).locator('button[type="submit"]').click();

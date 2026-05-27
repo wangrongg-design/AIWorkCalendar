@@ -1,0 +1,66 @@
+<view class="page analysis-page bottom-safe">
+  <view class="analysis-header">
+    <view class="page-title">AI 整体分析</view>
+    <view class="page-subtitle">{{rangeTitle}}</view>
+  </view>
+
+  <view class="segmented-control period-tabs">
+    <view
+      wx:for="{{periods}}"
+      wx:key="value"
+      class="segmented-item {{periodIndex === index ? 'active' : ''}}"
+      data-index="{{index}}"
+      bindtap="onPeriodChange"
+    >
+      {{item.label}}
+    </view>
+  </view>
+
+  <view class="metric-row">
+    <view class="metric">
+      <view class="metric-value">{{fillRate}}%</view>
+      <view class="metric-label">填报率</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value warning">{{missingCount}}</view>
+      <view class="metric-label">缺填</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value risk">{{riskCount}}</view>
+      <view class="metric-label">风险</view>
+    </view>
+  </view>
+
+  <view class="surface insight-section primary">
+    <view class="section-kicker">核心结论</view>
+    <view class="section-body">{{coreConclusion}}</view>
+  </view>
+
+  <view class="surface insight-section">
+    <view class="section-kicker warning">风险提醒</view>
+    <view class="section-body">{{riskReminder}}</view>
+    <button wx:if="{{firstRiskDate}}" class="inline-action" bindtap="openRiskDay">查看风险日期</button>
+  </view>
+
+  <view class="surface insight-section">
+    <view class="section-kicker">人员状态</view>
+    <view class="section-body">{{peopleStatus}}</view>
+  </view>
+
+  <view class="surface insight-section">
+    <view class="section-kicker">项目进展</view>
+    <view class="section-body">{{projectProgress}}</view>
+  </view>
+
+  <view class="surface insight-section">
+    <view class="section-kicker">建议动作</view>
+    <view class="section-body">{{suggestedAction}}</view>
+    <view class="action-stack">
+      <button class="primary-button" loading="{{generating}}" bindtap="generateWeeklyReport">生成周报</button>
+      <button class="secondary-button" bindtap="remindMissing">提醒未填报</button>
+      <button class="tertiary-button" bindtap="viewRiskProjects">查看风险项目</button>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">分析中...</view>
+</view>

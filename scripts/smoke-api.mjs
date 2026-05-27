@@ -1,4 +1,5 @@
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
+const DEMO_UNIFIED_SOCIAL_CREDIT_CODE = "91110105MA01A1B2X3";
 
 async function request(path, options = {}, token) {
   const headers = new Headers(options.headers);
@@ -19,7 +20,7 @@ function today() {
 const login = await request("/auth/login", {
   method: "POST",
   body: JSON.stringify({
-    tenantCode: "demo",
+    tenantCode: DEMO_UNIFIED_SOCIAL_CREDIT_CODE,
     email: "admin@example.com",
     password: "Passw0rd!"
   })
@@ -75,7 +76,7 @@ console.log("report task created:", report.id, report.status);
 const opsLogin = await request("/auth/login", {
   method: "POST",
   body: JSON.stringify({
-    tenantCode: "demo",
+    tenantCode: DEMO_UNIFIED_SOCIAL_CREDIT_CODE,
     email: "super@example.com",
     password: "Passw0rd!"
   })

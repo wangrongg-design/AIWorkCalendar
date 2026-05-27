@@ -1,19 +1,23 @@
 .profile-header {
-  padding: 14rpx 4rpx 22rpx;
+  padding: 4rpx 0 8rpx;
 }
 
 .profile-name {
+  max-width: 100%;
   color: #1A1A1A;
   font-size: 44rpx;
   font-weight: 900;
   line-height: 1.16;
+  word-break: break-all;
 }
 
 .profile-subtitle {
+  max-width: 100%;
   margin-top: 10rpx;
   color: #737373;
   font-size: 25rpx;
   line-height: 1.45;
+  word-break: break-all;
 }
 
 .metric-grid {
@@ -24,15 +28,20 @@
 
 .metric-card {
   border: 1rpx solid #E6E6E6;
-  border-radius: 26rpx;
+  border-radius: 32rpx;
   background: #FFFFFF;
   padding: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(60, 64, 67, 0.035);
 }
 
 .metric-value {
+  overflow: hidden;
   color: #0B57D0;
   font-size: 38rpx;
   font-weight: 900;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric-value.risk {
@@ -51,35 +60,11 @@
 
 .ai-profile-panel {
   margin-top: 20rpx;
-  border: 1rpx solid #CCFBF1;
-  border-radius: 28rpx;
-  background: #ECFDF9;
-  padding: 24rpx;
-}
-
-.ai-kicker {
-  color: #0F766E;
-  font-size: 22rpx;
-  font-weight: 900;
-}
-
-.ai-title {
-  margin-top: 8rpx;
-  color: #1A1A1A;
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.ai-desc {
-  margin-top: 6rpx;
-  color: #424242;
-  font-size: 24rpx;
-  line-height: 1.5;
 }
 
 .profile-section {
   margin-top: 20rpx;
-  padding: 28rpx;
+  padding: 32rpx;
 }
 
 .info-row {

@@ -6,13 +6,6 @@ function formatHours(value) {
   return Number(number.toFixed(1)).toString();
 }
 
-function timeText(value) {
-  if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "--";
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
 function normalizeAttachment(item) {
   const size = Number(item.fileSize || 0);
   return {
@@ -33,8 +26,6 @@ function normalizeLog(log) {
     ...log,
     dateText: String(log.date || "").slice(0, 10),
     hoursText: formatHours(log.hours),
-    startTimeText: timeText(log.startTime),
-    endTimeText: timeText(log.endTime),
     statusTitle: log.status === "SUBMITTED" ? "已提交" : "草稿",
     projectName: log.project ? (log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name) : "",
     userName: log.user ? log.user.name : "",

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
-import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Sparkles, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -14,6 +14,7 @@ const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
   { key: "/calendar", icon: <CalendarDays size={19} />, label: "AI日历" },
+  { key: "/ai-analysis", icon: <Sparkles size={19} />, label: "AI整体分析" },
   { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报" },
   { key: "/reports", icon: <FileText size={19} />, label: "AI汇报" }
 ];

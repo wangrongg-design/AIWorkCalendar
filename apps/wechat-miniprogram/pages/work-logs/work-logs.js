@@ -43,15 +43,12 @@ Page({
   data: {
     filters,
     filterIndex: 0,
-    filterLabel: "全部",
     searchText: "",
     logs: [],
     filteredLogs: [],
     loading: false,
     emptyTitle: "暂无填报记录",
-    emptyDesc: "提交日报后会显示在这里。",
-    aiConclusion: "暂无填报记录",
-    aiRiskText: "提交日报后会在这里形成可搜索、可复盘的工作记录。"
+    emptyDesc: "提交日报后会显示在这里。"
   },
 
   onShow() {
@@ -73,7 +70,6 @@ Page({
       const logs = (result || []).map(normalizeLog);
       this.setData({ logs }, () => {
         this.applyFilter();
-        this.applyInsight(logs);
       });
     } catch (error) {
       wx.showToast({ title: error.message || "记录加载失败", icon: "none" });
@@ -86,12 +82,10 @@ Page({
     this.setData({ searchText: event.detail.value }, () => this.applyFilter());
   },
 
-  onFilterChange(event) {
-    const filterIndex = Number(event.detail.value);
-    this.setData({
-      filterIndex,
-      filterLabel: filters[filterIndex].label
-    }, () => this.applyFilter());
+  onFilterTap(event) {
+    const filterIndex = Number(event.currentTarget.dataset.index);
+    if (!Number.isFinite(filterIndex)) return;
+    this.setData({ filterIndex }, () => this.applyFilter());
   },
 
   applyFilter() {
@@ -112,16 +106,6 @@ Page({
       filteredLogs,
       emptyTitle: this.data.logs.length ? "没有匹配结果" : "暂无填报记录",
       emptyDesc: this.data.logs.length ? "调整搜索词或筛选条件后再试。" : "提交日报后会显示在这里。"
-    });
-  },
-
-  applyInsight(logs) {
-    const submitted = logs.filter((item) => item.status === "SUBMITTED").length;
-    const riskLogs = logs.filter((item) => item.hasRisk).length;
-    const hours = logs.reduce((sum, item) => sum + Number(item.hours || 0), 0);
-    this.setData({
-      aiConclusion: logs.length ? `${submitted} 条已提交，累计 ${formatHours(hours)} 小时` : "暂无填报记录",
-      aiRiskText: riskLogs > 0 ? `AI 发现 ${riskLogs} 条记录存在风险或阻塞，建议优先复盘。` : "暂无明显风险，工作记录会随持续填报沉淀为团队知识。"
     });
   },
 

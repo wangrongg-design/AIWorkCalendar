@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser } from "@/lib/types";
+import { demoUnifiedSocialCreditCode, normalizeUnifiedSocialCreditCode, unifiedSocialCreditCodeMessage, unifiedSocialCreditCodePattern } from "@/lib/unified-social-credit-code";
 
 type LoginResponse = {
   accessToken: string;
@@ -58,11 +59,16 @@ export default function OpsLoginPage() {
           <Form
             className="mt-6"
             layout="vertical"
-            initialValues={{ tenantCode: "demo", account: "super@example.com", password: "Passw0rd!" }}
+            initialValues={{ tenantCode: demoUnifiedSocialCreditCode, account: "super@example.com", password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
-            <Form.Item name="tenantCode" label="运维账号所属企业代码">
-              <Input placeholder="demo" />
+            <Form.Item
+              name="tenantCode"
+              label="运维账号所属企业统一社会信用代码"
+              normalize={normalizeUnifiedSocialCreditCode}
+              rules={[{ pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
+            >
+              <Input placeholder={demoUnifiedSocialCreditCode} />
             </Form.Item>
             <Form.Item name="account" label="运维账号邮箱或手机号" rules={[{ required: true }]}>
               <Input placeholder="super@example.com / 13900000001" />

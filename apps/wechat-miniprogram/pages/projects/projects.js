@@ -61,6 +61,14 @@ Page({
       wx.reLaunch({ url: "/pages/login/login" });
       return;
     }
+    if (wx.getStorageSync("projectRiskOnly")) {
+      wx.removeStorageSync("projectRiskOnly");
+      this.setData({
+        riskOnly: true,
+        riskToggleText: "查看全部",
+        riskToggleClass: "active"
+      });
+    }
     this.loadProjects();
   },
 
@@ -127,6 +135,6 @@ Page({
     const project = this.data.projects.find((item) => item.id === id);
     if (!project) return;
     wx.setStorageSync("selectedProjectDetail", project);
-    wx.navigateTo({ url: "/pages/project-detail/project-detail" });
+    wx.navigateTo({ url: `/pages/project-detail/project-detail?id=${id}` });
   }
 });

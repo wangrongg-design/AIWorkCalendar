@@ -35,6 +35,8 @@ Page({
     aiIconText: "AI",
     aiConclusion: "今天还没有填报信号",
     aiRiskText: "AI 日历会优先展示风险日期、缺填成员和团队状态。",
+    analysisTitle: "查看本周期整体情况",
+    analysisDesc: "按本周、本月、季度、年度查看核心结论、风险提醒和建议动作。",
     firstRiskDate: "",
     firstRiskDateText: "",
     scopeOptions: [{ value: "self", label: "只看自己" }],
@@ -102,6 +104,10 @@ Page({
     this.loadCalendar();
   },
 
+  openSearch() {
+    wx.switchTab({ url: "/pages/work-logs/work-logs" });
+  },
+
   onScopeChange(event) {
     const index = Number(event.detail.value);
     this.setData({
@@ -125,6 +131,13 @@ Page({
     const scope = this.data.scopeOptions[this.data.scopeIndex].value;
     wx.navigateTo({
       url: `/pages/day-detail/day-detail?date=${this.data.firstRiskDate}&scope=${scope}`
+    });
+  },
+
+  openAnalysis() {
+    const scope = this.data.scopeOptions[this.data.scopeIndex].value;
+    wx.navigateTo({
+      url: `/pages/ai-analysis/ai-analysis?month=${this.data.month}&scope=${scope}`
     });
   },
 
@@ -160,6 +173,12 @@ Page({
       aiIconText: riskDays.length > 0 ? "!" : "AI",
       aiConclusion,
       aiRiskText,
+      analysisTitle: riskDays.length > 0
+        ? `${riskDays.length} 个风险日期需要复盘`
+        : missing > 0
+          ? `${missing} 条缺填记录待处理`
+          : "本周期整体状态稳定",
+      analysisDesc: "查看本周、本月、季度、年度的核心结论、人员状态、项目进展和建议动作。",
       firstRiskDate: firstRisk ? firstRisk.date : "",
       firstRiskDateText: firstRisk ? shortDayTitle(firstRisk.date) : ""
     };

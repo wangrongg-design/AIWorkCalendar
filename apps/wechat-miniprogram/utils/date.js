@@ -63,19 +63,21 @@ function buildMonthGrid(month, days) {
       totalCount: data.filledCount + data.missingCount,
       tone: data.riskCount > 0 ? "risk" : data.fillRate >= 80 ? "good" : data.fillRate > 0 ? "normal" : "empty",
       primaryText: data.riskCount > 0
-        ? `风险 ${data.riskCount}`
+        ? "风险"
         : data.fillRate >= 80
-          ? "已完成"
+          ? "已填"
           : data.fillRate > 0
-            ? `${Math.round(data.fillRate)}%`
+            ? "部分"
             : isFutureDay(key)
               ? "待填"
               : "未填",
-      secondaryText: data.filledCount + data.missingCount > 0
-        ? `已填 ${data.filledCount}/${data.filledCount + data.missingCount}`
-        : isFutureDay(key)
-          ? "未开始"
-          : "无记录"
+      secondaryText: data.riskCount > 0
+        ? "需关注"
+        : data.filledCount + data.missingCount > 0
+          ? `${Math.round(data.fillRate)}%`
+          : isFutureDay(key)
+            ? "未开始"
+            : "无记录"
     });
   }
   const grid = blanks.concat(items);

@@ -2,7 +2,7 @@ const { getToken, clearSession } = require("./storage");
 
 function apiBaseUrl() {
   const app = getApp();
-  return wx.getStorageSync("apiBaseUrl") || app.globalData.apiBaseUrl || "http://localhost:3001";
+  return String(app.globalData.apiBaseUrl || "http://localhost:3001").replace(/\/$/, "");
 }
 
 function request(path, options = {}) {

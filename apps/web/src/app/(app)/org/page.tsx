@@ -8,6 +8,7 @@ import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound
 import { useMemo, useState } from "react";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
+import { normalizeUnifiedSocialCreditCode, unifiedSocialCreditCodeMessage, unifiedSocialCreditCodePattern } from "@/lib/unified-social-credit-code";
 import {
   AuditLog,
   BillingInterval,
@@ -272,7 +273,7 @@ export default function OrgPage() {
 
   const createTenant = useMutation({
     mutationFn: (values: { name: string; code: string; adminEmail: string; adminName: string; adminPassword?: string }) =>
-      apiFetch("/org/tenants", { method: "POST", body: JSON.stringify(values) }),
+      apiFetch("/org/tenants", { method: "POST", body: JSON.stringify({ ...values, code: normalizeUnifiedSocialCreditCode(values.code) }) }),
     onSuccess: () => {
       message.success("企业已创建");
       setTenantModalOpen(false);
@@ -603,7 +604,7 @@ export default function OrgPage() {
             组织权限
           </Typography.Title>
           <Typography.Text className="page-subtitle">
-            {org.data?.tenant.name ?? "企业"} · 企业代码 {org.data?.tenant.code ?? "-"}
+            {org.data?.tenant.name ?? "企业"} · 统一社会信用代码 {org.data?.tenant.code ?? "-"}
           </Typography.Text>
         </div>
         <Space>
@@ -1005,8 +1006,14 @@ export default function OrgPage() {
           <Form.Item name="name" label="企业名称" rules={[{ required: true, min: 2 }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="code" label="企业代码" rules={[{ required: true, pattern: /^[a-z0-9-]{2,32}$/ }]}>
-            <Input placeholder="acme" />
+          <Form.Item
+            name="code"
+            label="统一社会信用代码"
+            extra="请填写营业执照上的 18 位统一社会信用代码，系统将作为企业唯一注册标识。"
+            normalize={normalizeUnifiedSocialCreditCode}
+            rules={[{ required: true, pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
+          >
+            <Input placeholder="例如：91110105MA01A1B2X3" />
           </Form.Item>
           <Form.Item name="adminName" label="初始管理员姓名" rules={[{ required: true, min: 2 }]}>
             <Input />

@@ -1,5 +1,68 @@
 import SwiftUI
 
+fileprivate enum CalendarAnalysisPeriod: String, CaseIterable, Identifiable {
+    case week
+    case month
+    case quarter
+    case year
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .week:
+            return "本周"
+        case .month:
+            return "本月"
+        case .quarter:
+            return "季度"
+        case .year:
+            return "年度"
+        }
+    }
+
+    func range(anchor: Date) -> (start: Date, end: Date) {
+        let calendar = Calendar(identifier: .gregorian)
+        switch self {
+        case .week:
+            let weekday = calendar.component(.weekday, from: anchor)
+            let diffFromMonday = (weekday + 5) % 7
+            let start = calendar.date(byAdding: .day, value: -diffFromMonday, to: calendar.startOfDay(for: anchor)) ?? anchor
+            let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
+            return (start, end)
+        case .month:
+            let components = calendar.dateComponents([.year, .month], from: anchor)
+            let start = calendar.date(from: components) ?? anchor
+            let end = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: start) ?? start
+            return (start, end)
+        case .quarter:
+            let year = calendar.component(.year, from: anchor)
+            let month = calendar.component(.month, from: anchor)
+            let firstQuarterMonth = ((month - 1) / 3) * 3 + 1
+            let start = calendar.date(from: DateComponents(year: year, month: firstQuarterMonth, day: 1)) ?? anchor
+            let end = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: start) ?? start
+            return (start, end)
+        case .year:
+            let year = calendar.component(.year, from: anchor)
+            let start = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) ?? anchor
+            let end = calendar.date(from: DateComponents(year: year, month: 12, day: 31)) ?? start
+            return (start, end)
+        }
+    }
+}
+
+fileprivate struct CalendarPeriodSummary {
+    let rangeText: String
+    let fillRate: Double
+    let missingCount: Int
+    let riskCount: Int
+    let riskDayCount: Int
+    let coreConclusion: String
+    let riskReminder: String
+    let peopleStatus: String
+    let suggestedAction: String
+}
+
 @MainActor
 final class CalendarViewModel: ObservableObject {
     @Published var month = DateHelpers.monthKey()
@@ -64,8 +127,24 @@ final class CalendarViewModel: ObservableObject {
         days.first { $0.riskCount > 0 }
     }
 
+    var firstMissingDay: CalendarDay? {
+        days.first { $0.missingCount > 0 }
+    }
+
     var todayDay: CalendarDay? {
         days.first { $0.date == DateHelpers.dayKey() }
+    }
+
+    var todayFillRate: Double {
+        todayDay?.fillRate ?? 0
+    }
+
+    var todayMissingCount: Int {
+        todayDay?.missingCount ?? 0
+    }
+
+    var todayRiskCount: Int {
+        todayDay?.riskCount ?? 0
     }
 
     var dashboardConclusion: String {
@@ -84,13 +163,84 @@ final class CalendarViewModel: ObservableObject {
         }
         return "暂无明显风险，继续保持日报完整度。"
     }
+
+    var analysisAnchorDate: Date {
+        let currentMonth = DateHelpers.monthKey()
+        if month == currentMonth {
+            return Date()
+        }
+        return DateHelpers.monthFormatter.date(from: month) ?? Date()
+    }
+
+    fileprivate func summary(for period: CalendarAnalysisPeriod) -> CalendarPeriodSummary {
+        let range = period.range(anchor: analysisAnchorDate)
+        let startKey = DateHelpers.dayKey(range.start)
+        let endKey = DateHelpers.dayKey(range.end)
+        let periodDays = days.filter { $0.date >= startKey && $0.date <= endKey }
+        let filled = periodDays.reduce(0) { $0 + $1.filledCount }
+        let missing = periodDays.reduce(0) { $0 + $1.missingCount }
+        let risks = periodDays.reduce(0) { $0 + $1.riskCount }
+        let denominator = filled + missing
+        let fillRate = denominator > 0 ? (Double(filled) / Double(denominator)) * 100 : 0
+        let riskDayCount = periodDays.filter { $0.riskCount > 0 }.count
+        let rangeText = "\(startKey) 至 \(endKey)"
+
+        let coreConclusion: String
+        if risks > 0 {
+            coreConclusion = "当前周期发现 \(risks) 条风险信号，优先处理风险日期。"
+        } else if missing > 0 {
+            coreConclusion = "当前周期有 \(missing) 条缺填记录，先补齐日报覆盖。"
+        } else if filled > 0 {
+            coreConclusion = String(format: "当前周期填报覆盖稳定，填报率 %.0f%%。", fillRate)
+        } else {
+            coreConclusion = "当前周期暂无足够填报信号。"
+        }
+
+        let riskReminder: String
+        if risks > 0 {
+            riskReminder = "有 \(riskDayCount) 天出现风险，建议先进入风险日期查看具体日报。"
+        } else if missing > 0 {
+            riskReminder = "缺填会影响 AI 对团队状态的判断，建议优先提醒未填成员。"
+        } else {
+            riskReminder = "暂无明显风险，继续关注临近截止日期和低覆盖日期。"
+        }
+
+        let peopleStatus = totalEmployees > 0
+            ? String(format: "当前范围约 %d 名成员，周期填报率 %.0f%%，缺填 %d 条。", totalEmployees, fillRate, missing)
+            : "当前范围暂无成员统计，请确认组织和范围配置。"
+
+        let suggestedAction: String
+        if risks > 0 {
+            suggestedAction = "先查看风险日期，再复盘关联项目和负责人。"
+        } else if missing > 0 {
+            suggestedAction = "先提醒未填报，再生成周报沉淀本周期结论。"
+        } else {
+            suggestedAction = "可以生成周报，保留本周期工作节奏和关键结论。"
+        }
+
+        return CalendarPeriodSummary(
+            rangeText: rangeText,
+            fillRate: fillRate,
+            missingCount: missing,
+            riskCount: risks,
+            riskDayCount: riskDayCount,
+            coreConclusion: coreConclusion,
+            riskReminder: riskReminder,
+            peopleStatus: peopleStatus,
+            suggestedAction: suggestedAction
+        )
+    }
 }
 
 struct CalendarDashboardView: View {
     @EnvironmentObject private var auth: AuthStore
     @StateObject private var viewModel = CalendarViewModel()
     @State private var showsSearchHint = false
+    @State private var showsOverallAnalysis = false
+    @State private var actionMessage: String?
+    @State private var selectedDetailRoute: CalendarDetailRoute?
     var onCreateReport: (() -> Void)?
+    var onOpenProjects: (() -> Void)?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
 
@@ -126,6 +276,10 @@ struct CalendarDashboardView: View {
                             columns: columns,
                             scope: viewModel.scope
                         )
+
+                        CalendarOverallAnalysisEntry(viewModel: viewModel) {
+                            showsOverallAnalysis = true
+                        }
                     }
                     .padding(.horizontal, AITheme.Spacing.lg)
                     .padding(.top, AITheme.Spacing.sm)
@@ -141,6 +295,9 @@ struct CalendarDashboardView: View {
             .background(AITheme.ColorToken.appBackground)
             .navigationTitle("")
             .compactNavigationTitle()
+            .navigationDestination(item: $selectedDetailRoute) { route in
+                DayDetailView(date: route.date, scope: viewModel.scope)
+            }
             .overlay {
                 if viewModel.isLoading {
                     ProgressView()
@@ -161,10 +318,35 @@ struct CalendarDashboardView: View {
             } message: {
                 Text("当前版本可在“记录”页搜索日报；AI 日历会优先展示风险日期和缺填状态。")
             }
+            .alert("操作提示", isPresented: actionMessageBinding) {
+                Button("知道了", role: .cancel) {}
+            } message: {
+                Text(actionMessage ?? "")
+            }
             .alert("加载失败", isPresented: errorBinding) {
                 Button("知道了", role: .cancel) {}
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+            .sheet(isPresented: $showsOverallAnalysis) {
+                CalendarOverallAnalysisSheet(
+                    viewModel: viewModel,
+                    onOpenDate: { date in
+                        selectedDetailRoute = CalendarDetailRoute(date: date)
+                        showsOverallAnalysis = false
+                    },
+                    onGenerateWeeklyReport: {
+                        Task { await generateWeeklyReport() }
+                    },
+                    onRemindMissing: {
+                        remindMissing()
+                    },
+                    onOpenProjects: {
+                        showsOverallAnalysis = false
+                        onOpenProjects?()
+                    }
+                )
+                .environmentObject(auth)
             }
         }
     }
@@ -177,6 +359,70 @@ struct CalendarDashboardView: View {
                 viewModel.errorMessage = nil
             }
         }
+    }
+
+    private var actionMessageBinding: Binding<Bool> {
+        Binding {
+            actionMessage != nil
+        } set: { isPresented in
+            if !isPresented {
+                actionMessage = nil
+            }
+        }
+    }
+
+    private func remindMissing() {
+        if let day = viewModel.firstMissingDay {
+            actionMessage = "请进入 \(DateHelpers.shortDayTitle(day.date)) 的日期详情，查看缺填成员并提醒补齐。"
+        } else {
+            actionMessage = "当前范围暂无缺填记录。"
+        }
+    }
+
+    private func generateWeeklyReport() async {
+        guard viewModel.scope != .company else {
+            actionMessage = "全公司周报暂未开放，请切换到本部门或只看自己。"
+            return
+        }
+        let range = CalendarAnalysisPeriod.week.range(anchor: viewModel.analysisAnchorDate)
+        var request = GenerateReportRequest(
+            type: viewModel.scope == .department ? "DEPARTMENT_WEEKLY" : "PERSONAL_WEEKLY",
+            periodStart: DateHelpers.dayKey(range.start),
+            periodEnd: DateHelpers.dayKey(range.end),
+            departmentId: nil
+        )
+        if viewModel.scope == .department {
+            guard let departmentId = auth.user?.departmentId else {
+                actionMessage = "当前账号未绑定部门，无法生成部门周报。"
+                return
+            }
+            request.departmentId = departmentId
+        }
+        do {
+            let _: GeneratedReport = try await auth.client().request("/reports/generate", method: .post, body: request)
+            actionMessage = "周报已开始生成，稍后可在报告列表查看。"
+        } catch {
+            actionMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct GenerateReportRequest: Encodable {
+    let type: String
+    let periodStart: String
+    let periodEnd: String
+    var departmentId: String?
+}
+
+private struct GeneratedReport: Decodable {
+    let id: String
+}
+
+private struct CalendarDetailRoute: Identifiable, Hashable {
+    let date: String
+
+    var id: String {
+        date
     }
 }
 
@@ -324,23 +570,18 @@ private struct CalendarStatusSummary: View {
         HStack(spacing: AITheme.Spacing.xs) {
             CalendarStatusMetric(
                 title: "填报率",
-                value: String(format: "%.0f%%", viewModel.monthFillRate),
-                tint: viewModel.monthFillRate >= 80 ? AITheme.ColorToken.success : AITheme.ColorToken.primary
+                value: String(format: "%.0f%%", viewModel.todayFillRate),
+                tint: viewModel.todayFillRate >= 80 ? AITheme.ColorToken.success : AITheme.ColorToken.primary
             )
             CalendarStatusMetric(
                 title: "未填",
-                value: "\(viewModel.missingCount)",
-                tint: viewModel.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.success
+                value: "\(viewModel.todayMissingCount)",
+                tint: viewModel.todayMissingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.success
             )
             CalendarStatusMetric(
                 title: "风险",
-                value: "\(viewModel.riskDayCount)",
-                tint: viewModel.riskDayCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
-            )
-            CalendarStatusMetric(
-                title: "成员",
-                value: "\(viewModel.totalEmployees)",
-                tint: AITheme.ColorToken.ai
+                value: "\(viewModel.todayRiskCount)",
+                tint: viewModel.todayRiskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
             )
         }
         .accessibilityElement(children: .combine)
@@ -431,7 +672,7 @@ private struct CalendarStatusDayCell: View {
     let item: MonthGridItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 Text("\(item.day ?? 0)")
                     .font(.callout.weight(item.isToday ? .bold : .semibold))
@@ -443,33 +684,28 @@ private struct CalendarStatusDayCell: View {
                     Text("\(riskCount)")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.white)
-                        .frame(minWidth: 18, minHeight: 18)
+                        .frame(minWidth: 17, minHeight: 17)
                         .background(AITheme.ColorToken.danger)
                         .clipShape(Capsule())
-                        .accessibilityLabel("\(riskCount) 个风险")
                 }
             }
 
             Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(primaryStatusText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(statusColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            HStack(spacing: 4) {
+                Capsule()
+                    .fill(statusColor)
+                    .frame(width: statusBarWidth, height: 4)
 
-                HStack(spacing: 4) {
-                    Capsule()
-                        .fill(statusColor)
-                        .frame(width: 20, height: 4)
-                    Text(secondaryStatusText)
-                        .font(.caption2)
-                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                if let statusCaption {
+                    Text(statusCaption)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(statusCaptionColor)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.72)
                 }
             }
+            .frame(height: 18, alignment: .leading)
         }
         .padding(8)
         .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
@@ -489,11 +725,6 @@ private struct CalendarStatusDayCell: View {
 
     private var isFutureEmptyDay: Bool {
         item.data == nil && DateHelpers.isFutureDay(item.id)
-    }
-
-    private var totalCount: Int {
-        guard let data = item.data else { return 0 }
-        return data.filledCount + data.missingCount
     }
 
     private var statusColor: Color {
@@ -525,35 +756,45 @@ private struct CalendarStatusDayCell: View {
         return AITheme.ColorToken.cardBackground
     }
 
-    private var primaryStatusText: String {
+    private var statusBarWidth: CGFloat {
         guard let data = item.data else {
-            return isFutureEmptyDay ? "待填" : "未填"
+            return isFutureEmptyDay ? 14 : 10
         }
         if data.riskCount > 0 {
-            return "风险 \(data.riskCount)"
+            return 28
         }
         if data.fillRate >= 80 {
-            return "已完成"
+            return 26
+        }
+        if data.fillRate > 0 {
+            return max(14, min(30, CGFloat(data.fillRate / 100) * 30))
+        }
+        return 10
+    }
+
+    private var statusCaption: String? {
+        guard let data = item.data else {
+            return nil
+        }
+        if data.riskCount > 0 {
+            return "风险"
+        }
+        if data.fillRate >= 80 {
+            return "已填"
         }
         if data.fillRate > 0 {
             return "\(Int(data.fillRate.rounded()))%"
         }
-        return "未填"
+        return nil
     }
 
-    private var secondaryStatusText: String {
-        guard let data = item.data else {
-            return isFutureEmptyDay ? "未开始" : "无记录"
-        }
-        guard totalCount > 0 else {
-            return "\(Int(data.fillRate.rounded()))%"
-        }
-        return "已填 \(data.filledCount)/\(totalCount)"
+    private var statusCaptionColor: Color {
+        riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.textSecondary
     }
 
     private var accessibilityText: String {
         guard let data = item.data else {
-            return "\(item.day ?? 0) 日，\(primaryStatusText)"
+            return "\(item.day ?? 0) 日，\(isFutureEmptyDay ? "未来计划" : "未填报")"
         }
         return "\(item.day ?? 0) 日，填报率 \(String(format: "%.0f", data.fillRate))%，已填 \(data.filledCount)，缺填 \(data.missingCount)，风险 \(data.riskCount) 个"
     }
@@ -578,6 +819,330 @@ private struct CalendarLegend: View {
                         .font(.caption)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
                 }
+            }
+        }
+    }
+}
+
+private struct CalendarOverallAnalysisEntry: View {
+    @ObservedObject var viewModel: CalendarViewModel
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                Image(systemName: "sparkles")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ai)
+                    .frame(width: 36, height: 36)
+                    .background(AITheme.ColorToken.aiSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AI 整体分析")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text(entrySummary)
+                        .font(.caption)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                Text("查看分析")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ai)
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, AITheme.Spacing.sm)
+                    .background(AITheme.ColorToken.aiSurface)
+                    .clipShape(Capsule())
+            }
+            .padding(AITheme.Spacing.sm)
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("AI 整体分析，\(entrySummary)")
+    }
+
+    private var entrySummary: String {
+        if viewModel.riskDayCount > 0 {
+            return "本周 / 本月 / 季度 / 年度，先看 \(viewModel.riskDayCount) 个风险日期。"
+        }
+        if viewModel.missingCount > 0 {
+            return "本周 / 本月 / 季度 / 年度，关注 \(viewModel.missingCount) 条缺填信号。"
+        }
+        return "本周 / 本月 / 季度 / 年度，查看团队节奏和建议动作。"
+    }
+}
+
+private struct CalendarOverallAnalysisSheet: View {
+    @EnvironmentObject private var auth: AuthStore
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: CalendarViewModel
+    @State private var period: CalendarAnalysisPeriod = .week
+    @State private var projects: [Project] = []
+    let onOpenDate: (String) -> Void
+    let onGenerateWeeklyReport: () -> Void
+    let onRemindMissing: () -> Void
+    let onOpenProjects: () -> Void
+
+    var body: some View {
+        let summary = viewModel.summary(for: period)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                    Picker("分析周期", selection: $period) {
+                        ForEach(CalendarAnalysisPeriod.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(summary.rangeText)
+                        .font(AITheme.Typography.support)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+
+                    CalendarAnalysisConclusionCard(
+                        title: "\(period.title)核心结论",
+                        conclusion: summary.coreConclusion,
+                        tone: leadingTone
+                    )
+
+                    VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+                        CalendarAnalysisInfoRow(
+                            title: "风险提醒",
+                            value: summary.riskReminder,
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: summary.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
+                        )
+                        CalendarAnalysisInfoRow(
+                            title: "人员状态",
+                            value: summary.peopleStatus,
+                            systemImage: "person.2.fill",
+                            tint: summary.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ai
+                        )
+                        CalendarAnalysisInfoRow(
+                            title: "项目进展",
+                            value: projectText,
+                            systemImage: "folder.fill",
+                            tint: viewModel.riskDayCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.primary
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+                        Text("建议动作")
+                            .font(AITheme.Typography.eyebrow)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+
+                        FlowActionButtons {
+                            CalendarAnalysisActionButton(
+                                title: "生成周报",
+                                systemImage: "doc.badge.plus",
+                                tint: AITheme.ColorToken.primary
+                            ) {
+                                dismiss()
+                                onGenerateWeeklyReport()
+                            }
+
+                            CalendarAnalysisActionButton(
+                                title: "提醒未填报",
+                                systemImage: "person.crop.circle.badge.exclamationmark",
+                                tint: AITheme.ColorToken.warning
+                            ) {
+                                dismiss()
+                                onRemindMissing()
+                            }
+
+                            CalendarAnalysisActionButton(
+                                title: "查看风险项目",
+                                systemImage: "folder.badge.questionmark",
+                                tint: AITheme.ColorToken.danger
+                            ) {
+                                dismiss()
+                                onOpenProjects()
+                            }
+
+                            if let firstRiskDay = viewModel.firstRiskDay {
+                                CalendarAnalysisActionButton(
+                                    title: "风险日期",
+                                    systemImage: "calendar.badge.exclamationmark",
+                                    tint: AITheme.ColorToken.danger
+                                ) {
+                                    dismiss()
+                                    onOpenDate(firstRiskDay.date)
+                                }
+                            }
+                        }
+                    }
+                    .padding(AITheme.Spacing.md)
+                    .background(AITheme.ColorToken.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                            .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+                    }
+                }
+                .padding(AITheme.Spacing.lg)
+            }
+            .background(AITheme.ColorToken.appBackground)
+            .navigationTitle("AI 整体分析")
+            .compactNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .task {
+            await loadProjects()
+        }
+    }
+
+    private var leadingTone: Color {
+        let summary = viewModel.summary(for: period)
+        if summary.riskCount > 0 {
+            return AITheme.ColorToken.danger
+        }
+        if summary.missingCount > 0 {
+            return AITheme.ColorToken.warning
+        }
+        return AITheme.ColorToken.ai
+    }
+
+    private var projectText: String {
+        guard !projects.isEmpty else {
+            return "项目进展可进入项目页查看，重点关注临期、暂停和负责人缺失。"
+        }
+        let active = projects.filter { $0.status == .active }.count
+        let risks = projects.filter(projectHasRisk).count
+        return "\(active) 个项目进行中，\(risks) 个项目需要关注。"
+    }
+
+    private func loadProjects() async {
+        do {
+            projects = try await auth.client().request("/projects")
+        } catch {
+            projects = []
+        }
+    }
+
+    private func projectHasRisk(_ project: Project) -> Bool {
+        if project.status == .paused || project.owner == nil {
+            return true
+        }
+        if let endDate = project.endDate,
+           let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
+            let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
+            return days <= 7
+        }
+        return false
+    }
+}
+
+private struct CalendarAnalysisConclusionCard: View {
+    let title: String
+    let conclusion: String
+    let tone: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            Label(title, systemImage: "sparkles")
+                .font(AITheme.Typography.eyebrow)
+                .foregroundStyle(AITheme.ColorToken.ai)
+            Text(conclusion)
+                .font(.headline)
+                .foregroundStyle(AITheme.ColorToken.ink900)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(AITheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AITheme.ColorToken.aiSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(tone.opacity(0.28), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct CalendarAnalysisInfoRow: View {
+    let title: String
+    let value: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+                Text(value)
+                    .font(AITheme.Typography.support)
+                    .foregroundStyle(AITheme.ColorToken.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
+    }
+}
+
+private struct CalendarAnalysisActionButton: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(tint)
+                .padding(.vertical, 9)
+                .padding(.horizontal, AITheme.Spacing.sm)
+                .background(tint.opacity(0.1))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FlowActionButtons<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AITheme.Spacing.xs) {
+                content
+            }
+            VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+                content
             }
         }
     }

@@ -1,119 +1,76 @@
 <view class="page report-page bottom-safe">
-  <view class="page-hero">
+  <view class="report-header">
     <view>
-      <view class="page-title">今日</view>
-      <view class="page-subtitle">你好，{{user.name || "同事"}} · {{user.tenantName || ""}}</view>
-    </view>
-    <button class="tertiary-button logout" bindtap="logout">退出</button>
-  </view>
-
-  <view class="ai-status-panel">
-    <view class="ai-status-icon">{{todayStatusIcon}}</view>
-    <view class="ai-status-copy">
-      <view class="ai-status-kicker">AI 洞察</view>
-      <view class="ai-status-title">{{todayConclusion}}</view>
-      <view class="ai-status-desc">{{todayRiskText}}</view>
+      <view class="report-greeting">你好，{{user.name || "同事"}}</view>
+      <view class="page-subtitle">{{user.tenantName || ""}}</view>
     </view>
   </view>
 
-  <view class="surface ai-card">
-    <view class="card-top">
-      <view>
-        <view class="section-title">今天你完成了什么？</view>
-        <view class="section-desc">一句话即可，AI 会整理成日报。</view>
-      </view>
-      <view class="chip">AI</view>
+  <view class="ai-action-card today-status-panel">
+    <view class="ai-action-icon">{{todayStatusIcon}}</view>
+    <view class="ai-action-copy">
+      <view class="ai-action-kicker">AI 洞察</view>
+      <view class="ai-action-title">{{todayConclusion}}</view>
+      <view class="ai-action-desc">{{todayRiskText}}</view>
     </view>
+  </view>
 
-    <view class="chat-list">
-      <view wx:for="{{chatMessages}}" wx:key="index" class="chat-message {{item.role}}">
+  <view class="ios-card ai-card">
+    <view class="section-title">今天你完成了什么？</view>
+    <view class="section-desc">一句话即可，AI 会整理成日报。</view>
+
+    <view wx:if="{{chatMessages.length > 1}}" class="chat-list">
+      <view wx:for="{{chatMessages}}" wx:key="id" class="chat-message {{item.role}}">
         {{item.content}}
       </view>
     </view>
 
-    <textarea class="chat-input" value="{{chatInput}}" maxlength="2000" placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。" bindinput="onChatInput" />
+    <textarea class="chat-input" value="{{chatInput}}" maxlength="2000" placeholder="例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时" bindinput="onChatInput" />
 
     <view class="chat-actions">
       <button class="primary-button send-ai-button" loading="{{drafting}}" bindtap="sendChatMessage">AI 帮我整理日报</button>
-      <button class="voice-button {{recording ? 'recording' : ''}}" bindtap="toggleRecord">
-        {{recording ? "结束语音" : "语音输入"}}
-      </button>
     </view>
-
-    <view wx:if="{{voiceError}}" class="voice-error">{{voiceError}}</view>
   </view>
 
-  <view class="surface draft-card">
-    <view class="card-top">
-      <view>
-        <view class="section-title">日报草稿</view>
-        <view class="section-desc">AI 生成后仍可手动校正，提交前请确认工时和项目。</view>
-      </view>
-    </view>
+  <view wx:if="{{hasDraftContent}}" class="ios-card draft-card">
+    <view class="section-title">日报草稿</view>
+    <view class="section-desc">AI 生成后仍可手动校正，提交前请确认工时和项目。</view>
 
-    <view class="quick-grid compact-four">
+    <view class="editor-stack">
       <view class="field">
         <text class="field-label">日期</text>
         <picker mode="date" value="{{date}}" bindchange="onDateChange">
           <view class="picker-value">{{date}}</view>
         </picker>
       </view>
-      <view class="field">
-        <text class="field-label">工时</text>
-        <input class="input" type="digit" value="{{hours}}" bindinput="onHoursInput" />
-      </view>
-      <view class="field">
-        <text class="field-label">开始时间</text>
-        <picker mode="time" value="{{startTime}}" bindchange="onStartTimeChange">
-          <view class="picker-value time-value">{{startTime || "--:--"}}</view>
-        </picker>
-      </view>
-      <view class="field">
-        <text class="field-label">结束时间</text>
-        <picker mode="time" value="{{endTime}}" bindchange="onEndTimeChange">
-          <view class="picker-value time-value">{{endTime || "--:--"}}</view>
-        </picker>
-      </view>
-    </view>
 
-    <view class="title-project-row">
-      <view class="field title-field">
-        <text class="field-label">标题</text>
-        <input class="input" value="{{title}}" placeholder="例如：完成日报月历联调" bindinput="onTitleInput" />
-      </view>
-      <view class="field project-field">
-        <text class="field-label">关联项目</text>
+      <view class="field">
+        <text class="field-label">项目</text>
         <picker value="{{projectIndex}}" range="{{projectOptions}}" range-key="displayName" bindchange="onProjectChange">
           <view class="picker-value">{{projectOptions[projectIndex].displayName}}</view>
         </picker>
       </view>
-    </view>
 
-    <view class="field">
-      <text class="field-label">工作内容 / 计划</text>
-      <textarea class="textarea" value="{{content}}" maxlength="3000" placeholder="可以手动输入，也可以用语音识别填入。" bindinput="onContentInput" />
-    </view>
-
-    <view class="field attachment-field">
-      <text class="field-label">照片 / 文件</text>
-      <view class="attachment-actions">
-        <button class="attachment-button" bindtap="choosePhotos">添加照片</button>
-        <button class="attachment-button" bindtap="chooseFiles">添加文件</button>
+      <view class="field">
+        <text class="field-label">标题</text>
+        <input class="input" value="{{title}}" placeholder="例如：完成日报月历联调" bindinput="onTitleInput" />
       </view>
-      <view wx:if="{{attachments.length}}" class="attachment-list">
-        <view wx:for="{{attachments}}" wx:key="id" class="attachment-item">
-          <view class="attachment-info">
-            <view class="attachment-name">{{item.name}}</view>
-            <view class="attachment-meta">{{item.kindText}} · {{item.displaySize}}</view>
-          </view>
-          <button class="attachment-remove" data-id="{{item.id}}" bindtap="removeAttachment">移除</button>
-        </view>
+
+      <view class="field">
+        <text class="field-label">工时</text>
+        <input class="input" type="digit" value="{{hours}}" bindinput="onHoursInput" />
+      </view>
+
+      <view class="field">
+        <text class="field-label">日报内容</text>
+        <textarea class="textarea" value="{{content}}" maxlength="3000" placeholder="AI 生成后可继续手动补充。" bindinput="onContentInput" />
       </view>
     </view>
+  </view>
 
-    <view class="bottom-actions">
-      <button class="tertiary-button" bindtap="clearForm">清空</button>
-      <button class="primary-button submit-button" loading="{{submitting}}" bindtap="submit">提交今日工作</button>
-    </view>
+  <view class="report-actions">
+    <button class="primary-button" loading="{{submitting}}" bindtap="submit">提交今日工作</button>
+    <button class="secondary-button" loading="{{savingDraft}}" bindtap="saveDraft">保存为草稿</button>
+    <button class="tertiary-button" bindtap="clearForm">清空</button>
   </view>
 </view>

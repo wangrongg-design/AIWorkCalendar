@@ -1,18 +1,16 @@
 <view class="page list-page bottom-safe">
-  <view class="page-hero">
-    <view>
-      <view class="page-title">填报记录</view>
-      <view class="page-subtitle">搜索标题、内容或项目</view>
-    </view>
-    <picker range="{{filters}}" range-key="label" value="{{filterIndex}}" bindchange="onFilterChange">
-      <view class="filter-chip">{{filterLabel}}</view>
-    </picker>
-  </view>
+  <view class="page-title">填报记录</view>
 
-  <view class="ai-list-panel">
-    <view class="ai-list-kicker">AI 记录判断</view>
-    <view class="ai-list-title">{{aiConclusion}}</view>
-    <view class="ai-list-desc">{{aiRiskText}}</view>
+  <view class="segmented-control log-filter-tabs">
+    <view
+      wx:for="{{filters}}"
+      wx:key="value"
+      class="segmented-item {{filterIndex === index ? 'active' : ''}}"
+      data-index="{{index}}"
+      bindtap="onFilterTap"
+    >
+      {{item.label}}
+    </view>
   </view>
 
   <input class="search-input" value="{{searchText}}" placeholder="搜索标题、内容或项目" bindinput="onSearchInput" />
@@ -22,7 +20,7 @@
     <view class="empty-desc">{{emptyDesc}}</view>
   </view>
 
-  <view class="log-list">
+  <view wx:if="{{filteredLogs.length}}" class="list-stack">
     <view wx:for="{{filteredLogs}}" wx:key="id" class="log-row" data-id="{{item.id}}" bindtap="openLog">
       <view class="log-head">
         <view class="log-title">{{item.title}}</view>

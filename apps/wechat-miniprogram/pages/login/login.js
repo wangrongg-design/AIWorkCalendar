@@ -1,26 +1,18 @@
-const { request, apiBaseUrl } = require("../../utils/request");
+const { request } = require("../../utils/request");
 const { setSession, getToken } = require("../../utils/storage");
 
 Page({
   data: {
-    apiBaseUrl: "http://localhost:3001",
-    account: "admin@example.com",
-    password: "Passw0rd!",
+    account: "",
+    password: "",
     showPassword: false,
     loading: false
   },
 
   onLoad() {
-    this.setData({
-      apiBaseUrl: apiBaseUrl()
-    });
     if (getToken()) {
       wx.switchTab({ url: "/pages/calendar/calendar" });
     }
-  },
-
-  onApiBaseUrlInput(event) {
-    this.setData({ apiBaseUrl: event.detail.value.trim() });
   },
 
   onAccountInput(event) {
@@ -36,13 +28,11 @@ Page({
   },
 
   async login() {
-    const { apiBaseUrl: baseUrl, account, password } = this.data;
-    if (!baseUrl || !account || !password) {
+    const { account, password } = this.data;
+    if (!account || !password) {
       wx.showToast({ title: "请填写登录信息", icon: "none" });
       return;
     }
-    wx.setStorageSync("apiBaseUrl", baseUrl.replace(/\/$/, ""));
-    getApp().globalData.apiBaseUrl = baseUrl.replace(/\/$/, "");
     this.setData({ loading: true });
     try {
       const result = await request("/auth/login", {

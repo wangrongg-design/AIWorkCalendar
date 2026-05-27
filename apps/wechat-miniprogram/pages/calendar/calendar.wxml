@@ -1,10 +1,13 @@
 <view class="page calendar-page bottom-safe">
   <view class="calendar-topbar">
-    <view class="month-title">{{monthTitle}}</view>
+    <view class="month-switcher">
+      <button class="month-step" bindtap="prevMonth">‹</button>
+      <view class="month-title">{{monthTitle}}</view>
+      <button class="month-step" bindtap="nextMonth">›</button>
+    </view>
     <view class="toolbar-actions">
-      <button class="toolbar-button" bindtap="prevMonth">‹</button>
+      <button class="toolbar-button search-button" bindtap="openSearch">搜</button>
       <button class="toolbar-button today-button" bindtap="goToday">今</button>
-      <button class="toolbar-button" bindtap="nextMonth">›</button>
       <picker range="{{scopeOptions}}" range-key="label" value="{{scopeIndex}}" bindchange="onScopeChange">
         <view class="toolbar-button scope-icon">{{scopeLabel}}</view>
       </picker>
@@ -34,10 +37,6 @@
       <view class="metric-value risk">{{riskDayCount}}</view>
       <view class="metric-label">风险</view>
     </view>
-    <view class="metric">
-      <view class="metric-value ai">{{totalEmployees}}</view>
-      <view class="metric-label">成员</view>
-    </view>
   </view>
 
   <view class="surface calendar-card">
@@ -55,13 +54,11 @@
         <block wx:if="{{!item.blank}}">
           <view class="day-line">
             <text class="day">{{item.day}}</text>
-            <text wx:if="{{item.riskCount > 0}}" class="risk-badge">{{item.riskCount}}</text>
           </view>
           <view class="cell-spacer"></view>
           <view class="cell-status {{item.tone}}">{{item.primaryText}}</view>
           <view class="cell-foot">
             <view class="status-bar {{item.tone}}"></view>
-            <text>{{item.secondaryText}}</text>
           </view>
         </block>
       </view>
@@ -72,6 +69,16 @@
       <view class="legend-item"><text class="dot empty"></text>未填报</view>
       <view class="legend-item"><text class="dot risk"></text>风险</view>
     </view>
+  </view>
+
+  <view class="analysis-entry" bindtap="openAnalysis">
+    <view class="analysis-entry-copy">
+      <view class="analysis-kicker">AI 整体分析</view>
+      <view class="analysis-title">{{analysisTitle}}</view>
+      <view class="analysis-desc">{{analysisDesc}}</view>
+      <view class="analysis-periods">本周 / 本月 / 季度 / 年度</view>
+    </view>
+    <view class="analysis-action">查看分析</view>
   </view>
 
   <view wx:if="{{loading}}" class="loading">加载中...</view>

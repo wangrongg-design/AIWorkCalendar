@@ -25,7 +25,7 @@ docker compose up --build
 - API: http://localhost:3001
 - Swagger: http://localhost:3001/docs
 
-种子账号的企业代码为 `demo`，所有种子账号密码都是 `Passw0rd!`：
+种子企业的统一社会信用代码为 `91110105MA01A1B2X3`，所有种子账号密码都是 `Passw0rd!`：
 
 - `admin@example.com` 企业管理员
 - `manager@example.com` 研发经理

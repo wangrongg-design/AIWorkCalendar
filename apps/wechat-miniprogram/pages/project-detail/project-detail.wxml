@@ -54,5 +54,18 @@
         <text>{{project.ownerEmail}}</text>
       </view>
     </view>
+
+    <view class="surface detail-section">
+      <view class="section-title">周期</view>
+      <view class="info-row">
+        <text>开始</text>
+        <text>{{project.startText}}</text>
+      </view>
+      <view class="info-row">
+        <text>结束</text>
+        <text>{{project.endText}}</text>
+      </view>
+    </view>
   </block>
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
 </view>

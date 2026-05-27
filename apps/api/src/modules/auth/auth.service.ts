@@ -8,6 +8,7 @@ import { PrismaService } from "../../common/prisma.service";
 import { RateLimitService } from "../../common/rate-limit/rate-limit.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
+import { normalizeUnifiedSocialCreditCode } from "../../common/unified-social-credit-code";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto, PasswordResetConfirmDto, PasswordResetRequestDto, VerifyEmailDto } from "./dto/password.dto";
 import { RegisterTenantDto } from "./dto/register.dto";
@@ -55,10 +56,11 @@ export class AuthService {
 
   async register(dto: RegisterTenantDto) {
     const adminEmail = dto.adminEmail.trim().toLowerCase();
+    const tenantCode = normalizeUnifiedSocialCreditCode(dto.tenantCode);
     this.rateLimit.consume(`register:${adminEmail}`, 5, 60 * 60 * 1000);
-    const existingTenant = await this.prisma.tenant.findUnique({ where: { code: dto.tenantCode } });
+    const existingTenant = await this.prisma.tenant.findUnique({ where: { code: tenantCode } });
     if (existingTenant && !existingTenant.deletedAt) {
-      throw new BadRequestException("企业代码已被使用");
+      throw new BadRequestException("该统一社会信用代码已注册");
     }
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
@@ -72,7 +74,7 @@ export class AuthService {
       const tenant = await tx.tenant.create({
         data: {
           name: dto.companyName,
-          code: dto.tenantCode,
+          code: tenantCode,
           logoUrl
         }
       });
@@ -148,7 +150,7 @@ export class AuthService {
       action: "TENANT_REGISTERED",
       targetType: "Tenant",
       targetId: user.tenantId,
-      metadata: { tenantCode: dto.tenantCode, adminEmail }
+      metadata: { tenantCode, adminEmail }
     });
     return {
       ...(await this.buildAuthResponse(user, roles)),

@@ -1,6 +1,7 @@
 const { request } = require("../../utils/request");
 const { getToken, getUser, clearSession } = require("../../utils/storage");
 const { dateKey } = require("../../utils/date");
+const config = require("../../app.config");
 
 function roleTitle(role) {
   if (role === "SUPER_ADMIN") return "平台超管";
@@ -26,6 +27,7 @@ Page({
     departmentText: "未分配部门",
     emailText: "-",
     rolesText: "",
+    apiBaseURL: config.apiBaseUrl,
     todayCount: 0,
     todayHours: "0",
     todayRiskCount: 0,

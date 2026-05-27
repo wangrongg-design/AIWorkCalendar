@@ -10,18 +10,23 @@
       </view>
     </view>
 
-    <view class="surface metric-grid">
-      <view class="metric">
-        <view class="metric-value">{{log.hoursText}}h</view>
-        <view class="metric-label">工时</view>
+    <view class="surface detail-section">
+      <view class="section-title">填报</view>
+      <view class="info-row">
+        <text>日期</text>
+        <text>{{log.dateText}}</text>
       </view>
-      <view class="metric">
-        <view class="metric-value">{{log.startTimeText}}</view>
-        <view class="metric-label">开始</view>
+      <view class="info-row">
+        <text>状态</text>
+        <text>{{log.statusTitle}}</text>
       </view>
-      <view class="metric">
-        <view class="metric-value">{{log.endTimeText}}</view>
-        <view class="metric-label">结束</view>
+      <view class="info-row">
+        <text>工时</text>
+        <text>{{log.hoursText}} 小时</text>
+      </view>
+      <view wx:if="{{log.projectName}}" class="info-row">
+        <text>项目</text>
+        <text>{{log.projectName}}</text>
       </view>
     </view>
 

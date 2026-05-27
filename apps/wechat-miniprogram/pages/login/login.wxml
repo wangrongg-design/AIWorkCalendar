@@ -1,28 +1,13 @@
 <view class="page login-page bottom-safe">
-  <view class="login-hero">
+  <view class="login-brand">
     <view class="brand-logo-wrap">
       <image class="brand-logo" src="/assets/seven-ai-logo.png" mode="aspectFit" />
     </view>
     <view class="brand-product">AIWorkCalendar</view>
     <view class="brand-title">开启你的AI之旅</view>
-    <view class="brand-subtitle">北京七数智联科技有限公司</view>
-    <view class="brand-desc">移动端快速填报 · AI日历 · 项目风险可见</view>
   </view>
 
-  <view class="surface login-card">
-    <view class="card-head">
-      <view>
-        <view class="section-title">登录</view>
-        <view class="section-desc">使用邮箱或手机号进入你的 AI 工作日历。</view>
-      </view>
-      <view class="chip">安全连接</view>
-    </view>
-
-    <view class="field">
-      <text class="field-label">API 地址</text>
-      <input class="input" value="{{apiBaseUrl}}" placeholder="https://api.example.com" bindinput="onApiBaseUrlInput" />
-    </view>
-
+  <view class="login-form">
     <view class="field">
       <text class="field-label">邮箱或手机号</text>
       <input class="input login-input" value="{{account}}" placeholder="请输入邮箱或手机号" bindinput="onAccountInput" />
@@ -39,10 +24,8 @@
     <button class="primary-button login-button" loading="{{loading}}" bindtap="login">登录</button>
   </view>
 
-  <view class="surface notice-card">
-    <view class="notice-title">AI 工作日历</view>
-    <view class="notice">
-      一个账号默认对应一个企业。若同一账号存在多个企业，请联系管理员处理企业专属登录入口。
-    </view>
+  <view class="login-footer">
+    <view>北京七数智联科技有限公司</view>
+    <view>企业级 AI 工作填报与智能汇报 SaaS</view>
   </view>
 </view>

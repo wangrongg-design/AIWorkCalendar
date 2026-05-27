@@ -202,7 +202,7 @@ export default function OpsPage() {
           </div>
           <div className="min-w-0">
             <div className="font-medium text-ink">{record.name}</div>
-            <div className="mt-1 text-xs text-muted">{record.code}</div>
+            <div className="mt-1 text-xs text-muted">统一社会信用代码 {record.code}</div>
           </div>
         </div>
       )
@@ -255,7 +255,7 @@ export default function OpsPage() {
       render: (_, record) => (
         <div>
           <div>{record.tenantName}</div>
-          <div className="mt-1 text-xs text-muted">{record.tenantCode}</div>
+          <div className="mt-1 text-xs text-muted">统一社会信用代码 {record.tenantCode}</div>
         </div>
       )
     },
@@ -455,7 +455,7 @@ export default function OpsPage() {
           className="mb-4"
           type="info"
           showIcon
-          message={logoTenant ? `${logoTenant.name} · ${logoTenant.code}` : "企业 Logo"}
+          message={logoTenant ? `${logoTenant.name} · 统一社会信用代码 ${logoTenant.code}` : "企业 Logo"}
           description={tenantLogoSpec.helpText}
         />
         <Upload.Dragger
