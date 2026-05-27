@@ -2,8 +2,14 @@
   <view class="page-hero">
     <view>
       <view class="page-title">{{date}}</view>
-      <view class="page-subtitle">{{scopeText}} · 日期详情</view>
+      <view class="page-subtitle">{{scopeText}} · AI 日历详情</view>
     </view>
+  </view>
+
+  <view class="ai-detail-card {{aiInsightTone}}">
+    <view class="ai-kicker">AI 今日洞察</view>
+    <view class="ai-title">{{aiInsightTitle}}</view>
+    <view class="ai-desc">{{aiInsightText}}</view>
   </view>
 
   <view class="surface metrics">

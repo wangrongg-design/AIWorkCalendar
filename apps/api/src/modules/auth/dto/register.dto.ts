@@ -1,4 +1,4 @@
-import { IsEmail, IsString, Matches, MinLength } from "class-validator";
+import { IsEmail, IsOptional, IsString, Matches, MinLength } from "class-validator";
 
 export class RegisterTenantDto {
   @IsString()
@@ -19,4 +19,8 @@ export class RegisterTenantDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
 }

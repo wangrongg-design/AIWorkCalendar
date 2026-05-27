@@ -359,6 +359,7 @@ private struct CalendarStatusMetric: View {
                 .foregroundStyle(tint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
+                .monospacedDigit()
             Text(title)
                 .font(.caption)
                 .foregroundStyle(AITheme.ColorToken.textSecondary)
@@ -370,6 +371,10 @@ private struct CalendarStatusMetric: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AITheme.ColorToken.activeBackground)
         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
     }
 }
 
@@ -557,7 +562,7 @@ private struct CalendarStatusDayCell: View {
 private struct CalendarLegend: View {
     private let items: [(String, Color)] = [
         ("已完成", AITheme.ColorToken.success),
-        ("部分填报", AITheme.ColorToken.primaryHover),
+        ("部分填报", AITheme.ColorToken.primary),
         ("未填报", AITheme.ColorToken.warning),
         ("风险", AITheme.ColorToken.danger)
     ]

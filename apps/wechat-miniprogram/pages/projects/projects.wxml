@@ -1,0 +1,38 @@
+<view class="page projects-page bottom-safe">
+  <view class="page-hero">
+    <view>
+      <view class="page-title">项目</view>
+      <view class="page-subtitle">搜索项目、负责人</view>
+    </view>
+    <button class="risk-toggle {{riskToggleClass}}" bindtap="toggleRiskOnly">{{riskToggleText}}</button>
+  </view>
+
+  <view class="ai-project-panel">
+    <view class="ai-project-kicker">AI 项目判断</view>
+    <view class="ai-project-title">{{aiConclusion}}</view>
+    <view class="ai-project-desc">{{aiRiskText}}</view>
+  </view>
+
+  <input class="search-input" value="{{searchText}}" placeholder="搜索项目、负责人" bindinput="onSearchInput" />
+
+  <view wx:if="{{!filteredProjects.length && !loading}}" class="empty-state">
+    <view class="empty-title">{{emptyTitle}}</view>
+    <view class="empty-desc">{{emptyDesc}}</view>
+  </view>
+
+  <view class="project-list">
+    <view wx:for="{{filteredProjects}}" wx:key="id" class="project-row" data-id="{{item.id}}" bindtap="openProject">
+      <view class="project-head">
+        <view class="project-name">{{item.displayName}}</view>
+        <view class="status-badge {{item.statusTone}}">{{item.statusTitle}}</view>
+      </view>
+      <view class="project-meta">
+        <text>{{item.ownerName}}</text>
+        <text>{{item.dueText}}</text>
+      </view>
+      <view class="project-risk {{item.riskClass}}">{{item.aiRiskHint}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+</view>

@@ -1,0 +1,67 @@
+<view class="page detail-page bottom-safe">
+  <block wx:if="{{log}}">
+    <view class="detail-header">
+      <view class="detail-date">{{log.dateText}}</view>
+      <view class="detail-title">{{log.title}}</view>
+      <view class="detail-subtitle">
+        <text>{{log.statusTitle}}</text>
+        <text>{{log.hoursText}} 小时</text>
+        <text wx:if="{{log.projectName}}">{{log.projectName}}</text>
+      </view>
+    </view>
+
+    <view class="surface metric-grid">
+      <view class="metric">
+        <view class="metric-value">{{log.hoursText}}h</view>
+        <view class="metric-label">工时</view>
+      </view>
+      <view class="metric">
+        <view class="metric-value">{{log.startTimeText}}</view>
+        <view class="metric-label">开始</view>
+      </view>
+      <view class="metric">
+        <view class="metric-value">{{log.endTimeText}}</view>
+        <view class="metric-label">结束</view>
+      </view>
+    </view>
+
+    <view class="surface detail-section">
+      <view class="section-title">内容</view>
+      <view class="content-text">{{log.content}}</view>
+    </view>
+
+    <view wx:if="{{log.hasAnalysis}}" class="surface ai-detail-section">
+      <view class="ai-kicker">AI 分析</view>
+      <view wx:if="{{log.aiSummary}}" class="ai-summary">{{log.aiSummary}}</view>
+      <view wx:if="{{log.achievements.length}}" class="analysis-block">
+        <view class="analysis-title">成果</view>
+        <view wx:for="{{log.achievements}}" wx:key="*this" class="analysis-line">{{item}}</view>
+      </view>
+      <view wx:if="{{log.risks.length}}" class="analysis-block">
+        <view class="analysis-title danger">风险</view>
+        <view wx:for="{{log.risks}}" wx:key="*this" class="analysis-line danger">{{item}}</view>
+      </view>
+      <view wx:if="{{log.blockers.length}}" class="analysis-block">
+        <view class="analysis-title warning">阻塞</view>
+        <view wx:for="{{log.blockers}}" wx:key="*this" class="analysis-line warning">{{item}}</view>
+      </view>
+      <view wx:if="{{log.keywords.length}}" class="keyword-row">
+        <text wx:for="{{log.keywords}}" wx:key="*this">{{item}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{log.attachments.length}}" class="surface detail-section">
+      <view class="section-title">附件</view>
+      <view class="attachment-list">
+        <view wx:for="{{log.attachments}}" wx:key="id" class="attachment-item" data-id="{{item.id}}" bindtap="openAttachment">
+          <view>
+            <view class="attachment-name">{{item.fileName}}</view>
+            <view class="attachment-meta">{{item.kindText}} · {{item.displaySize}}</view>
+          </view>
+          <view class="attachment-action">查看</view>
+        </view>
+      </view>
+    </view>
+  </block>
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+</view>

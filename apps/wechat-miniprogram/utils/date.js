@@ -16,6 +16,22 @@ function addMonths(month, diff) {
   return monthKey(date);
 }
 
+function monthTitle(month) {
+  const [year, monthNumber] = String(month).split("-").map(Number);
+  if (!year || !monthNumber) return month;
+  return `${year}年${monthNumber}月`;
+}
+
+function shortDayTitle(day) {
+  const parts = String(day || "").split("-").map(Number);
+  if (parts.length < 3 || !parts[1] || !parts[2]) return day;
+  return `${parts[1]}月${parts[2]}日`;
+}
+
+function isFutureDay(day) {
+  return String(day || "") > dateKey();
+}
+
 function buildMonthGrid(month, days) {
   const [year, monthNumber] = month.split("-").map(Number);
   const first = new Date(year, monthNumber - 1, 1);
@@ -29,7 +45,8 @@ function buildMonthGrid(month, days) {
   const items = [];
   for (let day = 1; day <= totalDays; day += 1) {
     const key = `${month}-${pad(day)}`;
-    const data = dayMap.get(key) || {
+    const source = dayMap.get(key);
+    const data = source || {
       date: key,
       filledCount: 0,
       missingCount: 0,
@@ -40,17 +57,43 @@ function buildMonthGrid(month, days) {
       ...data,
       id: key,
       day,
+      hasData: Boolean(source),
+      isFuture: isFutureDay(key),
       isToday: key === today,
       totalCount: data.filledCount + data.missingCount,
-      tone: data.riskCount > 0 ? "risk" : data.fillRate >= 80 ? "good" : data.fillRate > 0 ? "normal" : "empty"
+      tone: data.riskCount > 0 ? "risk" : data.fillRate >= 80 ? "good" : data.fillRate > 0 ? "normal" : "empty",
+      primaryText: data.riskCount > 0
+        ? `风险 ${data.riskCount}`
+        : data.fillRate >= 80
+          ? "已完成"
+          : data.fillRate > 0
+            ? `${Math.round(data.fillRate)}%`
+            : isFutureDay(key)
+              ? "待填"
+              : "未填",
+      secondaryText: data.filledCount + data.missingCount > 0
+        ? `已填 ${data.filledCount}/${data.filledCount + data.missingCount}`
+        : isFutureDay(key)
+          ? "未开始"
+          : "无记录"
     });
   }
-  return blanks.concat(items);
+  const grid = blanks.concat(items);
+  while (grid.length < 42) {
+    grid.push({
+      id: `blank-trailing-${grid.length}`,
+      blank: true
+    });
+  }
+  return grid;
 }
 
 module.exports = {
   dateKey,
   monthKey,
   addMonths,
+  monthTitle,
+  shortDayTitle,
+  isFutureDay,
   buildMonthGrid
 };

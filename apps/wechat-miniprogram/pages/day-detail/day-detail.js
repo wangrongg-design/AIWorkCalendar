@@ -11,6 +11,9 @@ Page({
     missingEmployees: [],
     hasFilled: false,
     hasMissing: false,
+    aiInsightTitle: "AI 今日洞察",
+    aiInsightText: "日期详情会展示填报、缺填、风险和关联日报。",
+    aiInsightTone: "",
     loading: false
   },
 
@@ -41,12 +44,15 @@ Page({
         }))
       }));
       const missingEmployees = result.missingEmployees || [];
+      const stats = result.stats || {};
+      const aiInsight = this.buildInsight(stats, filledEmployees, missingEmployees);
       this.setData({
-        stats: result.stats || {},
+        stats,
         filledEmployees,
         missingEmployees,
         hasFilled: filledEmployees.length > 0,
-        hasMissing: missingEmployees.length > 0
+        hasMissing: missingEmployees.length > 0,
+        ...aiInsight
       });
     } catch (error) {
       wx.showToast({ title: error.message || "详情加载失败", icon: "none" });
@@ -59,5 +65,34 @@ Page({
     if (scope === "company") return "全公司";
     if (scope === "department") return "本部门";
     return "只看自己";
+  },
+
+  buildInsight(stats, filledEmployees, missingEmployees) {
+    if ((stats.riskCount || 0) > 0) {
+      return {
+        aiInsightTitle: `${stats.riskCount} 条风险需要关注`,
+        aiInsightText: "建议优先查看风险记录，确认阻塞来源、负责人和后续动作。",
+        aiInsightTone: "risk"
+      };
+    }
+    if ((stats.missingCount || missingEmployees.length || 0) > 0) {
+      return {
+        aiInsightTitle: `${stats.missingCount || missingEmployees.length} 人未填报`,
+        aiInsightText: "缺填会影响团队状态判断，建议提醒成员补齐日报或计划。",
+        aiInsightTone: "warning"
+      };
+    }
+    if (filledEmployees.length > 0) {
+      return {
+        aiInsightTitle: "当天填报已形成团队信号",
+        aiInsightText: `共 ${stats.filledCount || filledEmployees.length} 人提交，累计 ${stats.totalHours || 0} 小时。`,
+        aiInsightTone: ""
+      };
+    }
+    return {
+      aiInsightTitle: "今天还没有团队成员提交日报",
+      aiInsightText: "提醒员工填写后，AI 会自动生成团队观察和风险提示。",
+      aiInsightTone: "warning"
+    };
   }
 });

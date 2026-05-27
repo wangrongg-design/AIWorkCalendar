@@ -3,9 +3,65 @@
   width: 112rpx;
 }
 
+.ai-status-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+  border: 1rpx solid #E6E6E6;
+  border-radius: 28rpx;
+  background: #ECFDF9;
+  padding: 24rpx;
+}
+
+.ai-status-icon {
+  display: flex;
+  width: 60rpx;
+  height: 60rpx;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  background: #CCFBF1;
+  color: #0F766E;
+  font-size: 24rpx;
+  font-weight: 900;
+}
+
+.ai-status-copy {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.ai-status-kicker {
+  color: #0F766E;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.ai-status-title {
+  margin-top: 7rpx;
+  color: #1A1A1A;
+  font-size: 29rpx;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.ai-status-desc {
+  margin-top: 6rpx;
+  color: #424242;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
 .ai-card,
 .draft-card {
   padding: 28rpx;
+}
+
+.ai-card {
+  border-color: #CCFBF1;
+  margin-top: 22rpx;
+  background: #FFFFFF;
 }
 
 .draft-card {
@@ -44,14 +100,14 @@
 
 .chat-message.assistant {
   align-self: flex-start;
-  background: #f3f6fb;
-  color: #3c4043;
+  background: #F6F6F6;
+  color: #424242;
 }
 
 .chat-message.user {
   align-self: flex-end;
-  background: #0b57d0;
-  color: #ffffff;
+  background: #0B57D0;
+  color: #FFFFFF;
 }
 
 .chat-input {
@@ -59,9 +115,9 @@
   min-height: 148rpx;
   margin-top: 20rpx;
   border-radius: 22rpx;
-  background: #f3f6fb;
+  background: #F6F6F6;
   padding: 22rpx;
-  color: #202124;
+  color: #1A1A1A;
   font-size: 26rpx;
   line-height: 1.5;
 }
@@ -75,6 +131,8 @@
 .send-ai-button {
   flex: 1 1 0;
   height: 82rpx;
+  background: #ECFDF9;
+  color: #0F766E;
   line-height: 82rpx;
 }
 
@@ -84,8 +142,8 @@
   min-width: 0;
   height: 82rpx;
   border-radius: 41rpx;
-  background: #e6f4ea;
-  color: #137333;
+  background: #F0FDF4;
+  color: #16A34A;
   font-size: 27rpx;
   line-height: 82rpx;
   overflow: hidden;
@@ -95,26 +153,28 @@
 }
 
 .voice-button.recording {
-  background: #fce8e6;
-  color: #b3261e;
+  background: #FEF2F2;
+  color: #EE3B2B;
 }
 
 .voice-error {
   margin-top: 16rpx;
   border-radius: 18rpx;
-  background: #fce8e6;
+  background: #FEF2F2;
   padding: 16rpx 18rpx;
-  color: #b3261e;
+  color: #EE3B2B;
   font-size: 24rpx;
   line-height: 1.5;
 }
 
-.quick-grid {
+.quick-grid,
+.title-project-row {
   display: flex;
   gap: 18rpx;
 }
 
-.quick-grid .field {
+.quick-grid .field,
+.title-project-row .field {
   min-width: 0;
 }
 
@@ -126,20 +186,40 @@
   flex: 0 0 190rpx;
 }
 
-.time-grid {
-  margin-top: 18rpx;
+.compact-four {
+  display: grid;
+  grid-template-columns: 1.25fr 0.82fr 0.96fr 0.96fr;
+  gap: 12rpx;
 }
 
-.time-grid .field {
-  flex: 1 1 0;
+.compact-four .field,
+.compact-four .field:first-child,
+.compact-four .field:last-child {
+  min-width: 0;
+  flex: none;
 }
 
-.quick-grid.time-grid .field:last-child {
-  flex: 1 1 0;
+.compact-four .input,
+.compact-four .picker-value {
+  padding: 0 12rpx;
+  font-size: 24rpx;
+  text-align: center;
 }
 
 .time-value {
   justify-content: center;
+}
+
+.title-project-row {
+  margin-top: 18rpx;
+}
+
+.title-field {
+  flex: 0 0 60%;
+}
+
+.project-field {
+  flex: 1 1 0;
 }
 
 .picker-value {
@@ -149,9 +229,9 @@
   max-width: 100%;
   overflow: hidden;
   border-radius: 20rpx;
-  background: #f3f6fb;
+  background: #F6F6F6;
   padding: 0 24rpx;
-  color: #202124;
+  color: #1A1A1A;
   font-size: 28rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -171,8 +251,8 @@
   min-width: 0;
   height: 78rpx;
   border-radius: 39rpx;
-  background: #e8f0fe;
-  color: #174ea6;
+  background: #EEF5FF;
+  color: #0B57D0;
   font-size: 26rpx;
   line-height: 78rpx;
 }
@@ -190,7 +270,7 @@
   justify-content: space-between;
   gap: 16rpx;
   border-radius: 18rpx;
-  background: #f3f6fb;
+  background: #F6F6F6;
   padding: 16rpx 18rpx;
 }
 
@@ -200,7 +280,7 @@
 
 .attachment-name {
   overflow: hidden;
-  color: #202124;
+  color: #1A1A1A;
   font-size: 25rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -208,7 +288,7 @@
 
 .attachment-meta {
   margin-top: 4rpx;
-  color: #5f6368;
+  color: #737373;
   font-size: 22rpx;
 }
 
@@ -216,8 +296,8 @@
   flex: 0 0 112rpx;
   height: 58rpx;
   border-radius: 29rpx;
-  background: #fce8e6;
-  color: #b3261e;
+  background: #FEF2F2;
+  color: #EE3B2B;
   font-size: 24rpx;
   line-height: 58rpx;
 }

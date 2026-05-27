@@ -1,0 +1,58 @@
+<view class="page project-detail-page bottom-safe">
+  <block wx:if="{{project}}">
+    <view class="project-header">
+      <view class="project-name">{{project.name}}</view>
+      <view wx:if="{{project.code}}" class="project-code">{{project.code}}</view>
+      <view class="header-tags">
+        <text class="status-tag {{project.statusTone}}">{{project.statusTitle}}</text>
+        <text class="status-tag {{project.riskClass}}">{{project.dueText}}</text>
+      </view>
+    </view>
+
+    <view class="surface ai-section">
+      <view class="ai-kicker">AI 项目判断</view>
+      <view class="ai-title">{{project.aiRiskHint}}</view>
+      <view class="info-row">
+        <text>负责人</text>
+        <text>{{project.ownerName}}</text>
+      </view>
+      <view class="info-row">
+        <text>周期</text>
+        <text>{{project.timelineText}}</text>
+      </view>
+    </view>
+
+    <view class="surface detail-section">
+      <view class="section-title">项目</view>
+      <view class="info-row">
+        <text>名称</text>
+        <text>{{project.name}}</text>
+      </view>
+      <view wx:if="{{project.code}}" class="info-row">
+        <text>编码</text>
+        <text>{{project.code}}</text>
+      </view>
+      <view class="info-row">
+        <text>状态</text>
+        <text>{{project.statusTitle}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{project.description}}" class="surface detail-section">
+      <view class="section-title">说明</view>
+      <view class="description">{{project.description}}</view>
+    </view>
+
+    <view class="surface detail-section">
+      <view class="section-title">负责人</view>
+      <view class="info-row">
+        <text>姓名</text>
+        <text>{{project.ownerName}}</text>
+      </view>
+      <view wx:if="{{project.ownerEmail}}" class="info-row">
+        <text>邮箱</text>
+        <text>{{project.ownerEmail}}</text>
+      </view>
+    </view>
+  </block>
+</view>

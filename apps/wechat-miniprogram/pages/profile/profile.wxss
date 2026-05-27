@@ -1,0 +1,109 @@
+.profile-header {
+  padding: 14rpx 4rpx 22rpx;
+}
+
+.profile-name {
+  color: #1A1A1A;
+  font-size: 44rpx;
+  font-weight: 900;
+  line-height: 1.16;
+}
+
+.profile-subtitle {
+  margin-top: 10rpx;
+  color: #737373;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14rpx;
+}
+
+.metric-card {
+  border: 1rpx solid #E6E6E6;
+  border-radius: 26rpx;
+  background: #FFFFFF;
+  padding: 24rpx;
+}
+
+.metric-value {
+  color: #0B57D0;
+  font-size: 38rpx;
+  font-weight: 900;
+}
+
+.metric-value.risk {
+  color: #EE3B2B;
+}
+
+.metric-value.ai {
+  color: #0F766E;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  color: #737373;
+  font-size: 23rpx;
+}
+
+.ai-profile-panel {
+  margin-top: 20rpx;
+  border: 1rpx solid #CCFBF1;
+  border-radius: 28rpx;
+  background: #ECFDF9;
+  padding: 24rpx;
+}
+
+.ai-kicker {
+  color: #0F766E;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.ai-title {
+  margin-top: 8rpx;
+  color: #1A1A1A;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.ai-desc {
+  margin-top: 6rpx;
+  color: #424242;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.profile-section {
+  margin-top: 20rpx;
+  padding: 28rpx;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+  border-top: 1rpx solid #E6E6E6;
+  padding-top: 20rpx;
+  margin-top: 20rpx;
+  color: #424242;
+  font-size: 26rpx;
+}
+
+.info-row text:first-child {
+  flex-shrink: 0;
+  color: #737373;
+}
+
+.info-row text:last-child {
+  min-width: 0;
+  text-align: right;
+  word-break: break-all;
+}
+
+.logout-button {
+  margin-top: 24rpx;
+}

@@ -3,34 +3,69 @@
 @tailwind utilities;
 
 :root {
+  --color-black: #1A1A1A;
+  --color-gray-7: #2E2E2E;
+  --color-gray-6: #424242;
+  --color-gray-5: #737373;
+  --color-gray-4: #A3A3A3;
+  --color-gray-3: #CCCCCC;
+  --color-gray-2: #E6E6E6;
+  --color-gray-1: #F6F6F6;
+  --color-white: #FFFFFF;
   --color-primary: #0B57D0;
   --color-primary-hover: #1A73E8;
+  --color-primary-pressed: #0847A6;
   --color-primary-soft: #D3E3FD;
-  --color-primary-weak: #EEF5FF;
+  --color-primary-bg: #EEF5FF;
+  --color-primary-weak: var(--color-primary-bg);
   --color-ai: #0F766E;
   --color-ai-hover: #14A39A;
+  --color-ai-pressed: #0B5F59;
   --color-ai-soft: #CCFBF1;
-  --color-ai-weak: #ECFDF9;
+  --color-ai-bg: #ECFDF9;
+  --color-ai-weak: var(--color-ai-bg);
   --color-success: #16A34A;
   --color-success-soft: #DCFCE7;
-  --color-success-weak: #F0FDF4;
+  --color-success-bg: #F0FDF4;
+  --color-success-weak: var(--color-success-bg);
   --color-warning: #D97706;
   --color-warning-soft: #FEF3C7;
-  --color-warning-weak: #FFFBEB;
-  --color-danger: #DC2626;
+  --color-warning-bg: #FFFBEB;
+  --color-warning-weak: var(--color-warning-bg);
+  --color-danger: #EE3B2B;
+  --color-danger-pressed: #C92A20;
   --color-danger-soft: #FEE2E2;
-  --color-danger-weak: #FEF2F2;
-  --color-bg: #F8FAFC;
-  --color-page: #F8FAFC;
-  --color-card: #ffffff;
-  --color-panel: #ffffff;
-  --color-ink: #111827;
-  --color-text: #374151;
-  --color-muted: #6B7280;
-  --color-placeholder: #9CA3AF;
-  --color-line: #E5E7EB;
-  --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.06);
-  --shadow-float: 0 24px 70px rgba(15, 23, 42, 0.14);
+  --color-danger-bg: #FEF2F2;
+  --color-danger-weak: var(--color-danger-bg);
+  --color-bg: var(--color-gray-1);
+  --color-page: var(--color-gray-1);
+  --color-card: var(--color-white);
+  --color-panel: var(--color-white);
+  --color-ink: var(--color-black);
+  --color-text: var(--color-gray-6);
+  --color-muted: var(--color-gray-5);
+  --color-placeholder: var(--color-gray-4);
+  --color-line: var(--color-gray-2);
+  --font-sans:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    sans-serif;
+  --font-size-title: 32px;
+  --font-size-section: 24px;
+  --font-size-card-title: 20px;
+  --font-size-body: 14px;
+  --font-size-small: 13px;
+  --font-size-caption: 12px;
+  --line-height-title: 40px;
+  --line-height-section: 32px;
+  --line-height-body: 22px;
+  --line-height-small: 20px;
+  --shadow-card: 0 10px 28px rgba(26, 26, 26, 0.06);
+  --shadow-float: 0 24px 70px rgba(26, 26, 26, 0.14);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -40,15 +75,15 @@
   --md-primary: var(--color-primary);
   --md-on-primary: #ffffff;
   --md-primary-container: var(--color-primary-soft);
-  --md-on-primary-container: #0B57D0;
+  --md-on-primary-container: var(--color-primary);
   --md-secondary: var(--color-ai);
   --md-secondary-container: var(--color-ai-soft);
   --md-tertiary: var(--color-warning);
   --md-error: var(--color-danger);
   --md-surface: var(--color-bg);
-  --md-surface-container-low: #fafbfc;
-  --md-surface-container: #F3F6FA;
-  --md-surface-container-high: #eef2f7;
+  --md-surface-container-low: var(--color-white);
+  --md-surface-container: var(--color-gray-1);
+  --md-surface-container-high: var(--color-gray-2);
   --md-surface-bright: var(--color-card);
   --md-on-surface: var(--color-ink);
   --md-on-surface-variant: var(--color-muted);
@@ -67,7 +102,10 @@ body {
 
 body {
   margin: 0;
+  font-family: var(--font-sans);
   font-feature-settings: "kern";
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 .ant-layout {
@@ -531,8 +569,7 @@ body {
   min-height: 124px;
   border: 0;
   border-radius: 18px;
-  background:
-    linear-gradient(135deg, rgba(238, 243, 248, 0.56), rgba(248, 250, 253, 0.32));
+  background: transparent;
 }
 
 .calendar-cell:not(.is-today) {
@@ -2723,5 +2760,1086 @@ body {
 
   .calendar-empty-cell {
     min-height: 112px;
+  }
+}
+
+/* AIWorkCalendar VI v1.0: black/gray foundation, blue action, teal AI, semantic status colors. */
+.ant-typography,
+.ant-form-item-label > label,
+.ant-table-wrapper .ant-table,
+.ant-menu,
+.ant-dropdown-menu {
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
+
+.ant-btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-white);
+  box-shadow: none;
+}
+
+.ant-btn-primary:not(:disabled):hover {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+}
+
+.ant-btn-primary:not(:disabled):active {
+  background: var(--color-primary-pressed) !important;
+  border-color: var(--color-primary-pressed) !important;
+}
+
+.ant-btn-default {
+  background: var(--color-white);
+  border-color: var(--color-gray-2);
+  color: var(--color-black);
+}
+
+.ant-btn-default:not(:disabled):hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.ant-btn-dangerous,
+.ant-btn-dangerous:not(:disabled):hover {
+  color: var(--color-danger);
+}
+
+.ant-btn-primary.ant-btn-dangerous {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-white);
+}
+
+.ai-soft-button.ant-btn {
+  background: var(--color-ai-bg);
+  border-color: var(--color-ai-soft);
+  color: var(--color-ai);
+  font-weight: 700;
+}
+
+.ai-soft-button.ant-btn:not(:disabled):hover {
+  background: var(--color-ai-soft) !important;
+  border-color: var(--color-ai-hover) !important;
+  color: var(--color-ai-pressed) !important;
+}
+
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker,
+.ant-input-number .ant-input-number-input {
+  color: var(--color-text);
+}
+
+.ant-input::placeholder,
+.ant-input-number-input::placeholder,
+.ant-select-selection-placeholder {
+  color: var(--color-gray-4) !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-input-number:hover,
+.ant-select:not(.ant-select-disabled):hover .ant-select-selector,
+.ant-picker:hover {
+  border-color: var(--color-primary-hover);
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused,
+.ant-input-number-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.12) !important;
+}
+
+.ant-table-wrapper .ant-table {
+  background: var(--color-white);
+  border-color: var(--color-gray-2);
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  background: var(--color-gray-1) !important;
+  color: var(--color-gray-5) !important;
+  font-size: var(--font-size-caption);
+  line-height: 18px;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  color: var(--color-text);
+  border-bottom-color: var(--color-gray-2);
+}
+
+.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: var(--color-primary-bg) !important;
+}
+
+.ant-tag {
+  border: 0;
+  font-size: var(--font-size-caption);
+  line-height: 18px;
+}
+
+.ant-tag-blue,
+.ant-tag-processing {
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+}
+
+.ant-tag-cyan {
+  background: var(--color-ai-bg);
+  color: var(--color-ai);
+}
+
+.ant-tag-purple,
+.ant-tag-magenta,
+.ant-tag-geekblue {
+  background: var(--color-gray-1);
+  color: var(--color-gray-7);
+}
+
+.ant-tag-green,
+.ant-tag-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ant-tag-orange,
+.ant-tag-warning,
+.ant-tag-gold {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.ant-tag-red,
+.ant-tag-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.ant-tag-default,
+.ant-tag:not([class*="ant-tag-"]) {
+  background: var(--color-gray-1);
+  color: var(--color-gray-6);
+}
+
+.page-title {
+  color: var(--color-black) !important;
+  font-size: var(--font-size-title) !important;
+  font-weight: 700 !important;
+  line-height: var(--line-height-title) !important;
+}
+
+.page-subtitle,
+.section-subtitle,
+.metric-label,
+.metric-hint,
+.calendar-summary-label {
+  color: var(--color-gray-5);
+}
+
+.section-title,
+.metric-value,
+.calendar-summary-value,
+.auth-loading-mark {
+  color: var(--color-black);
+}
+
+.metric-value,
+.workday-metric-value,
+.calendar-summary-value,
+.h5-proof strong,
+.h5-phone-summary strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.surface-panel,
+.metric-card,
+.toolbar-panel,
+.calendar-summary-strip,
+.calendar-summary-item,
+.workbench-action,
+.workday-risk-panel,
+.workday-ai-panel,
+.workday-detail-data,
+.workday-missing-row,
+.workday-empty-state,
+.pricing-card,
+.register-value-panel,
+.login-form-card,
+.h5-loop-card,
+.h5-pain-list div,
+.h5-safeguards div {
+  background: var(--color-white);
+  border-color: var(--color-gray-2);
+  box-shadow: var(--shadow-card);
+}
+
+.toolbar-panel {
+  background: var(--color-gray-1);
+}
+
+.material-nav .ant-menu-item {
+  color: var(--color-gray-5);
+}
+
+.material-nav .ant-menu-item-selected {
+  background: var(--color-primary-bg) !important;
+  color: var(--color-primary) !important;
+}
+
+.material-nav .ant-menu-item:hover {
+  background: var(--color-primary-bg) !important;
+  color: var(--color-primary) !important;
+}
+
+.material-nav .ant-menu-item-selected::before {
+  background: var(--color-primary);
+}
+
+.workbench-ai,
+.ai-copilot-context,
+.login-ai-status,
+.register-ai-insight,
+.h5-ai-panel {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background:
+    linear-gradient(135deg, rgba(236, 253, 249, 0.94), rgba(255, 255, 255, 0.96) 62%),
+    radial-gradient(circle at 92% 10%, rgba(204, 251, 241, 0.82), transparent 28%);
+}
+
+.workbench-ai-kicker,
+.workday-section-kicker,
+.ai-copilot-kicker,
+.h5-eyebrow,
+.h5-ai-title,
+.login-ai-status,
+.login-value-english,
+.register-value-english,
+.workday-ai-copilot-link svg,
+.h5-section-heading span,
+.h5-showcase-copy svg,
+.login-capability-list svg,
+.h5-pain-list svg,
+.h5-safeguards svg {
+  color: var(--color-ai);
+}
+
+.workbench-ai-title,
+.workday-date,
+.workday-risk-title,
+.workday-ai-title,
+.workday-empty-title,
+.workday-section-heading,
+.copilot-title,
+.ai-copilot-context-title,
+.ai-copilot-section-title,
+.attachment-viewer-name,
+.login-top-brand,
+.login-brand-lockup div div,
+.login-value-title.ant-typography,
+.register-value-title.ant-typography,
+.login-insight-title,
+.login-signal-grid strong,
+.h5-hero-copy h1,
+.h5-section-heading h2,
+.h5-showcase-copy h2,
+.h5-loop-card h3,
+.h5-phone-header strong,
+.h5-final-cta h2 {
+  color: var(--color-black);
+}
+
+.workbench-ai-evidence span,
+.workday-risk-copy,
+.workday-empty-copy,
+.workday-subtitle,
+.workday-ai-list,
+.ai-copilot-insights,
+.ai-copilot-message,
+.ai-copilot-context-list span,
+.attachment-viewer-meta,
+.login-value-copy.ant-typography,
+.login-insight-list div,
+.register-value-copy.ant-typography,
+.h5-hero-lead,
+.h5-ai-panel p,
+.h5-pain-list div,
+.h5-showcase-copy p,
+.h5-final-cta p,
+.h5-loop-card p {
+  color: var(--color-text);
+}
+
+.workday-metric.is-filled {
+  background: var(--color-success-bg);
+}
+
+.workday-metric.is-filled .workday-metric-value {
+  color: var(--color-success);
+}
+
+.workday-metric.is-missing {
+  background: var(--color-warning-bg);
+}
+
+.workday-metric.is-missing .workday-metric-value {
+  color: var(--color-warning);
+}
+
+.workday-metric.is-hours {
+  background: var(--color-primary-bg);
+}
+
+.workday-metric.is-hours .workday-metric-value {
+  color: var(--color-primary);
+}
+
+.workday-metric.is-risk,
+.workday-risk-panel.has-risk {
+  background: var(--color-danger-bg);
+}
+
+.workday-metric.is-risk .workday-metric-value {
+  color: var(--color-danger);
+}
+
+.workday-risk-panel {
+  background: var(--color-warning-bg);
+}
+
+.ai-shimmer,
+.ai-copilot-message.is-loading {
+  background: linear-gradient(90deg, var(--color-ai-bg), var(--color-ai-soft), var(--color-ai-bg));
+  background-size: 220% 100%;
+  color: var(--color-ai);
+}
+
+.workday-ai-pill,
+.ai-copilot-actions button,
+.ai-copilot-pills button {
+  background: var(--color-ai-bg);
+  color: var(--color-ai);
+}
+
+.workday-ai-pill:hover,
+.ai-copilot-actions button:hover,
+.ai-copilot-pills button:hover:not(:disabled) {
+  background: var(--color-ai-soft);
+}
+
+.ai-copilot-section,
+.ai-copilot-action-bar,
+.ai-copilot-prompt-bar,
+.ai-copilot-message,
+.task-item,
+.attachment-viewer-item {
+  background: var(--color-gray-1);
+}
+
+.ai-copilot-message.user {
+  background: var(--color-primary);
+  color: var(--color-white);
+}
+
+.ai-copilot-input {
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-2);
+  box-shadow: var(--shadow-card);
+}
+
+.calendar-cell {
+  background: var(--color-white);
+  border: 1px solid transparent;
+  color: var(--color-gray-5);
+}
+
+.calendar-cell:hover {
+  background: var(--color-white);
+  border-color: var(--color-primary-soft);
+}
+
+.calendar-cell.is-today,
+.calendar-cell.is-today.is-future,
+.calendar-cell.is-today.is-past {
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary);
+  color: var(--color-black);
+}
+
+.calendar-cell.is-future {
+  background: var(--color-ai-bg);
+}
+
+.calendar-cell.is-past,
+.calendar-cell:not(.is-today) {
+  background: var(--color-gray-1);
+}
+
+.calendar-cell.is-outside {
+  background: var(--color-gray-1);
+  color: var(--color-gray-4);
+}
+
+.calendar-empty-cell {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.calendar-rate-track {
+  background: var(--color-gray-2);
+}
+
+.calendar-rate-fill {
+  background: var(--color-primary);
+}
+
+.calendar-cell:not(.is-today) .calendar-rate-fill {
+  background: var(--color-gray-3);
+}
+
+.calendar-risk-tag {
+  background: var(--color-danger-bg) !important;
+  color: var(--color-danger) !important;
+}
+
+.text-danger {
+  color: var(--color-danger) !important;
+}
+
+.text-warning {
+  color: var(--color-warning) !important;
+}
+
+.text-success {
+  color: var(--color-success) !important;
+}
+
+.text-secondary {
+  color: var(--color-ai) !important;
+}
+
+.bg-secondary-container {
+  background: var(--color-ai-soft) !important;
+}
+
+.bg-error-container {
+  background: var(--color-danger-bg) !important;
+}
+
+.text-error {
+  color: var(--color-danger) !important;
+}
+
+.login-stage,
+.login-product-stage,
+.h5-page,
+.h5-hero {
+  background:
+    linear-gradient(rgba(26, 26, 26, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26, 26, 26, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 22% 22%, rgba(238, 245, 255, 0.88), transparent 28%),
+    radial-gradient(circle at 82% 78%, rgba(236, 253, 249, 0.72), transparent 24%),
+    var(--color-gray-1);
+  background-size: 42px 42px, 42px 42px, auto, auto, auto;
+}
+
+.login-product-stage::before {
+  background:
+    linear-gradient(115deg, transparent 0 42%, rgba(11, 87, 208, 0.07) 42.2%, transparent 42.6%),
+    linear-gradient(68deg, transparent 0 58%, rgba(15, 118, 110, 0.07) 58.2%, transparent 58.6%);
+}
+
+.login-card,
+.login-value-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--color-gray-2);
+  box-shadow: var(--shadow-float);
+}
+
+.login-form .ant-input,
+.login-form .ant-input-affix-wrapper,
+.register-form .ant-input,
+.register-form .ant-input-affix-wrapper {
+  background: var(--color-gray-1);
+}
+
+.login-form .ant-input:hover,
+.login-form .ant-input-affix-wrapper:hover,
+.login-form .ant-input:focus,
+.login-form .ant-input-affix-wrapper-focused {
+  background: var(--color-white);
+}
+
+.pricing-card.is-recommended {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+}
+
+.login-live-dot {
+  background: var(--color-ai);
+  box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.36);
+}
+
+.h5-scene-grid div,
+.h5-phone-summary div,
+.h5-phone-calendar b {
+  background: var(--color-gray-1);
+}
+
+.h5-scene-grid div.is-hot,
+.h5-phone-calendar b.is-active {
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.h5-scene-grid div.is-risk {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-soft);
+}
+
+.h5-showcase {
+  background: var(--color-ai-bg);
+}
+
+.h5-phone {
+  border-color: var(--color-ai-soft);
+}
+
+.h5-phone-calendar b.is-plan {
+  background: var(--color-ai-soft);
+  color: var(--color-ai-pressed);
+}
+
+.h5-final-cta {
+  background: var(--color-black);
+}
+
+.h5-final-cta svg,
+.h5-final-cta .h5-primary-action {
+  color: var(--color-ai-pressed);
+}
+
+.h5-final-cta .h5-primary-action {
+  background: var(--color-ai-soft);
+}
+
+.tenant-logo-thumb {
+  display: flex;
+  width: 86px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  padding: 5px 8px;
+}
+
+.tenant-logo-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Larger AI work assistant dialog. Keep page context compact and give conversation the main space. */
+.ai-copilot-modal .ant-modal-content {
+  max-height: calc(100vh - 48px);
+}
+
+.ai-copilot-modal .ant-modal-header {
+  padding: 16px 20px 8px !important;
+}
+
+.ai-copilot-modal .ai-copilot {
+  display: grid;
+  height: min(780px, calc(100vh - 112px));
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+.ai-copilot-modal .ai-copilot-context,
+.ai-copilot-modal .ai-copilot-section,
+.ai-copilot-modal .ai-copilot-action-bar {
+  min-height: 0;
+  box-shadow: none;
+}
+
+.ai-copilot-modal .ai-copilot-context {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 12px;
+}
+
+.ai-copilot-modal .ai-copilot-section {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 12px 14px;
+}
+
+.ai-copilot-modal .ai-copilot-context-title {
+  margin-top: 3px;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.ai-copilot-modal .ai-copilot-context-list {
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ai-copilot-modal .ai-copilot-context-list span {
+  padding: 4px 8px;
+}
+
+.ai-copilot-modal .ai-copilot-insights {
+  margin-top: 6px;
+  display: grid;
+  gap: 2px;
+  line-height: 1.5;
+}
+
+.ai-copilot-modal .ai-copilot-action-bar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: 8px 10px;
+}
+
+.ai-copilot-modal .ai-copilot-thread {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-height: 360px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 18px;
+  background: var(--color-white);
+  padding: 14px;
+}
+
+.ai-copilot-modal .ai-copilot-message {
+  max-width: 78%;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ai-copilot-modal .ai-copilot-message.user {
+  justify-self: end;
+}
+
+.ai-copilot-modal .ai-copilot-compose {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  gap: 8px;
+}
+
+.ai-copilot-modal .ai-copilot-input {
+  padding: 12px;
+}
+
+.ai-copilot-modal .ai-copilot-input .ant-input {
+  min-height: 112px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@media (max-width: 760px) {
+  .ai-copilot-modal .ai-copilot {
+    height: min(780px, calc(100vh - 96px));
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ai-copilot-modal .ai-copilot-thread {
+    min-height: 320px;
+  }
+
+  .ai-copilot-modal .ai-copilot-message {
+    max-width: 92%;
+  }
+}
+
+/* Date detail dialog: VI v1.0, record-first layout. */
+.workday-detail-modal .ant-modal-content {
+  max-height: calc(100vh - 36px);
+  overflow: hidden;
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-xl);
+  background: var(--color-white);
+  box-shadow: 0 24px 70px rgba(26, 26, 26, 0.18);
+}
+
+.workday-detail-modal .ant-modal-body {
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 18px 24px 22px;
+  background: var(--color-gray-1);
+}
+
+.workday-detail-modal .ant-modal-close {
+  top: 14px;
+  right: 16px;
+  color: var(--color-gray-5);
+}
+
+.workday-detail-modal .workday-detail-hero {
+  align-items: center;
+  padding: 0 44px 14px 0;
+  border-bottom: 1px solid var(--color-gray-2);
+}
+
+.workday-detail-modal .workday-product {
+  color: var(--color-ai);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.workday-detail-modal .workday-date {
+  margin-top: 6px;
+  color: var(--color-black);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 38px;
+}
+
+.workday-detail-modal .workday-subtitle {
+  margin-top: 4px;
+  color: var(--color-gray-6);
+  font-size: 14px;
+}
+
+.workday-detail-modal .workday-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.workday-detail-modal .workday-metric {
+  min-height: 68px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  box-shadow: none;
+}
+
+.workday-detail-modal .workday-metric:hover {
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.workday-detail-modal .workday-metric-label {
+  color: var(--color-gray-6);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workday-detail-modal .workday-metric-value {
+  margin-top: 6px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 34px;
+}
+
+.workday-detail-modal .workday-focus-row {
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.workday-detail-modal .workday-risk-panel,
+.workday-detail-modal .workday-ai-panel,
+.workday-detail-modal .workday-detail-data,
+.workday-detail-modal .workday-missing-row,
+.workday-detail-modal .workday-empty-state {
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  box-shadow: none;
+}
+
+.workday-detail-modal .workday-risk-panel {
+  min-height: 112px;
+  padding: 14px;
+  background: var(--color-warning-bg);
+}
+
+.workday-detail-modal .workday-risk-panel.has-risk {
+  background: var(--color-danger-bg);
+}
+
+.workday-detail-modal .workday-risk-title,
+.workday-detail-modal .workday-ai-title {
+  margin-top: 6px;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.workday-detail-modal .workday-risk-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-ai-panel {
+  padding: 14px;
+}
+
+.workday-detail-modal .workday-ai-header {
+  align-items: center;
+}
+
+.workday-detail-modal .workday-ai-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-ai-list li::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: var(--color-ai);
+  vertical-align: 1px;
+}
+
+.workday-detail-modal .workday-ai-pills {
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.workday-detail-modal .workday-ai-pill {
+  padding: 5px 10px;
+  background: var(--color-ai-bg);
+  color: var(--color-ai);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workday-detail-modal .workday-ai-copilot-link {
+  margin-top: 10px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-md);
+  background: var(--color-gray-1);
+  padding: 8px 10px;
+  color: var(--color-gray-6);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-detail-data {
+  margin-top: 0;
+  padding: 16px;
+}
+
+.workday-detail-modal .workday-records-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.workday-detail-modal .workday-section-heading {
+  margin-bottom: 0;
+  color: var(--color-black);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 24px;
+}
+
+.workday-detail-modal .workday-records-subtitle {
+  margin-top: 4px;
+  color: var(--color-gray-5);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-records-list {
+  display: flex;
+  max-height: min(52vh, 620px);
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.workday-detail-modal .workday-employee-record {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  padding: 12px;
+}
+
+.workday-detail-modal .workday-employee-meta {
+  min-width: 0;
+  border-right: 1px solid var(--color-gray-2);
+  padding-right: 12px;
+}
+
+.workday-detail-modal .workday-employee-name {
+  color: var(--color-black);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-employee-dept,
+.workday-detail-modal .workday-employee-count {
+  margin-top: 6px;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-log-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workday-detail-modal .workday-log-card {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--color-gray-1);
+  padding: 12px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.workday-detail-modal .workday-log-card:hover {
+  border-color: var(--color-primary-soft);
+  background: var(--color-white);
+  transform: translateY(-1px);
+}
+
+.workday-detail-modal .workday-log-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workday-detail-modal .workday-log-title {
+  min-width: 0;
+  color: var(--color-black);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 22px;
+}
+
+.workday-detail-modal .workday-log-meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workday-detail-modal .workday-log-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.workday-detail-modal .workday-log-content {
+  display: -webkit-box;
+  margin-top: 7px;
+  overflow: hidden;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 21px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.workday-detail-modal .workday-log-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.workday-detail-modal .workday-log-tags span {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 16px;
+}
+
+.workday-detail-modal .workday-log-project {
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+}
+
+.workday-detail-modal .workday-log-achievement {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.workday-detail-modal .workday-log-risk {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.workday-detail-modal .workday-missing-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  padding: 10px 12px;
+}
+
+.workday-detail-modal .workday-missing-row .workday-section-heading {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+@media (max-width: 900px) {
+  .workday-detail-modal .workday-focus-row,
+  .workday-detail-modal .workday-metrics,
+  .workday-detail-modal .workday-employee-record {
+    grid-template-columns: 1fr;
+  }
+
+  .workday-detail-modal .workday-ai-list {
+    grid-template-columns: 1fr;
+  }
+
+  .workday-detail-modal .workday-employee-meta {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-gray-2);
+    padding-right: 0;
+    padding-bottom: 10px;
   }
 }

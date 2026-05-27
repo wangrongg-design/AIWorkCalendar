@@ -1,11 +1,14 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Form, Input, Space, Tag, Typography, message } from "antd";
+import { Alert, Button, Form, Input, Space, Tag, Typography, Upload, message } from "antd";
+import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarCheck2, CheckCircle2, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, CalendarCheck2, CheckCircle2, ImagePlus, ShieldCheck } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { tenantLogoSpec, validateTenantLogoFile } from "@/lib/tenant-logo";
 import { AuthUser } from "@/lib/types";
 
 type RegisterForm = {
@@ -14,6 +17,7 @@ type RegisterForm = {
   adminName: string;
   adminEmail: string;
   password: string;
+  logoUrl?: string;
 };
 
 type RegisterResponse = {
@@ -60,6 +64,8 @@ export default function HomePage() {
   const [form] = Form.useForm<RegisterForm>();
   const token = useAuthStore((state) => state.token);
   const setSession = useAuthStore((state) => state.setSession);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
 
   const register = useMutation({
     mutationFn: (values: RegisterForm) =>
@@ -73,6 +79,19 @@ export default function HomePage() {
       router.replace("/calendar");
     }
   });
+
+  const beforeLogoUpload = async (file: RcFile) => {
+    try {
+      const logo = await validateTenantLogoFile(file);
+      form.setFieldsValue({ logoUrl: logo.dataUrl });
+      setLogoPreview(logo.dataUrl);
+      setLogoFileList([{ uid: file.uid, name: file.name, status: "done", size: file.size }]);
+      message.success("企业 Logo 已添加");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "企业 Logo 不符合规格");
+    }
+    return false;
+  };
 
   return (
     <main className="min-h-screen bg-surface">
@@ -174,6 +193,9 @@ export default function HomePage() {
               form={form}
               className="register-form mt-6"
               layout="vertical"
+              onSubmitCapture={(event) => {
+                event.preventDefault();
+              }}
               onFinish={(values) => register.mutate({ ...values, tenantCode: values.tenantCode.toLowerCase() })}
             >
               <Form.Item className="register-priority-field" name="companyName" label="企业名称" rules={[{ required: true, min: 2 }]}>
@@ -198,7 +220,41 @@ export default function HomePage() {
               <Form.Item className="register-priority-field" name="password" label="登录密码" rules={[{ required: true, min: 6 }]}>
                 <Input.Password placeholder="至少 6 位" />
               </Form.Item>
-              <Button type="primary" htmlType="submit" block icon={<ArrowRight size={16} />} loading={register.isPending}>
+              <Form.Item name="logoUrl" hidden>
+                <Input />
+              </Form.Item>
+              <Form.Item label="企业 Logo" extra={`可选。${tenantLogoSpec.helpText} 登录后侧边栏将显示企业 Logo。`}>
+                <Upload.Dragger
+                  accept="image/png"
+                  maxCount={1}
+                  fileList={logoFileList}
+                  beforeUpload={beforeLogoUpload}
+                  onRemove={() => {
+                    form.setFieldsValue({ logoUrl: undefined });
+                    setLogoPreview(null);
+                    setLogoFileList([]);
+                    return true;
+                  }}
+                >
+                  <p className="ant-upload-drag-icon">
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="企业 Logo 预览" className="mx-auto h-12 max-w-[170px] object-contain" />
+                    ) : (
+                      <ImagePlus size={28} />
+                    )}
+                  </p>
+                  <p className="ant-upload-text">上传企业 Logo</p>
+                  <p className="ant-upload-hint">请使用与七数AI当前标识一致的 PNG 规格：620 x 220px。</p>
+                </Upload.Dragger>
+              </Form.Item>
+              <Button
+                type="primary"
+                htmlType="button"
+                block
+                icon={<ArrowRight size={16} />}
+                loading={register.isPending}
+                onClick={() => form.submit()}
+              >
                 免费创建企业
               </Button>
             </Form>

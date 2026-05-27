@@ -1,0 +1,105 @@
+.project-header {
+  padding: 12rpx 4rpx 22rpx;
+}
+
+.project-name {
+  color: #1A1A1A;
+  font-size: 42rpx;
+  font-weight: 900;
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.project-code {
+  margin-top: 8rpx;
+  color: #737373;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.status-tag {
+  border-radius: 999rpx;
+  background: #F6F6F6;
+  padding: 8rpx 16rpx;
+  color: #737373;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.status-tag.success {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+
+.status-tag.warning {
+  background: #FFFBEB;
+  color: #D97706;
+}
+
+.status-tag.risk {
+  background: #FEF2F2;
+  color: #EE3B2B;
+}
+
+.ai-section,
+.detail-section {
+  margin-top: 20rpx;
+  padding: 28rpx;
+}
+
+.ai-section {
+  border-color: #CCFBF1;
+  background: #ECFDF9;
+}
+
+.ai-kicker {
+  color: #0F766E;
+  font-size: 24rpx;
+  font-weight: 900;
+}
+
+.ai-title {
+  margin-top: 10rpx;
+  color: #1A1A1A;
+  font-size: 29rpx;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+  border-top: 1rpx solid #E6E6E6;
+  padding: 20rpx 0 0;
+  margin-top: 20rpx;
+  color: #424242;
+  font-size: 26rpx;
+  line-height: 1.45;
+}
+
+.info-row text:first-child {
+  flex-shrink: 0;
+  color: #737373;
+}
+
+.info-row text:last-child {
+  min-width: 0;
+  text-align: right;
+  word-break: break-all;
+}
+
+.description {
+  margin-top: 14rpx;
+  color: #424242;
+  font-size: 26rpx;
+  line-height: 1.6;
+  word-break: break-all;
+}

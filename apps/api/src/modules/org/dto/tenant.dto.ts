@@ -20,5 +20,8 @@ export class CreateTenantDto {
   @IsString()
   @MinLength(6)
   adminPassword?: string;
-}
 
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+}

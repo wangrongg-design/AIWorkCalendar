@@ -120,6 +120,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isCalendarHome = pathname === "/calendar" || pathname === "/dashboard";
   const mobileNavItems = [...(dailyNavItems ?? []), ...(canUseAdminMenu ? (adminNavItems ?? []) : [])];
   const roleText = user.roles.map((role) => roleLabels[role] ?? role).join(" / ");
+  const tenantLogoSrc = user.tenantLogoUrl || "/seven-ai-logo.png";
+  const tenantLogoAlt = user.tenantLogoUrl ? `${user.tenantName} Logo` : "七数AI";
   const navigateTo = (key: string) => {
     router.push(key);
     setMobileNavOpen(false);
@@ -149,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex min-h-screen flex-col">
           <div className={`flex h-[76px] items-center gap-3 ${collapsed ? "justify-center px-3" : "px-5"}`}>
             <div className={`flex h-8 shrink-0 items-center ${collapsed ? "w-12 justify-center" : "w-28"}`}>
-              <img src="/seven-ai-logo.png" alt="七数AI" className="h-7 w-full object-contain opacity-75" />
+              <img src={tenantLogoSrc} alt={tenantLogoAlt} className="h-7 w-full object-contain opacity-90" />
             </div>
             {!collapsed ? (
               <div className="min-w-0">

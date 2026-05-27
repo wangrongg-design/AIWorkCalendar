@@ -8,11 +8,24 @@ const today = new Date();
 const todayKey = dateKey(today);
 const yesterdayKey = dateKey(addDays(today, -1));
 const tomorrowKey = dateKey(addDays(today, 1));
+const ACTIVE_MEMBER_MONTHLY_PRICE_CENTS = 1900;
+const BILLING_PLANS = [
+  {
+    plan: "TEAM",
+    name: "专业版",
+    description: "¥19 / 启用成员 / 月，按企业内启用成员数量计费。",
+    monthlyPriceCents: ACTIVE_MEMBER_MONTHLY_PRICE_CENTS,
+    yearlyPriceCents: 0,
+    recommendedSeats: 1,
+    features: ["完整 AI 工作日历功能", "AI 日报、周报、月报", "AI 风险分析", "AI 工作问答", "日历看板", "项目管理", "数据导出", "可随时新增或停用成员"]
+  }
+];
 
 const tenant = {
   id: "tenant-demo",
   name: "示例科技有限公司",
   code: "demo",
+  logoUrl: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   deletedAt: null
@@ -58,9 +71,9 @@ const projects = [
 const subscription = {
   id: "sub-demo",
   tenantId: tenant.id,
-  plan: "BUSINESS",
+  plan: "TEAM",
   status: "ACTIVE",
-  seatLimit: 30,
+  seatLimit: 5,
   currentPeriodStart: todayKey,
   currentPeriodEnd: dateKey(addDays(today, 365)),
   trialEndsAt: null,
@@ -127,10 +140,14 @@ const server = http.createServer(async (req, res) => {
     if (route === "POST /auth/change-password") return json(res, changePassword(requireUser(currentUser), body));
     if (route === "GET /org") return json(res, getOrg(requireUser(currentUser)));
     if (route === "GET /billing/subscription") return json(res, subscriptionSummary(requireUser(currentUser).tenantId));
+    if (route === "GET /billing/plans") return json(res, getBillingPlans());
     if (route === "PATCH /billing/subscription") return json(res, updateSubscription(requireUser(currentUser), body));
     if (route === "GET /billing/orders") return json(res, listBillingOrders(requireUser(currentUser)));
     if (route === "POST /billing/orders") return json(res, createBillingOrder(requireUser(currentUser), body));
     if (route === "GET /ops/overview") return json(res, opsOverview(requireUser(currentUser)));
+    if (req.method === "PATCH" && url.pathname.startsWith("/ops/tenants/") && url.pathname.endsWith("/logo")) {
+      return json(res, updateOpsTenantLogo(requireUser(currentUser), url.pathname.split("/")[3], body));
+    }
     if (req.method === "PATCH" && url.pathname.startsWith("/ops/accounts/")) {
       return json(res, updateOpsAccount(requireUser(currentUser), lastPath(url.pathname), body));
     }
@@ -295,10 +312,12 @@ function login(res, body) {
 function registerTenant(body) {
   if (tenants.some((item) => item.code === body.tenantCode)) throw httpError(400, "企业代码已被使用");
   const tenantId = `tenant-${Date.now()}`;
+  const logoUrl = normalizeTenantLogoUrl(body.logoUrl);
   const newTenant = {
     id: tenantId,
     name: body.companyName,
     code: body.tenantCode,
+    logoUrl,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     deletedAt: null
@@ -310,7 +329,7 @@ function registerTenant(body) {
     tenantId,
     plan: "TRIAL",
     status: "TRIALING",
-    seatLimit: 3,
+    seatLimit: 0,
     currentPeriodStart: todayKey,
     currentPeriodEnd: periodEnd,
     trialEndsAt: periodEnd,
@@ -369,7 +388,7 @@ function clearLocalData(user) {
     tenantId: tenant.id,
     plan: "TRIAL",
     status: "TRIALING",
-    seatLimit: 3,
+    seatLimit: 0,
     currentPeriodStart: todayKey,
     currentPeriodEnd: periodEnd,
     trialEndsAt: periodEnd,
@@ -452,6 +471,7 @@ function me(user) {
     tenantId: ownerTenant.id,
     tenantName: ownerTenant.name,
     tenantCode: ownerTenant.code,
+    tenantLogoUrl: ownerTenant.logoUrl ?? null,
     email: user.email,
     phone: user.phone ?? null,
     name: user.name,
@@ -494,10 +514,12 @@ function createTenant(user, body) {
   if (!adminEmail) throw httpError(400, "Admin email is required");
   const now = new Date().toISOString();
   const tenantId = `tenant-${Date.now()}`;
+  const logoUrl = normalizeTenantLogoUrl(body.logoUrl);
   const newTenant = {
     id: tenantId,
     name: body.name,
     code,
+    logoUrl,
     createdAt: now,
     updatedAt: now,
     deletedAt: null
@@ -509,7 +531,7 @@ function createTenant(user, body) {
     tenantId,
     plan: "TRIAL",
     status: "TRIALING",
-    seatLimit: 3,
+    seatLimit: 0,
     currentPeriodStart: todayKey,
     currentPeriodEnd: periodEnd,
     trialEndsAt: periodEnd,
@@ -595,7 +617,7 @@ function subscriptionSummary(tenantId = tenant.id) {
       tenantId,
       plan: "TRIAL",
       status: "TRIALING",
-      seatLimit: 3,
+      seatLimit: 0,
       currentPeriodStart: todayKey,
       currentPeriodEnd: periodEnd,
       trialEndsAt: periodEnd,
@@ -610,11 +632,34 @@ function subscriptionSummary(tenantId = tenant.id) {
     subscriptions.set(tenantId, item);
   }
   const usedSeats = users.filter((user) => user.tenantId === tenantId && user.isActive).length;
+  const isTrialing = item.status === "TRIALING";
   return {
     ...item,
     usedSeats,
-    remainingSeats: Math.max(item.seatLimit - usedSeats, 0),
-    isUsable: ["TRIALING", "ACTIVE"].includes(item.status) && (!item.currentPeriodEnd || item.currentPeriodEnd >= todayKey)
+    remainingSeats: null,
+    isUsable: ["TRIALING", "ACTIVE"].includes(item.status) && (!item.currentPeriodEnd || item.currentPeriodEnd >= todayKey),
+    billingModel: "ACTIVE_MEMBER_MONTHLY",
+    activeMemberMonthlyPriceCents: ACTIVE_MEMBER_MONTHLY_PRICE_CENTS,
+    estimatedMonthlyAmountCents: usedSeats * ACTIVE_MEMBER_MONTHLY_PRICE_CENTS,
+    trialUnlimited: isTrialing
+  };
+}
+
+function getBillingPlans() {
+  return {
+    currency: "CNY",
+    plans: BILLING_PLANS,
+    billingPolicy: {
+      model: "ACTIVE_MEMBER_MONTHLY",
+      trialDays: 30,
+      trialUnlimitedMembers: true,
+      activeMemberMonthlyPriceCents: ACTIVE_MEMBER_MONTHLY_PRICE_CENTS,
+      copy: "企业免费试用1个月，正式使用 ¥19 / 启用成员 / 月。"
+    },
+    paymentProviders: [
+      { provider: "ALIPAY", enabled: true, mode: "mock" },
+      { provider: "WECHAT", enabled: true, mode: "mock" }
+    ]
   };
 }
 
@@ -645,15 +690,19 @@ function createBillingOrder(user, body) {
   requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
   const plan = body.plan ?? "TEAM";
   const interval = body.interval ?? "MONTHLY";
-  const seatLimit = Number(body.seatLimit ?? subscriptionSummary(user.tenantId).seatLimit);
-  const amountCents = planUnitPriceCents(plan, interval) * seatLimit;
+  if (plan !== "TEAM" || interval !== "MONTHLY") {
+    throw httpError(400, "当前仅支持专业版按月订阅");
+  }
+  const activeMemberCount = subscriptionSummary(user.tenantId).usedSeats;
+  const billedMemberCount = Math.max(1, activeMemberCount);
+  const amountCents = planUnitPriceCents(plan, interval) * billedMemberCount;
   const order = {
     id: `order-${Date.now()}`,
     tenantId: user.tenantId,
     createdById: user.id,
     plan,
     interval,
-    seatLimit,
+    seatLimit: billedMemberCount,
     status: "PENDING",
     provider: body.provider ?? "MANUAL",
     amountCents,
@@ -667,7 +716,7 @@ function createBillingOrder(user, body) {
     deletedAt: null
   };
   billingOrders.unshift(order);
-  audit(user, "BILLING_ORDER_CREATED", "BillingOrder", order.id, { plan, interval, seatLimit, amountCents });
+  audit(user, "BILLING_ORDER_CREATED", "BillingOrder", order.id, { plan, interval, activeMemberCount, billedMemberCount, amountCents });
   return order;
 }
 
@@ -706,8 +755,9 @@ function confirmManualPayment(user, orderId, body) {
 }
 
 function planUnitPriceCents(plan, interval) {
-  const monthly = { TRIAL: 0, TEAM: 3900, BUSINESS: 9900, ENTERPRISE: 29900 }[plan] ?? 3900;
-  return interval === "YEARLY" ? Math.round(monthly * 10) : monthly;
+  const config = BILLING_PLANS.find((item) => item.plan === plan);
+  const monthly = plan === "TRIAL" ? 0 : config?.monthlyPriceCents ?? ACTIVE_MEMBER_MONTHLY_PRICE_CENTS;
+  return interval === "YEARLY" ? 0 : monthly;
 }
 
 function opsOverview(user) {
@@ -718,6 +768,7 @@ function opsOverview(user) {
       id: item.id,
       name: item.name,
       code: item.code,
+      logoUrl: item.logoUrl ?? null,
       createdAt: item.createdAt,
       subscription: subscriptionSummary(item.id),
       counts: {
@@ -748,6 +799,7 @@ function opsOverview(user) {
           tenantId: item.tenantId,
           tenantName: ownerTenant.name,
           tenantCode: ownerTenant.code,
+          tenantLogoUrl: ownerTenant.logoUrl ?? null,
           email: item.email,
           phone: item.phone ?? null,
           name: item.name,
@@ -776,6 +828,7 @@ function updateOpsAccount(user, accountId, body) {
     tenantId: target.tenantId,
     tenantName: ownerTenant.name,
     tenantCode: ownerTenant.code,
+    tenantLogoUrl: ownerTenant.logoUrl ?? null,
     email: target.email,
     phone: target.phone ?? null,
     name: target.name,
@@ -786,6 +839,22 @@ function updateOpsAccount(user, accountId, body) {
     lastLoginAt: target.lastLoginAt ?? null,
     createdAt: target.createdAt
   };
+}
+
+function updateOpsTenantLogo(user, tenantId, body) {
+  requireRole(user, ["SUPER_ADMIN"]);
+  const target = tenants.find((item) => item.id === tenantId && !item.deletedAt);
+  if (!target) throw httpError(404, "Tenant not found");
+  const nextLogoUrl = normalizeTenantLogoUrl(body.logoUrl);
+  const hadLogo = Boolean(target.logoUrl);
+  target.logoUrl = nextLogoUrl;
+  target.updatedAt = new Date().toISOString();
+  audit(user, "OPS_TENANT_LOGO_UPDATED", "Tenant", target.id, {
+    tenantCode: target.code,
+    hadLogo,
+    hasLogo: Boolean(target.logoUrl)
+  });
+  return target;
 }
 
 function exportData(user, url) {
@@ -842,9 +911,6 @@ function publicUser(user) {
 function assertSeatAvailable(tenantId) {
   const summary = subscriptionSummary(tenantId);
   if (!summary.isUsable) throw httpError(400, "当前企业订阅不可用，请续费或联系平台管理员。");
-  if (summary.usedSeats + 1 > summary.seatLimit) {
-    throw httpError(400, `当前订阅席位已满：${summary.usedSeats}/${summary.seatLimit}。请升级套餐或增加席位。`);
-  }
 }
 
 function updateOrgUser(user, id, body) {
@@ -1422,6 +1488,26 @@ function normalizeAccount(value) {
     email: text.toLowerCase(),
     phone: normalizePhone(text)
   };
+}
+
+function normalizeTenantLogoUrl(value) {
+  if (value === undefined) return undefined;
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^data:image\/png;base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!match) throw httpError(400, "企业 Logo 仅支持 PNG data URL");
+  const buffer = Buffer.from(match[1].replace(/\s/g, ""), "base64");
+  if (buffer.byteLength > 256 * 1024) throw httpError(400, "企业 Logo 不能超过 256KB");
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (buffer.length < 24 || !buffer.subarray(0, 8).equals(pngSignature)) {
+    throw httpError(400, "企业 Logo 文件不是有效 PNG");
+  }
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  if (width !== 620 || height !== 220) {
+    throw httpError(400, "企业 Logo 尺寸必须为 620 x 220px");
+  }
+  return trimmed;
 }
 
 function matchesAccount(user, account) {

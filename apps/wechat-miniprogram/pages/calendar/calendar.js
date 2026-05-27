@@ -1,6 +1,6 @@
 const { request } = require("../../utils/request");
 const { getToken, getUser } = require("../../utils/storage");
-const { addMonths, buildMonthGrid, dateKey, monthKey } = require("../../utils/date");
+const { addMonths, buildMonthGrid, dateKey, monthKey, monthTitle, shortDayTitle } = require("../../utils/date");
 
 function roleScopes(user) {
   const roles = user && Array.isArray(user.roles) ? user.roles : [];
@@ -22,11 +22,21 @@ function roleScopes(user) {
 Page({
   data: {
     month: monthKey(),
+    monthTitle: monthTitle(monthKey()),
     weekdays: ["日", "一", "二", "三", "四", "五", "六"],
     grid: [],
     days: [],
     totalEmployees: 0,
     todayData: {},
+    monthFillRate: "0",
+    missingCount: 0,
+    riskDayCount: 0,
+    monthFillRateTone: "",
+    aiIconText: "AI",
+    aiConclusion: "今天还没有填报信号",
+    aiRiskText: "AI 日历会优先展示风险日期、缺填成员和团队状态。",
+    firstRiskDate: "",
+    firstRiskDateText: "",
     scopeOptions: [{ value: "self", label: "只看自己" }],
     scopeIndex: 0,
     scopeLabel: "只看自己",
@@ -58,11 +68,13 @@ Page({
       const result = await request(`/analytics/calendar?month=${this.data.month}&scope=${scope}`);
       const grid = buildMonthGrid(this.data.month, result.days || []);
       const today = dateKey();
+      const summary = this.summarizeCalendar(result.days || [], result.totalEmployees || 0);
       this.setData({
         days: result.days || [],
         grid,
         totalEmployees: result.totalEmployees || 0,
         todayData: (result.days || []).find((item) => item.date === today) || {},
+        ...summary,
         scopeLabel: this.data.scopeOptions[this.data.scopeIndex].label
       });
     } catch (error) {
@@ -73,12 +85,20 @@ Page({
   },
 
   prevMonth() {
-    this.setData({ month: addMonths(this.data.month, -1) });
+    const month = addMonths(this.data.month, -1);
+    this.setData({ month, monthTitle: monthTitle(month) });
     this.loadCalendar();
   },
 
   nextMonth() {
-    this.setData({ month: addMonths(this.data.month, 1) });
+    const month = addMonths(this.data.month, 1);
+    this.setData({ month, monthTitle: monthTitle(month) });
+    this.loadCalendar();
+  },
+
+  goToday() {
+    const month = monthKey();
+    this.setData({ month, monthTitle: monthTitle(month) });
     this.loadCalendar();
   },
 
@@ -98,5 +118,50 @@ Page({
     wx.navigateTo({
       url: `/pages/day-detail/day-detail?date=${date}&scope=${scope}`
     });
+  },
+
+  openFirstRiskDay() {
+    if (!this.data.firstRiskDate) return;
+    const scope = this.data.scopeOptions[this.data.scopeIndex].value;
+    wx.navigateTo({
+      url: `/pages/day-detail/day-detail?date=${this.data.firstRiskDate}&scope=${scope}`
+    });
+  },
+
+  summarizeCalendar(days, totalEmployees) {
+    const today = dateKey();
+    const todayDay = days.find((item) => item.date === today);
+    const filled = days.reduce((sum, item) => sum + (item.filledCount || 0), 0);
+    const missing = days.reduce((sum, item) => sum + (item.missingCount || 0), 0);
+    const riskDays = days.filter((item) => (item.riskCount || 0) > 0);
+    const denominator = filled + missing;
+    const monthFillRate = denominator ? ((filled / denominator) * 100).toFixed(0) : "0";
+    const firstRisk = riskDays[0];
+
+    let aiConclusion = "今天还没有填报信号";
+    if (todayDay) {
+      aiConclusion = `今日发现 ${todayDay.riskCount || 0} 条风险，${todayDay.missingCount || 0} 人未填报`;
+    }
+
+    let aiRiskText = "暂无明显风险，继续保持日报完整度。";
+    if (firstRisk) {
+      aiRiskText = `建议先查看 ${shortDayTitle(firstRisk.date)}，确认风险来源和缺填成员。`;
+    } else if (missing > 0) {
+      aiRiskText = `${missing} 条缺填记录会影响团队状态判断，建议先补齐日报覆盖。`;
+    } else if (!totalEmployees) {
+      aiRiskText = "当前范围暂无可分析成员，先完成团队和部门配置。";
+    }
+
+    return {
+      monthFillRate,
+      missingCount: missing,
+      riskDayCount: riskDays.length,
+      monthFillRateTone: Number(monthFillRate) >= 80 ? "success" : "",
+      aiIconText: riskDays.length > 0 ? "!" : "AI",
+      aiConclusion,
+      aiRiskText,
+      firstRiskDate: firstRisk ? firstRisk.date : "",
+      firstRiskDateText: firstRisk ? shortDayTitle(firstRisk.date) : ""
+    };
   }
 });

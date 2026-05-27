@@ -5,6 +5,7 @@ import { AccessService } from "../../common/access/access.service";
 import { AuditService } from "../../common/audit/audit.service";
 import { PrismaService } from "../../common/prisma.service";
 import { SubscriptionService } from "../../common/subscription/subscription.service";
+import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
 import { CreateDepartmentDto, UpdateDepartmentDto } from "./dto/department.dto";
 import { CreateTenantDto } from "./dto/tenant.dto";
@@ -87,6 +88,7 @@ export class OrgService {
     }
 
     const passwordHash = await bcrypt.hash(dto.adminPassword ?? "Passw0rd!", 10);
+    const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
     const roleDefs: Array<{ code: RoleCode; name: string }> = [
       { code: RoleCode.SUPER_ADMIN, name: "超级管理员" },
       { code: RoleCode.COMPANY_ADMIN, name: "企业管理员" },
@@ -97,8 +99,8 @@ export class OrgService {
     return this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.upsert({
         where: { code: dto.code },
-        update: { name: dto.name, deletedAt: null },
-        create: { name: dto.name, code: dto.code }
+        update: { name: dto.name, logoUrl, deletedAt: null },
+        create: { name: dto.name, code: dto.code, logoUrl }
       });
       const periodEnd = new Date();
       periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);

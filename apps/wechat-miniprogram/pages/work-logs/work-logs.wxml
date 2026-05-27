@@ -1,0 +1,42 @@
+<view class="page list-page bottom-safe">
+  <view class="page-hero">
+    <view>
+      <view class="page-title">填报记录</view>
+      <view class="page-subtitle">搜索标题、内容或项目</view>
+    </view>
+    <picker range="{{filters}}" range-key="label" value="{{filterIndex}}" bindchange="onFilterChange">
+      <view class="filter-chip">{{filterLabel}}</view>
+    </picker>
+  </view>
+
+  <view class="ai-list-panel">
+    <view class="ai-list-kicker">AI 记录判断</view>
+    <view class="ai-list-title">{{aiConclusion}}</view>
+    <view class="ai-list-desc">{{aiRiskText}}</view>
+  </view>
+
+  <input class="search-input" value="{{searchText}}" placeholder="搜索标题、内容或项目" bindinput="onSearchInput" />
+
+  <view wx:if="{{!filteredLogs.length && !loading}}" class="empty-state">
+    <view class="empty-title">{{emptyTitle}}</view>
+    <view class="empty-desc">{{emptyDesc}}</view>
+  </view>
+
+  <view class="log-list">
+    <view wx:for="{{filteredLogs}}" wx:key="id" class="log-row" data-id="{{item.id}}" bindtap="openLog">
+      <view class="log-head">
+        <view class="log-title">{{item.title}}</view>
+        <view class="status-badge {{item.statusTone}}">{{item.statusTitle}}</view>
+      </view>
+      <view class="log-meta">
+        <text>{{item.dateText}}</text>
+        <text>{{item.hoursText}}h</text>
+        <text wx:if="{{item.projectName}}">{{item.projectName}}</text>
+      </view>
+      <view class="log-preview">{{item.contentPreview}}</view>
+      <view wx:if="{{item.hasRisk}}" class="risk-line">AI 发现风险或阻塞</view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+</view>

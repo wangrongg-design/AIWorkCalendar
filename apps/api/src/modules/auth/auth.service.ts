@@ -6,6 +6,7 @@ import { createHash, randomBytes } from "crypto";
 import { AuditService } from "../../common/audit/audit.service";
 import { PrismaService } from "../../common/prisma.service";
 import { RateLimitService } from "../../common/rate-limit/rate-limit.service";
+import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto, PasswordResetConfirmDto, PasswordResetRequestDto, VerifyEmailDto } from "./dto/password.dto";
@@ -60,6 +61,7 @@ export class AuthService {
       throw new BadRequestException("企业代码已被使用");
     }
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
     const roleDefs: Array<{ code: RoleCode; name: string }> = [
       { code: RoleCode.SUPER_ADMIN, name: "超级管理员" },
       { code: RoleCode.COMPANY_ADMIN, name: "企业管理员" },
@@ -70,7 +72,8 @@ export class AuthService {
       const tenant = await tx.tenant.create({
         data: {
           name: dto.companyName,
-          code: dto.tenantCode
+          code: dto.tenantCode,
+          logoUrl
         }
       });
       const periodEnd = oneMonthTrialEnd();
@@ -242,6 +245,7 @@ export class AuthService {
       tenantId: fullUser.tenantId,
       tenantName: fullUser.tenant.name,
       tenantCode: fullUser.tenant.code,
+      tenantLogoUrl: fullUser.tenant.logoUrl,
       email: fullUser.email,
       phone: fullUser.phone,
       name: fullUser.name,
@@ -383,7 +387,7 @@ export class AuthService {
       phone?: string | null;
       name: string;
       departmentId: string | null;
-      tenant: { name: string; code: string };
+      tenant: { name: string; code: string; logoUrl?: string | null };
       department?: { name: string } | null;
       requiresWorkReport?: boolean;
     },
@@ -402,6 +406,7 @@ export class AuthService {
         tenantId: user.tenantId,
         tenantName: user.tenant.name,
         tenantCode: user.tenant.code,
+        tenantLogoUrl: user.tenant.logoUrl ?? null,
         email: user.email,
         phone: user.phone ?? null,
         name: user.name,

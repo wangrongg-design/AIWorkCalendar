@@ -1,20 +1,23 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Avatar, Button, Form, Input, Layout, Modal, Space, Switch, Table, Tag, Typography, message } from "antd";
+import { Alert, Avatar, Button, Form, Input, Layout, Modal, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { tenantLogoSpec, validateTenantLogoFile } from "@/lib/tenant-logo";
 import { RoleCode, SubscriptionPlan, SubscriptionStatus } from "@/lib/types";
 
 type OpsTenant = {
   id: string;
   name: string;
   code: string;
+  logoUrl?: string | null;
   createdAt: string;
   subscription?: {
     plan: SubscriptionPlan;
@@ -40,6 +43,7 @@ type OpsAccount = {
   tenantId: string;
   tenantName: string;
   tenantCode: string;
+  tenantLogoUrl?: string | null;
   email: string | null;
   phone?: string | null;
   name: string;
@@ -95,6 +99,9 @@ export default function OpsPage() {
   const clearSession = useAuthStore((state) => state.clearSession);
   const isOps = Boolean(user?.roles.includes("SUPER_ADMIN"));
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [logoTenant, setLogoTenant] = useState<OpsTenant | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
   const [passwordForm] = Form.useForm<ChangePasswordForm>();
 
   useEffect(() => {
@@ -124,6 +131,24 @@ export default function OpsPage() {
     }
   });
 
+  const updateTenantLogo = useMutation({
+    mutationFn: ({ tenantId, nextLogoUrl }: { tenantId: string; nextLogoUrl: string | null }) =>
+      apiFetch<OpsTenant>(`/ops/tenants/${tenantId}/logo`, {
+        method: "PATCH",
+        body: JSON.stringify({ logoUrl: nextLogoUrl })
+      }),
+    onSuccess: () => {
+      message.success("企业 Logo 已更新");
+      setLogoTenant(null);
+      setLogoUrl(null);
+      setLogoFileList([]);
+      queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "企业 Logo 更新失败");
+    }
+  });
+
   const changePassword = useMutation({
     mutationFn: (values: ChangePasswordForm) =>
       apiFetch<{ ok: boolean }>("/auth/change-password", {
@@ -145,13 +170,40 @@ export default function OpsPage() {
     }
   });
 
+  const openLogoEditor = (tenant: OpsTenant) => {
+    setLogoTenant(tenant);
+    setLogoUrl(tenant.logoUrl ?? null);
+    setLogoFileList(
+      tenant.logoUrl
+        ? [{ uid: tenant.id, name: `${tenant.name}-logo.png`, status: "done" }]
+        : []
+    );
+  };
+
+  const beforeLogoUpload = async (file: RcFile) => {
+    try {
+      const logo = await validateTenantLogoFile(file);
+      setLogoUrl(logo.dataUrl);
+      setLogoFileList([{ uid: file.uid, name: file.name, status: "done", size: file.size }]);
+      message.success("企业 Logo 已读取，保存后生效");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "企业 Logo 不符合规格");
+    }
+    return false;
+  };
+
   const tenantColumns: ColumnsType<OpsTenant> = [
     {
       title: "企业",
       render: (_, record) => (
-        <div>
-          <div className="font-medium text-ink">{record.name}</div>
-          <div className="mt-1 text-xs text-muted">{record.code}</div>
+        <div className="flex items-center gap-3">
+          <div className="tenant-logo-thumb">
+            <img src={record.logoUrl || "/seven-ai-logo.png"} alt={`${record.name} Logo`} />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium text-ink">{record.name}</div>
+            <div className="mt-1 text-xs text-muted">{record.code}</div>
+          </div>
         </div>
       )
     },
@@ -175,7 +227,16 @@ export default function OpsPage() {
     { title: "填报", width: 90, render: (_, record) => record.counts.workLogs },
     { title: "报告", width: 90, render: (_, record) => record.counts.reports },
     { title: "服务到期", width: 120, render: (_, record) => dateText(record.subscription?.currentPeriodEnd) },
-    { title: "创建日期", width: 120, render: (_, record) => dateText(record.createdAt) }
+    { title: "创建日期", width: 120, render: (_, record) => dateText(record.createdAt) },
+    {
+      title: "Logo",
+      width: 110,
+      render: (_, record) => (
+        <Button size="small" icon={<ImagePlus size={14} />} onClick={() => openLogoEditor(record)}>
+          修改
+        </Button>
+      )
+    }
   ];
 
   const accountColumns: ColumnsType<OpsAccount> = [
@@ -373,6 +434,51 @@ export default function OpsPage() {
             更新密码
           </Button>
         </Form>
+      </Modal>
+
+      <Modal
+        title="修改企业 Logo"
+        open={Boolean(logoTenant)}
+        onCancel={() => {
+          setLogoTenant(null);
+          setLogoUrl(null);
+          setLogoFileList([]);
+        }}
+        onOk={() => {
+          if (!logoTenant) return;
+          updateTenantLogo.mutate({ tenantId: logoTenant.id, nextLogoUrl: logoUrl });
+        }}
+        confirmLoading={updateTenantLogo.isPending}
+        okText="保存 Logo"
+      >
+        <Alert
+          className="mb-4"
+          type="info"
+          showIcon
+          message={logoTenant ? `${logoTenant.name} · ${logoTenant.code}` : "企业 Logo"}
+          description={tenantLogoSpec.helpText}
+        />
+        <Upload.Dragger
+          accept="image/png"
+          maxCount={1}
+          fileList={logoFileList}
+          beforeUpload={beforeLogoUpload}
+          onRemove={() => {
+            setLogoUrl(null);
+            setLogoFileList([]);
+            return true;
+          }}
+        >
+          <p className="ant-upload-drag-icon">
+            {logoUrl ? (
+              <img src={logoUrl} alt="企业 Logo 预览" className="mx-auto h-14 max-w-[220px] object-contain" />
+            ) : (
+              <ImagePlus size={30} />
+            )}
+          </p>
+          <p className="ant-upload-text">上传或替换企业 Logo</p>
+          <p className="ant-upload-hint">移除当前文件后保存，可恢复显示七数AI默认 Logo。</p>
+        </Upload.Dragger>
       </Modal>
     </Layout>
   );

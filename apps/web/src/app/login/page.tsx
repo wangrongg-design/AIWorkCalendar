@@ -167,14 +167,13 @@ export default function LoginPage() {
           <Form
             className="login-form mt-6"
             layout="vertical"
-            initialValues={{ account: "admin@example.com", password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
             <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
-              <Input placeholder="admin@example.com / 13900000002" />
+              <Input placeholder="请输入邮箱或手机号" />
             </Form.Item>
             <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-              <Input.Password placeholder="Passw0rd!" />
+              <Input.Password placeholder="请输入密码" />
             </Form.Item>
             <Button className="login-submit" type="primary" htmlType="submit" block loading={login.isPending}>
               {login.isPending ? "AI 正在验证企业身份…" : "进入工作空间"}

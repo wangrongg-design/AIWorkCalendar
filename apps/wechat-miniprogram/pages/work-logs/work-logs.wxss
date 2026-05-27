@@ -1,0 +1,159 @@
+.filter-chip {
+  max-width: 150rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #EEF5FF;
+  padding: 16rpx 22rpx;
+  color: #0B57D0;
+  font-size: 24rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-list-panel {
+  border: 1rpx solid #E6E6E6;
+  border-radius: 28rpx;
+  background: #ECFDF9;
+  padding: 24rpx;
+}
+
+.ai-list-kicker {
+  color: #0F766E;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.ai-list-title {
+  margin-top: 8rpx;
+  color: #1A1A1A;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1.36;
+}
+
+.ai-list-desc {
+  margin-top: 6rpx;
+  color: #424242;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.search-input {
+  width: 100%;
+  height: 86rpx;
+  margin-top: 20rpx;
+  border-radius: 24rpx;
+  background: #FFFFFF;
+  padding: 0 26rpx;
+  color: #1A1A1A;
+  font-size: 27rpx;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.log-row {
+  border: 1rpx solid #E6E6E6;
+  border-radius: 28rpx;
+  background: #FFFFFF;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 14rpx rgba(60, 64, 67, 0.04);
+}
+
+.log-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.log-title {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  color: #1A1A1A;
+  font-size: 29rpx;
+  font-weight: 800;
+  line-height: 1.32;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge {
+  flex-shrink: 0;
+  border-radius: 999rpx;
+  background: #F6F6F6;
+  padding: 7rpx 14rpx;
+  color: #737373;
+  font-size: 21rpx;
+  font-weight: 800;
+}
+
+.status-badge.success {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+
+.log-meta {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 12rpx;
+  color: #737373;
+  font-size: 23rpx;
+}
+
+.log-meta text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-preview {
+  margin-top: 12rpx;
+  overflow: hidden;
+  color: #424242;
+  font-size: 25rpx;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.risk-line {
+  margin-top: 12rpx;
+  color: #EE3B2B;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+
+.empty-state {
+  margin-top: 24rpx;
+  border-radius: 28rpx;
+  background: #FFFFFF;
+  padding: 46rpx 28rpx;
+  text-align: center;
+}
+
+.empty-title {
+  color: #1A1A1A;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.empty-desc {
+  margin-top: 8rpx;
+  color: #737373;
+  font-size: 24rpx;
+}
+
+.loading {
+  margin-top: 20rpx;
+  color: #737373;
+  font-size: 24rpx;
+  text-align: center;
+}

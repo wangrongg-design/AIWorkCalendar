@@ -82,6 +82,13 @@ Page({
     projectIndex: 0,
     projectId: "",
     attachments: [],
+    workLogs: [],
+    todaySubmittedCount: 0,
+    todayHoursText: "0",
+    todayRiskCount: 0,
+    todayStatusIcon: "AI",
+    todayConclusion: "今天还未完成填报",
+    todayRiskText: "先用一句话描述今天完成的事，AI 会整理标题、内容和工时。",
     recording: false,
     drafting: false,
     submitting: false,
@@ -99,6 +106,7 @@ Page({
     });
     this.initSpeechManager();
     this.loadProjects();
+    this.loadWorkLogs();
   },
 
   async loadProjects() {
@@ -120,6 +128,42 @@ Page({
     } catch (error) {
       this.setData({ projectOptions: [{ id: "", displayName: "不关联项目" }], projectIndex: 0, projectId: "" });
     }
+  },
+
+  async loadWorkLogs() {
+    try {
+      const workLogs = await request("/work-logs");
+      this.applyTodayStatus(workLogs || []);
+    } catch (error) {
+      this.applyTodayStatus([]);
+    }
+  },
+
+  applyTodayStatus(workLogs) {
+    const today = dateKey();
+    const todayLogs = (workLogs || []).filter((item) => String(item.date || "").slice(0, 10) === today);
+    const submitted = todayLogs.filter((item) => item.status === "SUBMITTED").length;
+    const hours = todayLogs.reduce((sum, item) => sum + Number(item.hours || 0), 0);
+    const riskCount = todayLogs.reduce((sum, item) => {
+      const risks = item.aiAnalysis && Array.isArray(item.aiAnalysis.risks) ? item.aiAnalysis.risks.length : 0;
+      const blockers = item.aiAnalysis && Array.isArray(item.aiAnalysis.blockers) ? item.aiAnalysis.blockers.length : 0;
+      return sum + risks + blockers;
+    }, 0);
+    const hasDraftContent = Boolean(this.data.title.trim() || this.data.content.trim());
+    const todayHoursText = Number(hours.toFixed(1)).toString();
+    this.setData({
+      workLogs,
+      todaySubmittedCount: submitted,
+      todayHoursText,
+      todayRiskCount: riskCount,
+      todayStatusIcon: riskCount > 0 ? "!" : "AI",
+      todayConclusion: submitted > 0 ? `今天已提交 ${submitted} 条日报` : hasDraftContent ? "日报草稿已准备，等待确认提交" : "今天还未完成填报",
+      todayRiskText: riskCount > 0
+        ? `AI 发现 ${riskCount} 个风险或阻塞，提交前建议补充处理动作。`
+        : submitted > 0
+          ? "暂无明显风险，今日工作信号已进入团队看板。"
+          : "先用一句话描述今天完成的事，AI 会整理标题、内容和工时。"
+    });
   },
 
   initSpeechManager() {
@@ -194,6 +238,7 @@ Page({
         endTime: timeFromIso(draft.endTime),
         chatMessages: messages.concat([{ role: "assistant", content: draft.assistantMessage }])
       });
+      this.applyTodayStatus(this.data.workLogs);
       wx.showToast({ title: draft.kind === "PLAN" ? "已生成计划" : "已生成日报" });
     } catch (error) {
       wx.showToast({ title: error.message || "AI 生成失败", icon: "none" });
@@ -284,11 +329,11 @@ Page({
   },
 
   onTitleInput(event) {
-    this.setData({ title: event.detail.value });
+    this.setData({ title: event.detail.value }, () => this.applyTodayStatus(this.data.workLogs));
   },
 
   onContentInput(event) {
-    this.setData({ content: event.detail.value });
+    this.setData({ content: event.detail.value }, () => this.applyTodayStatus(this.data.workLogs));
   },
 
   choosePhotos() {
@@ -309,7 +354,8 @@ Page({
               size: item.size || 0,
               displaySize: formatFileSize(item.size || 0),
               mimeType: mimeFromName(name, "image/jpeg"),
-              kind: "IMAGE"
+              kind: "IMAGE",
+              kindText: "图片"
             };
           });
         this.setData({ attachments: this.data.attachments.concat(items).slice(0, 9) });
@@ -335,7 +381,8 @@ Page({
             size: item.size || 0,
             displaySize: formatFileSize(item.size || 0),
             mimeType: mimeFromName(item.name || item.path),
-            kind: "FILE"
+            kind: "FILE",
+            kindText: "文件"
           }));
         this.setData({ attachments: this.data.attachments.concat(items).slice(0, 9) });
       }
@@ -400,7 +447,7 @@ Page({
           content: "告诉我今天做了什么、花了多久，或明天计划做什么。我会整理成日报或计划草稿。"
         }
       ]
-    });
+    }, () => this.applyTodayStatus(this.data.workLogs));
   },
 
   async submit() {
@@ -433,6 +480,7 @@ Page({
       await request(`/work-logs/${workLog.id}/submit`, { method: "POST" });
       wx.showToast({ title: "已提交" });
       this.clearForm();
+      this.loadWorkLogs();
     } catch (error) {
       wx.showToast({ title: error.message || "提交失败", icon: "none" });
     } finally {

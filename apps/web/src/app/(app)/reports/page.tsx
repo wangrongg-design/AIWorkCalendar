@@ -46,13 +46,13 @@ function downloadReportWord(report: Report) {
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
   <style>
-    body { font-family: "Microsoft YaHei", Arial, sans-serif; color: #1f1f1f; line-height: 1.7; }
-    h1 { font-size: 24px; margin: 0 0 8px; }
-    h2 { font-size: 16px; margin: 24px 0 8px; border-bottom: 1px solid #dadce0; padding-bottom: 6px; }
-    .meta { color: #5f6368; margin-bottom: 20px; }
+    body { font-family: "Microsoft YaHei", Arial, sans-serif; color: #424242; line-height: 1.7; }
+    h1 { color: #1A1A1A; font-size: 24px; margin: 0 0 8px; }
+    h2 { color: #1A1A1A; font-size: 16px; margin: 24px 0 8px; border-bottom: 1px solid #E6E6E6; padding-bottom: 6px; }
+    .meta { color: #737373; margin-bottom: 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border: 1px solid #dadce0; padding: 8px 10px; text-align: left; }
-    th { background: #eef3f8; }
+    th, td { border: 1px solid #E6E6E6; padding: 8px 10px; text-align: left; }
+    th { background: #F6F6F6; color: #737373; }
   </style>
 </head>
 <body>

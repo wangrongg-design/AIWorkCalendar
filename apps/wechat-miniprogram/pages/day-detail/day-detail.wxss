@@ -1,3 +1,50 @@
+.ai-detail-card {
+  border: 1rpx solid #CCFBF1;
+  border-radius: 28rpx;
+  background: #ECFDF9;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.ai-detail-card.warning {
+  border-color: #FEF3C7;
+  background: #FFFBEB;
+}
+
+.ai-detail-card.risk {
+  border-color: #FEE2E2;
+  background: #FEF2F2;
+}
+
+.ai-kicker {
+  color: #0F766E;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.ai-detail-card.warning .ai-kicker {
+  color: #D97706;
+}
+
+.ai-detail-card.risk .ai-kicker {
+  color: #EE3B2B;
+}
+
+.ai-title {
+  margin-top: 8rpx;
+  color: #1A1A1A;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.ai-desc {
+  margin-top: 6rpx;
+  color: #424242;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -8,24 +55,24 @@
 }
 
 .metric {
-  background: #ffffff;
+  background: #FFFFFF;
   padding: 22rpx 10rpx;
   text-align: center;
 }
 
 .metric-value {
-  color: #202124;
+  color: #1A1A1A;
   font-size: 32rpx;
   font-weight: 800;
 }
 
 .metric-value.risk {
-  color: #b3261e;
+  color: #EE3B2B;
 }
 
 .metric-label {
   margin-top: 8rpx;
-  color: #5f6368;
+  color: #737373;
   font-size: 21rpx;
 }
 
@@ -36,8 +83,8 @@
 
 .empty {
   border-radius: 20rpx;
-  background: #f3f6fb;
-  color: #8a929d;
+  background: #F6F6F6;
+  color: #A3A3A3;
   font-size: 26rpx;
   line-height: 96rpx;
   text-align: center;
@@ -48,7 +95,7 @@
 }
 
 .employee + .employee {
-  border-top: 1rpx solid #edf1f5;
+  border-top: 1rpx solid #E6E6E6;
 }
 
 .employee-name {
@@ -66,7 +113,7 @@
 .log-card {
   margin-top: 16rpx;
   border-radius: 22rpx;
-  background: #f8fafd;
+  background: #F6F6F6;
   padding: 22rpx;
 }
 
@@ -83,9 +130,9 @@
   overflow: hidden;
   margin-top: 10rpx;
   border-radius: 999rpx;
-  background: #e8f0fe;
+  background: #EEF5FF;
   padding: 6rpx 14rpx;
-  color: #0b57d0;
+  color: #0B57D0;
   font-size: 22rpx;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -94,7 +141,7 @@
 
 .log-content {
   margin-top: 10rpx;
-  color: #3c4043;
+  color: #424242;
   font-size: 26rpx;
   line-height: 1.55;
   overflow-wrap: break-word;
@@ -105,9 +152,9 @@
   display: inline-flex;
   margin-top: 14rpx;
   border-radius: 999rpx;
-  background: #e8f0fe;
+  background: #EEF5FF;
   padding: 6rpx 14rpx;
-  color: #0b57d0;
+  color: #0B57D0;
   font-size: 22rpx;
   font-weight: 800;
 }
@@ -115,16 +162,16 @@
 .analysis {
   margin-top: 14rpx;
   border-radius: 18rpx;
-  background: #e8f0fe;
+  background: #ECFDF9;
   padding: 16rpx;
-  color: #0842a0;
+  color: #0F766E;
   font-size: 23rpx;
   line-height: 1.5;
 }
 
 .analysis-risk {
   margin-top: 8rpx;
-  color: #b3261e;
+  color: #EE3B2B;
 }
 
 .missing-list {
@@ -138,7 +185,7 @@
   gap: 18rpx;
   justify-content: space-between;
   border-radius: 18rpx;
-  background: #f3f6fb;
+  background: #F6F6F6;
   padding: 18rpx 20rpx;
   font-size: 26rpx;
 }

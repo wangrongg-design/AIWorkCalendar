@@ -47,11 +47,23 @@ enum AITheme {
     }
 
     enum ColorToken {
+        static let black = Color.viDynamic(light: 0x1A1A1A, dark: 0xF7F7F7)
+        static let gray7 = Color.viDynamic(light: 0x2E2E2E, dark: 0xEDEDED)
+        static let gray6 = Color.viDynamic(light: 0x424242, dark: 0xDADADA)
+        static let gray5 = Color.viDynamic(light: 0x737373, dark: 0xB8B8B8)
+        static let gray4 = Color.viDynamic(light: 0xA3A3A3, dark: 0x8F8F8F)
+        static let gray3 = Color.viDynamic(light: 0xCCCCCC, dark: 0x666666)
+        static let gray2 = Color.viDynamic(light: 0xE6E6E6, dark: 0x3A3A3A)
+        static let gray1 = Color.viDynamic(light: 0xF6F6F6, dark: 0x121212)
+        static let white = Color.viDynamic(light: 0xFFFFFF, dark: 0x1C1C1E)
+
+        static let primaryPressed = Color.hex(0x0847A6)
         static let primary = Color.hex(0x0B57D0)
         static let primaryHover = Color.hex(0x1A73E8)
         static let primarySoft = Color.viDynamic(light: 0xD3E3FD, dark: 0x12315E)
         static let primarySurface = Color.viDynamic(light: 0xEEF5FF, dark: 0x0D1B2E)
 
+        static let aiPressed = Color.hex(0x0B5F59)
         static let ai = Color.hex(0x0F766E)
         static let aiHover = Color.hex(0x14A39A)
         static let aiSoft = Color.viDynamic(light: 0xCCFBF1, dark: 0x123D39)
@@ -65,29 +77,32 @@ enum AITheme {
         static let warningSoft = Color.viDynamic(light: 0xFEF3C7, dark: 0x4A2F0D)
         static let warningSurface = Color.viDynamic(light: 0xFFFBEB, dark: 0x2B1D0B)
 
-        static let danger = Color.hex(0xDC2626)
+        static let dangerPressed = Color.hex(0xC92A20)
+        static let danger = Color.hex(0xEE3B2B)
         static let dangerSoft = Color.viDynamic(light: 0xFEE2E2, dark: 0x4A1616)
         static let dangerSurface = Color.viDynamic(light: 0xFEF2F2, dark: 0x2A1010)
 
-        static let ink900 = Color.viDynamic(light: 0x111827, dark: 0xF9FAFB)
-        static let ink800 = Color.viDynamic(light: 0x1F2937, dark: 0xF3F4F6)
-        static let ink700 = Color.viDynamic(light: 0x374151, dark: 0xE5E7EB)
-        static let ink500 = Color.viDynamic(light: 0x6B7280, dark: 0xAAB2C0)
-        static let ink400 = Color.viDynamic(light: 0x9CA3AF, dark: 0x7D8796)
-        static let line = Color.viDynamic(light: 0xE5E7EB, dark: 0x2D333B)
-        static let surface = Color.viDynamic(light: 0xF8FAFC, dark: 0x0B0F14)
-        static let surfaceRaised = Color.viDynamic(light: 0xF3F6FA, dark: 0x111827)
-        static let panel = Color.viDynamic(light: 0xFFFFFF, dark: 0x161B22)
+        static let ink900 = black
+        static let ink800 = gray7
+        static let ink700 = gray6
+        static let ink500 = gray5
+        static let ink400 = gray4
+        static let line = gray2
+        static let surface = gray1
+        static let surfaceRaised = white
+        static let panel = white
 
         static let brand = primary
         static let brandSecondary = aiHover
         static let accentBlue = primaryHover
-        static let appBackgroundLight = Color.hex(0xF8FAFC)
+        static let appBackgroundLight = Color.hex(0xF6F6F6)
         static let cardBackgroundLight = Color.white
-        static let activeBackgroundLight = Color.hex(0xF3F6FA)
+        static let activeBackgroundLight = Color.white
         static let textSecondary = ink500
         static let textTertiary = ink400
-        static let cardShadow = Color.black.opacity(0.04)
+        static let disabledBackground = gray1
+        static let disabledText = gray4
+        static let cardShadow = Color.black.opacity(0.035)
 
         static var appBackground: Color {
             surface
@@ -107,13 +122,16 @@ enum AITheme {
     }
 
     enum Typography {
-        static let eyebrow = Font.footnote.weight(.semibold)
+        static let eyebrow = Font.system(size: 13, weight: .semibold, design: .default)
         static let title = Font.system(size: 34, weight: .bold, design: .default)
-        static let pageTitle = Font.system(size: 28, weight: .semibold, design: .default)
+        static let pageTitle = Font.system(size: 28, weight: .bold, design: .default)
+        static let title2 = Font.system(size: 22, weight: .semibold, design: .default)
         static let section = Font.system(size: 20, weight: .semibold, design: .default)
         static let body = Font.system(size: 16, weight: .regular, design: .default)
-        static let support = Font.system(size: 14, weight: .regular, design: .default)
-        static let caption = Font.system(size: 13, weight: .regular, design: .default)
+        static let support = Font.system(size: 15, weight: .regular, design: .default)
+        static let footnote = Font.system(size: 13, weight: .regular, design: .default)
+        static let caption = Font.system(size: 12, weight: .regular, design: .default)
+        static let metric = Font.system(size: 32, weight: .bold, design: .default)
     }
 
     enum Layout {
@@ -151,6 +169,7 @@ struct SectionTitle: View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
             Text(title)
                 .font(AITheme.Typography.section)
+                .foregroundStyle(AITheme.ColorToken.ink900)
             if let subtitle {
                 Text(subtitle)
                     .font(AITheme.Typography.support)
@@ -202,7 +221,7 @@ struct CompactAIActionPanel: View {
                     .font(.headline)
                     .foregroundStyle(evidenceTint)
                     .frame(width: 28, height: 28)
-                    .background(evidenceTint.opacity(0.12))
+                    .background(evidenceSurface)
                     .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
 
                 VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
@@ -223,8 +242,16 @@ struct CompactAIActionPanel: View {
                 Button(action: action) {
                     Label(actionTitle, systemImage: "arrow.right")
                         .font(.footnote.weight(.semibold))
+                        .padding(.vertical, AITheme.Spacing.xs)
+                        .padding(.horizontal, AITheme.Spacing.sm)
+                        .background(AITheme.ColorToken.aiSurface)
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.5)
+                        }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .foregroundStyle(AITheme.ColorToken.ai)
             }
         }
@@ -234,6 +261,17 @@ struct CompactAIActionPanel: View {
         .overlay {
             RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
                 .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.5)
+        }
+    }
+
+    private var evidenceSurface: Color {
+        switch evidenceTone {
+        case .ai:
+            return AITheme.ColorToken.aiSurface
+        case .warning:
+            return AITheme.ColorToken.warningSurface
+        case .danger:
+            return AITheme.ColorToken.dangerSurface
         }
     }
 
@@ -297,7 +335,7 @@ struct AIInsightPanel: View {
                                 .padding(.top, 7)
                             Text(insight)
                                 .font(AITheme.Typography.support)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(AITheme.ColorToken.ink700)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -314,14 +352,27 @@ struct FlatTag: View {
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .font(.caption.weight(.medium))
+            .font(AITheme.Typography.caption.weight(.semibold))
             .foregroundStyle(tint)
             .padding(.vertical, AITheme.Spacing.xs)
             .padding(.horizontal, AITheme.Spacing.sm)
-            .background(tint.opacity(0.10))
+            .background(tagSurface)
             .clipShape(Capsule())
             .lineLimit(1)
             .minimumScaleFactor(0.82)
+    }
+
+    private var tagSurface: Color {
+        if title.contains("风险") || title.contains("失败") || title.contains("阻塞") {
+            return AITheme.ColorToken.dangerSurface
+        }
+        if title.contains("未") || title.contains("待") || title.contains("临近") || title.contains("提醒") {
+            return AITheme.ColorToken.warningSurface
+        }
+        if title.contains("已") || title.contains("完成") || title.contains("正常") {
+            return AITheme.ColorToken.successSurface
+        }
+        return AITheme.ColorToken.aiSurface
     }
 }
 
@@ -337,14 +388,30 @@ struct StatusBadge: View {
             }
             Text(title)
         }
-        .font(.caption.weight(.medium))
+        .font(AITheme.Typography.caption.weight(.semibold))
         .foregroundStyle(tint)
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(tint.opacity(0.12))
+        .background(badgeSurface)
         .frame(minHeight: AITheme.Layout.minTouchTarget * 0.72)
         .clipShape(Capsule())
         .accessibilityElement(children: .combine)
+    }
+
+    private var badgeSurface: Color {
+        if title.contains("风险") || title.contains("失败") || title.contains("阻塞") {
+            return AITheme.ColorToken.dangerSurface
+        }
+        if title.contains("未") || title.contains("待") || title.contains("草稿") || title.contains("暂停") {
+            return title.contains("草稿") ? AITheme.ColorToken.gray1 : AITheme.ColorToken.warningSurface
+        }
+        if title.contains("AI") || title.contains("分析") {
+            return AITheme.ColorToken.aiSurface
+        }
+        if title.contains("已") || title.contains("完成") || title.contains("进行中") || title.contains("正常") {
+            return AITheme.ColorToken.successSurface
+        }
+        return AITheme.ColorToken.gray1
     }
 }
 
@@ -360,7 +427,7 @@ struct MetricTile: View {
                 .font(.headline)
                 .foregroundStyle(tint)
                 .frame(width: 28, height: 28)
-                .background(tint.opacity(0.12))
+                .background(iconSurface)
                 .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
@@ -369,14 +436,28 @@ struct MetricTile: View {
                     .foregroundStyle(AITheme.ColorToken.textSecondary)
                 Text(value)
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AITheme.ColorToken.ink900)
             }
 
             Spacer(minLength: 0)
         }
         .padding(AITheme.Spacing.sm)
         .background(AITheme.ColorToken.activeBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+    }
+
+    private var iconSurface: Color {
+        if title.contains("风险") {
+            return AITheme.ColorToken.dangerSurface
+        }
+        if title.contains("工时") || title.contains("近") {
+            return AITheme.ColorToken.aiSurface
+        }
+        return AITheme.ColorToken.primarySurface
     }
 }
 
@@ -391,6 +472,10 @@ struct AITextFieldStyle: TextFieldStyle {
             .frame(minHeight: AITheme.Layout.minTouchTarget + 8)
             .background(AITheme.ColorToken.activeBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.8)
+            }
     }
 }
 
@@ -414,10 +499,14 @@ struct PrimaryActionButton: View {
                 }
             }
             .font(.headline)
-            .foregroundStyle(isEnabled ? .white : AITheme.ColorToken.primary)
+            .foregroundStyle(isEnabled ? .white : AITheme.ColorToken.disabledText)
             .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget + 10)
-            .background(isEnabled ? AITheme.ColorToken.primary : AITheme.ColorToken.primarySoft)
+            .background(isEnabled ? AITheme.ColorToken.primary : AITheme.ColorToken.disabledBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                    .stroke(isEnabled ? Color.clear : AITheme.ColorToken.separator, lineWidth: 0.8)
+            }
         }
         .buttonStyle(.plain)
         .disabled(isLoading)

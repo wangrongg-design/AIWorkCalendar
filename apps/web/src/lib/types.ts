@@ -20,6 +20,7 @@ export type AuthUser = {
   tenantId: string;
   tenantName: string;
   tenantCode: string;
+  tenantLogoUrl?: string | null;
   email: string | null;
   phone?: string | null;
   name: string;

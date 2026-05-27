@@ -1,19 +1,28 @@
 <view class="page report-page bottom-safe">
   <view class="page-hero">
     <view>
-      <view class="page-title">快速填报</view>
+      <view class="page-title">今日</view>
       <view class="page-subtitle">你好，{{user.name || "同事"}} · {{user.tenantName || ""}}</view>
     </view>
     <button class="tertiary-button logout" bindtap="logout">退出</button>
   </view>
 
+  <view class="ai-status-panel">
+    <view class="ai-status-icon">{{todayStatusIcon}}</view>
+    <view class="ai-status-copy">
+      <view class="ai-status-kicker">AI 洞察</view>
+      <view class="ai-status-title">{{todayConclusion}}</view>
+      <view class="ai-status-desc">{{todayRiskText}}</view>
+    </view>
+  </view>
+
   <view class="surface ai-card">
     <view class="card-top">
       <view>
-        <view class="section-title">AI 对话填报</view>
-        <view class="section-desc">输入或语音描述，AI 先生成草稿，你确认后再提交。</view>
+        <view class="section-title">今天你完成了什么？</view>
+        <view class="section-desc">一句话即可，AI 会整理成日报。</view>
       </view>
-      <view class="chip">草稿</view>
+      <view class="chip">AI</view>
     </view>
 
     <view class="chat-list">
@@ -25,7 +34,7 @@
     <textarea class="chat-input" value="{{chatInput}}" maxlength="2000" placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。" bindinput="onChatInput" />
 
     <view class="chat-actions">
-      <button class="primary-button send-ai-button" loading="{{drafting}}" bindtap="sendChatMessage">生成草稿</button>
+      <button class="primary-button send-ai-button" loading="{{drafting}}" bindtap="sendChatMessage">AI 帮我整理日报</button>
       <button class="voice-button {{recording ? 'recording' : ''}}" bindtap="toggleRecord">
         {{recording ? "结束语音" : "语音输入"}}
       </button>
@@ -37,12 +46,12 @@
   <view class="surface draft-card">
     <view class="card-top">
       <view>
-        <view class="section-title">待提交草稿</view>
-        <view class="section-desc">可直接微调日期、标题、工时和内容。</view>
+        <view class="section-title">日报草稿</view>
+        <view class="section-desc">AI 生成后仍可手动校正，提交前请确认工时和项目。</view>
       </view>
     </view>
 
-    <view class="quick-grid">
+    <view class="quick-grid compact-four">
       <view class="field">
         <text class="field-label">日期</text>
         <picker mode="date" value="{{date}}" bindchange="onDateChange">
@@ -53,9 +62,6 @@
         <text class="field-label">工时</text>
         <input class="input" type="digit" value="{{hours}}" bindinput="onHoursInput" />
       </view>
-    </view>
-
-    <view class="quick-grid time-grid">
       <view class="field">
         <text class="field-label">开始时间</text>
         <picker mode="time" value="{{startTime}}" bindchange="onStartTimeChange">
@@ -70,16 +76,17 @@
       </view>
     </view>
 
-    <view class="field">
-      <text class="field-label">关联项目</text>
-      <picker value="{{projectIndex}}" range="{{projectOptions}}" range-key="displayName" bindchange="onProjectChange">
-        <view class="picker-value">{{projectOptions[projectIndex].displayName}}</view>
-      </picker>
-    </view>
-
-    <view class="field">
-      <text class="field-label">标题</text>
-      <input class="input" value="{{title}}" placeholder="例如：完成日报月历联调" bindinput="onTitleInput" />
+    <view class="title-project-row">
+      <view class="field title-field">
+        <text class="field-label">标题</text>
+        <input class="input" value="{{title}}" placeholder="例如：完成日报月历联调" bindinput="onTitleInput" />
+      </view>
+      <view class="field project-field">
+        <text class="field-label">关联项目</text>
+        <picker value="{{projectIndex}}" range="{{projectOptions}}" range-key="displayName" bindchange="onProjectChange">
+          <view class="picker-value">{{projectOptions[projectIndex].displayName}}</view>
+        </picker>
+      </view>
     </view>
 
     <view class="field">
@@ -97,7 +104,7 @@
         <view wx:for="{{attachments}}" wx:key="id" class="attachment-item">
           <view class="attachment-info">
             <view class="attachment-name">{{item.name}}</view>
-            <view class="attachment-meta">{{item.kind === "IMAGE" ? "图片" : "文件"}} · {{item.displaySize}}</view>
+            <view class="attachment-meta">{{item.kindText}} · {{item.displaySize}}</view>
           </view>
           <button class="attachment-remove" data-id="{{item.id}}" bindtap="removeAttachment">移除</button>
         </view>
@@ -106,7 +113,7 @@
 
     <view class="bottom-actions">
       <button class="tertiary-button" bindtap="clearForm">清空</button>
-      <button class="primary-button submit-button" loading="{{submitting}}" bindtap="submit">提交分析</button>
+      <button class="primary-button submit-button" loading="{{submitting}}" bindtap="submit">提交今日工作</button>
     </view>
   </view>
 </view>

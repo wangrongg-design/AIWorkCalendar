@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../../common/audit/audit.service";
 import { PrismaService } from "../../common/prisma.service";
+import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
 import { UpdateOpsAccountDto } from "./dto/update-account.dto";
+import { UpdateOpsTenantLogoDto } from "./dto/update-tenant-logo.dto";
 
 const activeMemberMonthlyPriceCents = 1900;
 
@@ -34,7 +36,7 @@ export class OpsService {
       this.prisma.user.findMany({
         where: { deletedAt: null },
         include: {
-          tenant: { select: { id: true, name: true, code: true } },
+          tenant: { select: { id: true, name: true, code: true, logoUrl: true } },
           department: { select: { id: true, name: true } },
           roles: { where: { deletedAt: null }, include: { role: true } }
         },
@@ -73,6 +75,7 @@ export class OpsService {
           id: tenant.id,
           name: tenant.name,
           code: tenant.code,
+          logoUrl: tenant.logoUrl,
           createdAt: tenant.createdAt,
           subscription: tenant.subscription
             ? {
@@ -94,6 +97,7 @@ export class OpsService {
         tenantId: account.tenantId,
         tenantName: account.tenant.name,
         tenantCode: account.tenant.code,
+        tenantLogoUrl: account.tenant.logoUrl,
         email: account.email,
         phone: account.phone,
         name: account.name,
@@ -125,7 +129,7 @@ export class OpsService {
         name: dto.name?.trim()
       },
       include: {
-        tenant: { select: { id: true, name: true, code: true } },
+        tenant: { select: { id: true, name: true, code: true, logoUrl: true } },
         department: { select: { id: true, name: true } },
         roles: { where: { deletedAt: null }, include: { role: true } }
       }
@@ -149,6 +153,7 @@ export class OpsService {
       tenantId: updated.tenantId,
       tenantName: updated.tenant.name,
       tenantCode: updated.tenant.code,
+      tenantLogoUrl: updated.tenant.logoUrl,
       email: updated.email,
       phone: updated.phone,
       name: updated.name,
@@ -157,6 +162,40 @@ export class OpsService {
       requiresWorkReport: updated.requiresWorkReport,
       roles: updated.roles.map((item) => item.role.code),
       lastLoginAt: updated.lastLoginAt,
+      createdAt: updated.createdAt
+    };
+  }
+
+  async updateTenantLogo(actor: CurrentUser, tenantId: string, dto: UpdateOpsTenantLogoDto) {
+    const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
+    const existing = await this.prisma.tenant.findFirst({
+      where: { id: tenantId, deletedAt: null },
+      select: { id: true, name: true, code: true, logoUrl: true }
+    });
+    if (!existing) {
+      throw new NotFoundException("Tenant not found");
+    }
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { logoUrl }
+    });
+    await this.audit.log({
+      tenantId: actor.tenantId,
+      actorUserId: actor.id,
+      action: "OPS_TENANT_LOGO_UPDATED",
+      targetType: "Tenant",
+      targetId: tenantId,
+      metadata: {
+        tenantCode: existing.code,
+        hadLogo: Boolean(existing.logoUrl),
+        hasLogo: Boolean(updated.logoUrl)
+      }
+    });
+    return {
+      id: updated.id,
+      name: updated.name,
+      code: updated.code,
+      logoUrl: updated.logoUrl,
       createdAt: updated.createdAt
     };
   }

@@ -1,15 +1,18 @@
 # Work Calendar AI 微信小程序
 
-这是 Work Calendar AI 的原生微信小程序前端，用于移动端快速填报。
+这是 Work Calendar AI 的原生微信小程序前端，按最新版 iOS App 的核心结构开放移动端高频功能。
 
 ## 已实现功能
 
-- 邮箱、密码、企业代码登录
+- 邮箱或手机号 + 密码登录，默认一个账号对应一个企业
 - 可配置 API 地址
+- AI日历：首页展示 AI 今日摘要、月度状态、风险日期和日期详情
 - AI 对话生成日报/计划草稿
 - 微信同声传译插件语音输入，识别结果进入 AI 对话并回填草稿
 - 提交后自动调用现有 `/work-logs` 和 `/work-logs/:id/submit`
-- 月历看板：已填人数、未填人数、填报率、风险数
+- 填报记录：搜索、筛选、点击查看详情和附件
+- 项目：项目状态、负责人、截止时间和 AI 风险判断
+- 我的：个人今日填报、今日工时、风险信号和近 7 日工时
 - 日期详情：已填员工、未填员工、填报内容、AI 总结和风险
 - 根据角色自动设置默认范围：
   - 企业管理员/超级管理员：全公司
@@ -49,7 +52,6 @@
 7. 演示账号：
 
    ```txt
-   企业代码: demo
    邮箱: admin@example.com
    密码: Passw0rd!
    ```
@@ -96,7 +98,10 @@ pnpm config:apply
 - `POST /auth/login`
 - `GET /projects`
 - `POST /work-logs`
+- `GET /work-logs`
+- `GET /work-logs/:id`
 - `POST /work-logs/:id/submit`
+- `GET /work-logs/:id/attachments/:attachmentId/download`
 - `GET /analytics/calendar?month=YYYY-MM&scope=self|department|company`
 - `GET /analytics/calendar/day?date=YYYY-MM-DD&scope=self|department|company`
 

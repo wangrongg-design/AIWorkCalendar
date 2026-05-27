@@ -1,32 +1,42 @@
 <view class="page calendar-page bottom-safe">
-  <view class="page-hero">
-    <view>
-      <view class="page-title">日历看板</view>
-      <view class="page-subtitle">{{month}} · {{scopeLabel}}</view>
+  <view class="calendar-topbar">
+    <view class="month-title">{{monthTitle}}</view>
+    <view class="toolbar-actions">
+      <button class="toolbar-button" bindtap="prevMonth">‹</button>
+      <button class="toolbar-button today-button" bindtap="goToday">今</button>
+      <button class="toolbar-button" bindtap="nextMonth">›</button>
+      <picker range="{{scopeOptions}}" range-key="label" value="{{scopeIndex}}" bindchange="onScopeChange">
+        <view class="toolbar-button scope-icon">{{scopeLabel}}</view>
+      </picker>
     </view>
-    <picker range="{{scopeOptions}}" range-key="label" value="{{scopeIndex}}" bindchange="onScopeChange">
-      <view class="scope-picker">{{scopeLabel}}</view>
-    </picker>
   </view>
 
-  <view class="surface month-toolbar">
-    <button class="month-button" bindtap="prevMonth">‹</button>
-    <view class="month-text">{{month}}</view>
-    <button class="month-button" bindtap="nextMonth">›</button>
+  <view class="ai-summary-card" bindtap="openFirstRiskDay">
+    <view class="ai-icon">{{aiIconText}}</view>
+    <view class="ai-copy">
+      <view class="ai-kicker">AI 今日摘要</view>
+      <view class="ai-title">{{aiConclusion}}</view>
+      <view class="ai-desc">{{aiRiskText}}</view>
+    </view>
+    <view wx:if="{{firstRiskDate}}" class="ai-chevron">›</view>
   </view>
 
-  <view class="surface metrics">
+  <view class="status-summary">
     <view class="metric">
-      <view class="metric-value">{{totalEmployees}}</view>
-      <view class="metric-label">应填报</view>
+      <view class="metric-value {{monthFillRateTone}}">{{monthFillRate}}%</view>
+      <view class="metric-label">填报率</view>
     </view>
     <view class="metric">
-      <view class="metric-value">{{todayData.fillRate || 0}}%</view>
-      <view class="metric-label">今日填报率</view>
+      <view class="metric-value warning">{{missingCount}}</view>
+      <view class="metric-label">未填</view>
     </view>
     <view class="metric">
-      <view class="metric-value risk">{{todayData.riskCount || 0}}</view>
-      <view class="metric-label">今日风险</view>
+      <view class="metric-value risk">{{riskDayCount}}</view>
+      <view class="metric-label">风险</view>
+    </view>
+    <view class="metric">
+      <view class="metric-value ai">{{totalEmployees}}</view>
+      <view class="metric-label">成员</view>
     </view>
   </view>
 
@@ -45,13 +55,22 @@
         <block wx:if="{{!item.blank}}">
           <view class="day-line">
             <text class="day">{{item.day}}</text>
-            <text wx:if="{{item.isToday}}" class="today-dot">今天</text>
+            <text wx:if="{{item.riskCount > 0}}" class="risk-badge">{{item.riskCount}}</text>
           </view>
-          <view class="rate">{{item.fillRate}}%</view>
-          <view class="counts">{{item.filledCount}} / {{item.totalCount}}</view>
-          <view wx:if="{{item.riskCount > 0}}" class="risk-text">{{item.riskCount}} 风险</view>
+          <view class="cell-spacer"></view>
+          <view class="cell-status {{item.tone}}">{{item.primaryText}}</view>
+          <view class="cell-foot">
+            <view class="status-bar {{item.tone}}"></view>
+            <text>{{item.secondaryText}}</text>
+          </view>
         </block>
       </view>
+    </view>
+    <view class="legend-row">
+      <view class="legend-item"><text class="dot good"></text>已完成</view>
+      <view class="legend-item"><text class="dot normal"></text>部分填报</view>
+      <view class="legend-item"><text class="dot empty"></text>未填报</view>
+      <view class="legend-item"><text class="dot risk"></text>风险</view>
     </view>
   </view>
 

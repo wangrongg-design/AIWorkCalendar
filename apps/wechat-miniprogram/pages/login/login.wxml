@@ -3,16 +3,17 @@
     <view class="brand-logo-wrap">
       <image class="brand-logo" src="/assets/seven-ai-logo.png" mode="aspectFit" />
     </view>
-    <view class="brand-title">Work Calendar AI</view>
+    <view class="brand-product">AIWorkCalendar</view>
+    <view class="brand-title">开启你的AI之旅</view>
     <view class="brand-subtitle">北京七数智联科技有限公司</view>
-    <view class="brand-desc">移动端快速填报 · 日历看板 · AI 汇报</view>
+    <view class="brand-desc">移动端快速填报 · AI日历 · 项目风险可见</view>
   </view>
 
   <view class="surface login-card">
     <view class="card-head">
       <view>
-        <view class="section-title">登录企业账号</view>
-        <view class="section-desc">使用 PC 端同一账号，移动端只保留高频操作。</view>
+        <view class="section-title">登录</view>
+        <view class="section-desc">使用邮箱或手机号进入你的 AI 工作日历。</view>
       </view>
       <view class="chip">安全连接</view>
     </view>
@@ -23,27 +24,25 @@
     </view>
 
     <view class="field">
-      <text class="field-label">企业代码</text>
-      <input class="input" value="{{tenantCode}}" placeholder="demo" bindinput="onTenantCodeInput" />
-    </view>
-
-    <view class="field">
       <text class="field-label">邮箱或手机号</text>
-      <input class="input" value="{{account}}" placeholder="admin@example.com / 13900000002" bindinput="onAccountInput" />
+      <input class="input login-input" value="{{account}}" placeholder="请输入邮箱或手机号" bindinput="onAccountInput" />
     </view>
 
     <view class="field">
       <text class="field-label">密码</text>
-      <input class="input" password value="{{password}}" placeholder="Passw0rd!" bindinput="onPasswordInput" />
+      <view class="password-row">
+        <input class="input password-input" password="{{!showPassword}}" value="{{password}}" placeholder="请输入密码" bindinput="onPasswordInput" />
+        <button class="password-toggle" bindtap="togglePassword">{{showPassword ? "隐藏" : "显示"}}</button>
+      </view>
     </view>
 
     <button class="primary-button login-button" loading="{{loading}}" bindtap="login">登录</button>
   </view>
 
   <view class="surface notice-card">
-    <view class="notice-title">本地调试</view>
+    <view class="notice-title">AI 工作日历</view>
     <view class="notice">
-      微信开发者工具需关闭“校验合法域名”。生产环境请使用 HTTPS API 域名。
+      一个账号默认对应一个企业。若同一账号存在多个企业，请联系管理员处理企业专属登录入口。
     </view>
   </view>
 </view>

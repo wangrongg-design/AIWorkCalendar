@@ -5,6 +5,7 @@ import { CurrentUserParam } from "../../common/decorators/current-user.decorator
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/types/current-user";
 import { UpdateOpsAccountDto } from "./dto/update-account.dto";
+import { UpdateOpsTenantLogoDto } from "./dto/update-tenant-logo.dto";
 import { OpsService } from "./ops.service";
 
 @ApiBearerAuth()
@@ -22,5 +23,10 @@ export class OpsController {
   @Patch("accounts/:id")
   updateAccount(@CurrentUserParam() user: CurrentUser, @Param("id") id: string, @Body() dto: UpdateOpsAccountDto) {
     return this.opsService.updateAccount(user, id, dto);
+  }
+
+  @Patch("tenants/:id/logo")
+  updateTenantLogo(@CurrentUserParam() user: CurrentUser, @Param("id") id: string, @Body() dto: UpdateOpsTenantLogoDto) {
+    return this.opsService.updateTenantLogo(user, id, dto);
   }
 }

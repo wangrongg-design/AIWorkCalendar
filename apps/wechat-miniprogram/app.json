@@ -1,36 +1,59 @@
 {
   "pages": [
     "pages/login/login",
-    "pages/report/report",
     "pages/calendar/calendar",
+    "pages/report/report",
+    "pages/work-logs/work-logs",
+    "pages/work-log-detail/work-log-detail",
+    "pages/projects/projects",
+    "pages/project-detail/project-detail",
+    "pages/profile/profile",
     "pages/day-detail/day-detail"
   ],
   "window": {
     "navigationBarTitleText": "Work Calendar AI",
-    "navigationBarBackgroundColor": "#f8fafd",
+    "navigationBarBackgroundColor": "#F6F6F6",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f8fafd",
+    "backgroundColor": "#F6F6F6",
     "backgroundTextStyle": "dark"
   },
   "tabBar": {
-    "color": "#6b7280",
-    "selectedColor": "#0b57d0",
-    "backgroundColor": "#ffffff",
+    "color": "#737373",
+    "selectedColor": "#0B57D0",
+    "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
     "list": [
       {
-        "pagePath": "pages/report/report",
-        "text": "快速填报"
+        "pagePath": "pages/calendar/calendar",
+        "text": "AI日历"
       },
       {
-        "pagePath": "pages/calendar/calendar",
-        "text": "日历看板"
+        "pagePath": "pages/report/report",
+        "text": "填报"
+      },
+      {
+        "pagePath": "pages/work-logs/work-logs",
+        "text": "记录"
+      },
+      {
+        "pagePath": "pages/projects/projects",
+        "text": "项目"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
       }
     ]
   },
   "permission": {
     "scope.record": {
       "desc": "用于语音识别快速填写工作日报和计划"
+    }
+  },
+  "plugins": {
+    "WechatSI": {
+      "version": "0.3.5",
+      "provider": "wx069ba97219f66d99"
     }
   },
   "style": "v2",

@@ -1,8 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
 import { Bot, CalendarPlus, CheckCircle2, FileText, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
@@ -320,6 +319,9 @@ export default function CalendarPage() {
     return `今日填报已完成，团队合计 ${todayStats.totalHours}h，本月填报率 ${summary.rate}%。`;
   }, [calendar.isFetching, summary.rate, todayDetail.isFetching, todayStats]);
   const detailStats = dayDetail.data?.stats;
+  const detailFilledEmployees = dayDetail.data?.filledEmployees ?? [];
+  const detailMissingEmployees = dayDetail.data?.missingEmployees ?? [];
+  const detailLogCount = detailFilledEmployees.reduce((sum, employee) => sum + employee.logs.length, 0);
   const selectedDateKind = selectedDate ? dateKind(selectedDate) : "today";
   const detailTitle = selectedDateKind === "future" ? "团队计划情况" : "今日团队填报情况";
   const aiObservations = useMemo(() => {
@@ -463,40 +465,6 @@ export default function CalendarPage() {
     setSelectedDate(today.format("YYYY-MM-DD"));
   };
 
-  const filledColumns: ColumnsType<CalendarDayDetail["filledEmployees"][number]> = [
-    { title: "员工", dataIndex: "name", width: 120 },
-    { title: "部门", dataIndex: "departmentName", width: 120 },
-    {
-      title: "当天填报",
-      render: (_, record) => (
-        <Space direction="vertical" size={8} className="w-full">
-          {record.logs.map((log) => (
-            <button
-              key={log.id}
-              type="button"
-              className="block w-full border-b border-line pb-2 text-left transition-colors hover:bg-surface-container-low last:border-b-0"
-              onClick={() => setSelectedWorkLog(log)}
-            >
-              <div className="font-medium">{log.title}</div>
-              {log.project ? <Tag color="blue">{log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name}</Tag> : null}
-              <div className="mt-1 text-sm text-muted">{log.content}</div>
-              {log.attachments?.length ? (
-                <Tag className="mt-2" icon={<Paperclip size={13} />}>
-                  附件 {log.attachments.length}
-                </Tag>
-              ) : null}
-              <Space className="mt-2" wrap>
-                <Tag>{Number(log.hours).toFixed(1)} 小时</Tag>
-                {log.aiAnalysis?.achievements?.map((item) => <Tag color="green" key={item}>{item}</Tag>)}
-                {log.aiAnalysis?.risks?.map((item) => <Tag color="red" key={item}>{item}</Tag>)}
-              </Space>
-            </button>
-          ))}
-        </Space>
-      )
-    }
-  ];
-
   return (
     <div className="page-stack dashboard-calendar-page">
       <div className="page-header dashboard-calendar-header">
@@ -579,7 +547,7 @@ export default function CalendarPage() {
         <div className="metric-card">
           <div className="metric-label">今日填报率</div>
           <div className="metric-value">{todayStats?.fillRate ?? 0}%</div>
-          <Progress percent={todayStats?.fillRate ?? 0} showInfo={false} strokeColor="#0B57D0" />
+          <Progress percent={todayStats?.fillRate ?? 0} showInfo={false} strokeColor="var(--color-primary)" />
         </div>
         <div className="metric-card">
           <div className="metric-label">已填 / 应填</div>
@@ -691,7 +659,7 @@ export default function CalendarPage() {
         >
           <div className="mb-5 rounded-[18px] border border-line bg-surface-container-low p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-              <Bot size={17} className="text-primary" />
+              <Bot size={17} className="text-secondary" />
               AI 对话填报
             </div>
             <div className="mb-3 max-h-48 space-y-2 overflow-auto">
@@ -720,7 +688,7 @@ export default function CalendarPage() {
                   }
                 }}
               />
-              <Button type="primary" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
+              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
                 生成草稿
               </Button>
             </div>
@@ -780,7 +748,7 @@ export default function CalendarPage() {
         open={chatOpen}
         onCancel={() => setChatOpen(false)}
         footer={null}
-        width={720}
+        width="min(1040px, calc(100vw - 32px))"
         zIndex={1200}
         className="ai-copilot-modal"
         styles={{ body: { padding: 0 }, header: { borderBottom: 0, padding: "18px 18px 8px" } }}
@@ -835,7 +803,7 @@ export default function CalendarPage() {
             <div className="ai-copilot-input">
               <Input.TextArea
                 value={chatInput}
-                rows={2}
+                rows={4}
                 placeholder="询问团队风险、项目进展、人员投入情况…"
                 onChange={(event) => setChatInput(event.target.value)}
                 onPressEnter={(event) => {
@@ -866,7 +834,8 @@ export default function CalendarPage() {
         open={Boolean(selectedDate)}
         onCancel={() => setSelectedDate(null)}
         footer={null}
-        width={1180}
+        width={1240}
+        style={{ top: 18 }}
         className="workday-detail-modal"
       >
         {selectedDate ? (
@@ -955,21 +924,59 @@ export default function CalendarPage() {
           </div>
         ) : (
           <div className="workday-detail-data">
-            <div className="workday-section-heading">{selectedDateKind === "future" ? "计划记录" : "日报记录"}</div>
-            <Table
-              rowKey="id"
-              size="small"
-              loading={dayDetail.isFetching}
-              dataSource={dayDetail.data?.filledEmployees ?? []}
-              columns={filledColumns}
-              pagination={false}
-            />
+            <div className="workday-records-heading">
+              <div>
+                <div className="workday-section-heading">{selectedDateKind === "future" ? "计划记录" : "日报记录"}</div>
+                <div className="workday-records-subtitle">{detailLogCount} 条记录 · {detailFilledEmployees.length} 位成员</div>
+              </div>
+              {dayDetail.isFetching ? <span className="ai-shimmer">正在同步记录…</span> : null}
+            </div>
+            <div className="workday-records-list">
+              {detailFilledEmployees.map((employee) => (
+                <div key={employee.id} className="workday-employee-record">
+                  <div className="workday-employee-meta">
+                    <div className="workday-employee-name">{employee.name}</div>
+                    <div className="workday-employee-dept">{employee.departmentName ?? "未分配部门"}</div>
+                    <div className="workday-employee-count">{employee.logs.length} 条</div>
+                  </div>
+                  <div className="workday-log-stack">
+                    {employee.logs.map((log) => (
+                      <button key={log.id} type="button" className="workday-log-card" onClick={() => setSelectedWorkLog(log)}>
+                        <div className="workday-log-main">
+                          <div className="workday-log-title-row">
+                            <div className="workday-log-title">{log.title}</div>
+                            <div className="workday-log-meta">
+                              <span>{Number(log.hours).toFixed(1)} 小时</span>
+                              {log.attachments?.length ? (
+                                <span className="workday-log-attachment"><Paperclip size={13} /> 附件 {log.attachments.length}</span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="workday-log-content">{log.content}</div>
+                          <div className="workday-log-tags">
+                            {log.project ? (
+                              <span className="workday-log-project">{log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name}</span>
+                            ) : null}
+                            {log.aiAnalysis?.achievements?.slice(0, 3).map((item) => (
+                              <span className="workday-log-achievement" key={item}>{item}</span>
+                            ))}
+                            {log.aiAnalysis?.risks?.slice(0, 3).map((item) => (
+                              <span className="workday-log-risk" key={item}>{item}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         <div className="workday-missing-row">
           <div className="workday-section-heading">{selectedDateKind === "future" ? "未提交计划" : "未提交日报"}</div>
           <Space wrap>
-            {(dayDetail.data?.missingEmployees ?? []).map((item) => (
+            {detailMissingEmployees.map((item) => (
               <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
             ))}
           </Space>

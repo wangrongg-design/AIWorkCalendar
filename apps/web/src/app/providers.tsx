@@ -17,18 +17,20 @@ export function Providers({ children }: { children: ReactNode }) {
           colorInfo: "#0B57D0",
           colorSuccess: "#16A34A",
           colorWarning: "#D97706",
-          colorError: "#DC2626",
-          colorText: "#111827",
-          colorTextSecondary: "#6B7280",
-          colorBorder: "#E5E7EB",
-          colorBgLayout: "#F8FAFC",
-          colorBgContainer: "#ffffff",
-          colorFillSecondary: "#F3F6FA",
+          colorError: "#EE3B2B",
+          colorText: "#1A1A1A",
+          colorTextSecondary: "#737373",
+          colorTextTertiary: "#A3A3A3",
+          colorBorder: "#E6E6E6",
+          colorBorderSecondary: "#E6E6E6",
+          colorBgLayout: "#F6F6F6",
+          colorBgContainer: "#FFFFFF",
+          colorFillSecondary: "#F6F6F6",
           borderRadius: 10,
           controlHeight: 40,
           fontFamily:
-            '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
-          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)"
+            '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+          boxShadow: "0 10px 28px rgba(26, 26, 26, 0.06)"
         },
         components: {
           Button: {
@@ -60,9 +62,9 @@ export function Providers({ children }: { children: ReactNode }) {
             borderRadiusLG: 20
           },
           Table: {
-            borderColor: "#E5E7EB",
-            headerBg: "#F8FAFC",
-            headerColor: "#6B7280",
+            borderColor: "#E6E6E6",
+            headerBg: "#F6F6F6",
+            headerColor: "#737373",
             rowHoverBg: "#EEF5FF"
           },
           Tabs: {
@@ -72,12 +74,12 @@ export function Providers({ children }: { children: ReactNode }) {
           Tag: {
             borderRadiusSM: 999
           },
-          Layout: { headerBg: "#ffffff", siderBg: "#F8FAFC" },
+          Layout: { headerBg: "#FFFFFF", siderBg: "#F6F6F6" },
           Menu: {
             itemBg: "transparent",
             itemSelectedBg: "rgba(11, 87, 208, 0.08)",
             itemSelectedColor: "#0B57D0",
-            itemHoverBg: "#F3F6FA",
+            itemHoverBg: "#EEF5FF",
             itemBorderRadius: 10
           }
         }

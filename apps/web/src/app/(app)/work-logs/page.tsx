@@ -453,7 +453,7 @@ export default function WorkLogsPage() {
         >
           <div className="mb-5 rounded-[18px] border border-line bg-surface-container-low p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-              <Bot size={17} className="text-primary" />
+              <Bot size={17} className="text-secondary" />
               AI 对话填报
             </div>
             <div className="mb-3 max-h-48 space-y-2 overflow-auto">
@@ -482,7 +482,7 @@ export default function WorkLogsPage() {
                   }
                 }}
               />
-              <Button type="primary" icon={<WandSparkles size={16} />} loading={draftLog.isPending} onClick={sendAiMessage}>
+              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftLog.isPending} onClick={sendAiMessage}>
                 生成草稿
               </Button>
             </div>
