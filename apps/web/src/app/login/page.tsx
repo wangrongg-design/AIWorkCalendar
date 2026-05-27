@@ -4,9 +4,10 @@ import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Form, Input, Modal, Typography, message } from "antd";
 import { ArrowRight, CalendarCheck2, Home, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { businessLeaderQuotes } from "@/lib/business-quotes";
 import { AuthUser } from "@/lib/types";
 
 type LoginResponse = {
@@ -26,6 +27,11 @@ export default function LoginPage() {
   const [confirmResetForm] = Form.useForm();
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
+  const leaderQuote = useMemo(() => {
+    const now = new Date();
+    const seed = now.getFullYear() * 372 + now.getMonth() * 31 + now.getDate();
+    return businessLeaderQuotes[seed % businessLeaderQuotes.length];
+  }, []);
 
   const login = useMutation({
     mutationFn: (values: { account: string; password: string }) =>
@@ -79,44 +85,53 @@ export default function LoginPage() {
       </header>
 
       <section className="system-login-shell">
-        <Card className="system-login-card" styles={{ body: { padding: 0 } }}>
-          <div className="system-login-card-inner">
-            <div className="system-login-mark">
-              <CalendarCheck2 size={22} />
-            </div>
-            <Typography.Title level={1} className="system-login-title">
-              登录系统
-            </Typography.Title>
-            <Typography.Text className="system-login-subtitle">进入 Work Calendar AI 工作台</Typography.Text>
+        <div className="system-login-layout">
+          <aside className="system-login-quote" aria-label="商业领袖语录">
+            <p>“{leaderQuote.quote}”</p>
+            <span>{leaderQuote.author}</span>
+          </aside>
 
-            {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
-            <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
-              <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
-                <Input placeholder="请输入邮箱或手机号" />
-              </Form.Item>
-              <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-                <Input.Password placeholder="请输入密码" />
-              </Form.Item>
-              <Button type="primary" htmlType="submit" block icon={<LogIn size={16} />} loading={login.isPending}>
-                {login.isPending ? "正在验证身份…" : "进入工作台"}
-              </Button>
-            </Form>
+          <div className="system-login-panel">
+            <Card className="system-login-card" styles={{ body: { padding: 0 } }}>
+              <div className="system-login-card-inner">
+                <div className="system-login-mark">
+                  <CalendarCheck2 size={22} />
+                </div>
+                <Typography.Title level={1} className="system-login-title">
+                  登录系统
+                </Typography.Title>
+                <Typography.Text className="system-login-subtitle">进入 Work Calendar AI 工作台</Typography.Text>
 
-            <div className="system-login-links">
-              <Button type="link" onClick={() => setResetModalOpen(true)}>
-                忘记密码
-              </Button>
-              <button type="button" onClick={() => router.push("/")}>
-                <span>没有企业账号？</span>
-                <strong>免费创建企业</strong>
-                <ArrowRight size={15} />
-              </button>
+                {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
+                <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
+                  <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
+                    <Input placeholder="请输入邮箱或手机号" />
+                  </Form.Item>
+                  <Form.Item name="password" label="密码" rules={[{ required: true }]}>
+                    <Input.Password placeholder="请输入密码" />
+                  </Form.Item>
+                  <Button type="primary" htmlType="submit" block icon={<LogIn size={16} />} loading={login.isPending}>
+                    {login.isPending ? "正在验证身份…" : "进入工作台"}
+                  </Button>
+                </Form>
+
+                <div className="system-login-links">
+                  <Button type="link" onClick={() => setResetModalOpen(true)}>
+                    忘记密码
+                  </Button>
+                  <button type="button" onClick={() => router.push("/")}>
+                    <span>没有企业账号？</span>
+                    <strong>免费创建企业</strong>
+                    <ArrowRight size={15} />
+                  </button>
+                </div>
+              </div>
+            </Card>
+            <div className="system-login-note">
+              <strong>系统入口</strong>
+              <span>官网负责产品介绍与免费试用，登录页仅用于已有账号进入工作台。</span>
             </div>
           </div>
-        </Card>
-        <div className="system-login-note">
-          <strong>系统入口</strong>
-          <span>官网负责产品介绍与免费试用，登录页仅用于已有账号进入工作台。</span>
         </div>
       </section>
 

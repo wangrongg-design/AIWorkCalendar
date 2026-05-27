@@ -248,13 +248,13 @@ export default function AIAnalysisPage() {
             建议动作
           </div>
           <div className="ai-analysis-action-grid">
-            <Button onClick={() => router.push("/calendar")} icon={<UsersRound size={16} />}>
+            <Button className="ai-soft-button" onClick={() => router.push("/calendar")} icon={<UsersRound size={16} />}>
               提醒未填报员工
             </Button>
-            <Button onClick={() => router.push("/reports")} icon={<FileText size={16} />}>
+            <Button className="ai-soft-button" onClick={() => router.push("/reports")} icon={<FileText size={16} />}>
               生成周期汇报
             </Button>
-            <Button onClick={() => router.push("/calendar")} icon={<CalendarDays size={16} />}>
+            <Button className="ai-soft-button" onClick={() => router.push("/calendar")} icon={<CalendarDays size={16} />}>
               查看风险日期
             </Button>
           </div>

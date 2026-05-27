@@ -227,7 +227,7 @@ export default function ReportsPage() {
               />
             </Form.Item>
           ) : null}
-          <Button type="primary" htmlType="submit" icon={<WandSparkles size={16} />} loading={generate.isPending}>
+          <Button className="ai-soft-button" htmlType="submit" icon={<WandSparkles size={16} />} loading={generate.isPending}>
             生成报告
           </Button>
         </Form>

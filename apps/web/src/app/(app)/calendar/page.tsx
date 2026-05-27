@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { Bot, CalendarPlus, CheckCircle2, FileText, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
+import { Bot, CalendarPlus, CheckCircle2, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
@@ -306,14 +306,6 @@ export default function CalendarPage() {
   const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
   const todayStats = todayDetail.data?.stats;
-  const todayFilledNames = useMemo(
-    () => (todayDetail.data?.filledEmployees ?? []).map((employee) => employee.name).slice(0, 6),
-    [todayDetail.data?.filledEmployees]
-  );
-  const todayMissingNames = useMemo(
-    () => (todayDetail.data?.missingEmployees ?? []).map((employee) => employee.name).slice(0, 6),
-    [todayDetail.data?.missingEmployees]
-  );
   const todayReferenceCount = useMemo(
     () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
     [todayDetail.data?.filledEmployees]
@@ -517,12 +509,6 @@ export default function CalendarPage() {
           >
             刷新
           </Button>
-          <Button icon={<CalendarPlus size={16} />} onClick={() => openQuickFill(today)}>
-            新增填报
-          </Button>
-          <Button icon={<FileText size={16} />} onClick={() => router.push("/reports")}>
-            生成汇报
-          </Button>
         </Space>
       </div>
 
@@ -540,54 +526,11 @@ export default function CalendarPage() {
                 <span>参考：{todayReferenceCount} 条记录</span>
               </div>
             </div>
-            <div className="workbench-actions">
-              <button type="button" onClick={() => setSelectedDate(today)} className="workbench-action">
-                <CalendarPlus size={18} />
-                <span>查看今日详情</span>
-              </button>
-              <button type="button" onClick={() => setChatOpen(true)} className="workbench-action">
+            <div className="workbench-actions is-ai-only">
+              <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button">
                 <Bot size={18} />
                 <span>打开AI洞察</span>
               </button>
-            </div>
-          </div>
-
-          <div className="workbench-metrics is-today-only">
-            <div className="metric-card">
-              <div className="metric-label">今日填报率</div>
-              <div className="metric-value">{todayStats?.fillRate ?? 0}%</div>
-              <Progress percent={todayStats?.fillRate ?? 0} showInfo={false} strokeColor="var(--color-primary)" />
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">已填 / 应填</div>
-              <div className="metric-value">
-                {todayStats?.filledCount ?? 0}/{todayStats?.totalEmployees ?? 0}
-              </div>
-              <div className="metric-hint">按当前权限范围统计</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">今日风险</div>
-              <div className="metric-value text-danger">{todayStats?.riskCount ?? 0}</div>
-              <div className="metric-hint">{(todayStats?.riskCount ?? 0) > 0 ? "需要优先处理" : "暂无明显风险"}</div>
-            </div>
-          </div>
-
-          <div className="calendar-today-people-panel">
-            <div>
-              <div className="calendar-today-people-title">今日信息</div>
-              <div className="calendar-today-people-copy">
-                {todayStats?.missingCount ? `今天还有 ${todayStats.missingCount} 人未填报，需要补日报。` : "今天没有缺填成员，可以继续查看具体日报。"}
-              </div>
-            </div>
-            <div className="calendar-today-people-list">
-              <div>
-                <span>已填</span>
-                <strong>{todayFilledNames.length ? todayFilledNames.join("、") : "暂无"}</strong>
-              </div>
-              <div>
-                <span>未填</span>
-                <strong>{todayMissingNames.length ? todayMissingNames.join("、") : "暂无"}</strong>
-              </div>
             </div>
           </div>
 
@@ -906,7 +849,7 @@ export default function CalendarPage() {
             </div>
             <div className="workday-ai-copilot-link">
               <span>需要继续追问时，AI 会带着当前日期和团队填报上下文打开右侧助手。</span>
-              <Button type="text" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
+              <Button className="ai-soft-button" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
                 打开 AI 工作助手
               </Button>
             </div>
