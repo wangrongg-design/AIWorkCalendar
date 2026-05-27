@@ -41,19 +41,19 @@ export default function LoginPage() {
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
 
   const login = useMutation({
-    mutationFn: (values: { account: string; password: string; tenantCode?: string }) =>
+    mutationFn: (values: { account: string; password: string }) =>
       apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
         body: JSON.stringify(values)
       }),
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
-      router.replace("/dashboard");
+      router.replace("/calendar");
     }
   });
 
   const requestPasswordReset = useMutation({
-    mutationFn: (values: { email: string; tenantCode?: string }) =>
+    mutationFn: (values: { email: string }) =>
       apiFetch<PasswordResetRequestResponse>("/auth/password-reset/request", {
         method: "POST",
         body: JSON.stringify(values)
@@ -167,12 +167,9 @@ export default function LoginPage() {
           <Form
             className="login-form mt-6"
             layout="vertical"
-            initialValues={{ tenantCode: "demo", account: "admin@example.com", password: "Passw0rd!" }}
+            initialValues={{ account: "admin@example.com", password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
-            <Form.Item name="tenantCode" label="企业代码">
-              <Input placeholder="demo" />
-            </Form.Item>
             <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
               <Input placeholder="admin@example.com / 13900000002" />
             </Form.Item>
@@ -206,9 +203,6 @@ export default function LoginPage() {
         {requestPasswordReset.error ? <Alert className="mb-4" type="error" showIcon message={(requestPasswordReset.error as Error).message} /> : null}
         {confirmPasswordReset.error ? <Alert className="mb-4" type="error" showIcon message={(confirmPasswordReset.error as Error).message} /> : null}
         <Form form={resetForm} layout="vertical" onFinish={(values) => requestPasswordReset.mutate(values)}>
-          <Form.Item name="tenantCode" label="企业代码">
-            <Input placeholder="demo" />
-          </Form.Item>
           <Form.Item name="email" label="邮箱" rules={[{ required: true, type: "email" }]}>
             <Input placeholder="admin@example.com" />
           </Form.Item>

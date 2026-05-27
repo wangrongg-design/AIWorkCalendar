@@ -45,6 +45,13 @@ export class BillingService {
     return {
       currency: "CNY",
       plans: billingPlans,
+      billingPolicy: {
+        model: "ACTIVE_MEMBER_MONTHLY",
+        trialDays: 30,
+        trialUnlimitedMembers: true,
+        activeMemberMonthlyPriceCents: planUnitPriceCents(SubscriptionPlan.TEAM, BillingInterval.MONTHLY),
+        copy: "企业免费试用1个月，正式使用 ¥19 / 启用成员 / 月。"
+      },
       paymentProviders: getPaymentProviderConfigs().map((item) => ({
         provider: item.provider,
         enabled: item.enabled,
@@ -87,10 +94,18 @@ export class BillingService {
     if (!this.access.isCompanyAdmin(user)) {
       throw new BadRequestException("Only company admins can create billing orders");
     }
-    const amountCents = planUnitPriceCents(dto.plan, dto.interval);
-    if (amountCents <= 0) {
+    const plan = dto.plan ?? SubscriptionPlan.TEAM;
+    const interval = dto.interval ?? BillingInterval.MONTHLY;
+    if (plan !== SubscriptionPlan.TEAM || interval !== BillingInterval.MONTHLY) {
+      throw new BadRequestException("当前仅支持专业版按月订阅");
+    }
+    const unitPriceCents = planUnitPriceCents(plan, interval);
+    if (unitPriceCents <= 0) {
       throw new BadRequestException("Invalid billing plan");
     }
+    const activeMemberCount = await this.countActiveMembers(user.tenantId);
+    const billedMemberCount = Math.max(1, activeMemberCount);
+    const amountCents = unitPriceCents * billedMemberCount;
     const providerConfig = getPaymentProviderConfig(dto.provider);
     if (dto.provider !== PaymentProvider.MANUAL && (!providerConfig || !providerConfig.enabled)) {
       throw new BadRequestException(`${dto.provider} payment is not configured`);
@@ -99,18 +114,32 @@ export class BillingService {
     if (dto.provider !== PaymentProvider.MANUAL && !payment) {
       throw new BadRequestException(`${dto.provider} payment is not supported`);
     }
+    const metadata: Prisma.InputJsonObject = payment
+      ? {
+          billingModel: "ACTIVE_MEMBER_MONTHLY",
+          unitPriceCents,
+          activeMemberCount,
+          billedMemberCount,
+          payment
+        }
+      : {
+          billingModel: "ACTIVE_MEMBER_MONTHLY",
+          unitPriceCents,
+          activeMemberCount,
+          billedMemberCount
+        };
     const order = await this.prisma.billingOrder.create({
       data: {
         tenantId: user.tenantId,
         requesterId: user.id,
-        plan: dto.plan,
-        interval: dto.interval,
-        seatLimit: dto.seatLimit,
+        plan,
+        interval,
+        seatLimit: billedMemberCount,
         amountCents,
         provider: dto.provider,
         expiresAt: addPeriod(BillingInterval.MONTHLY),
         paymentUrl: payment?.paymentUrl ?? null,
-        metadata: payment ? { payment } : undefined
+        metadata
       },
       include: { payments: true }
     });
@@ -138,7 +167,7 @@ export class BillingService {
       action: "BILLING_ORDER_CREATED",
       targetType: "BillingOrder",
       targetId: order.id,
-      metadata: { plan: dto.plan, interval: dto.interval, seatLimit: dto.seatLimit, amountCents, provider: dto.provider }
+      metadata: { plan, interval, activeMemberCount, billedMemberCount, unitPriceCents, amountCents, provider: dto.provider }
     });
     return this.prisma.billingOrder.findFirst({ where: { id: order.id }, include: { payments: true } });
   }
@@ -211,6 +240,16 @@ export class BillingService {
       notifyUrl: providerConfig?.notifyUrl ?? null,
       returnUrl: providerConfig?.returnUrl ?? null
     };
+  }
+
+  private countActiveMembers(tenantId: string) {
+    return this.prisma.user.count({
+      where: {
+        tenantId,
+        isActive: true,
+        deletedAt: null
+      }
+    });
   }
 
   private async getTenantOrder(user: CurrentUser, orderId: string) {

@@ -25,18 +25,18 @@ async function main() {
   await prisma.subscription.upsert({
     where: { tenantId: tenant.id },
     update: {
-      plan: SubscriptionPlan.BUSINESS,
+      plan: SubscriptionPlan.TEAM,
       status: SubscriptionStatus.ACTIVE,
-      seatLimit: 30,
+      seatLimit: 0,
       currentPeriodStart: dateOnly(0),
       currentPeriodEnd: dateOnly(365),
       deletedAt: null
     },
     create: {
       tenantId: tenant.id,
-      plan: SubscriptionPlan.BUSINESS,
+      plan: SubscriptionPlan.TEAM,
       status: SubscriptionStatus.ACTIVE,
-      seatLimit: 30,
+      seatLimit: 0,
       currentPeriodStart: dateOnly(0),
       currentPeriodEnd: dateOnly(365)
     }

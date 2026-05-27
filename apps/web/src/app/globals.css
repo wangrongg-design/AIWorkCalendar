@@ -115,9 +115,42 @@ body {
   min-width: 640px;
 }
 
+.ant-modal {
+  top: 28px;
+  padding-bottom: 28px;
+}
+
 .ant-modal .ant-modal-content {
+  display: flex;
+  max-height: calc(100vh - 56px);
+  flex-direction: column;
   border-radius: var(--radius-xl);
   box-shadow: var(--md-elevation-2);
+}
+
+.ant-modal .ant-modal-header,
+.ant-modal .ant-modal-footer {
+  flex: 0 0 auto;
+}
+
+.ant-modal .ant-modal-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.ant-modal .ant-form-item {
+  margin-bottom: 12px;
+}
+
+@media (max-height: 760px) {
+  .ant-modal {
+    top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .ant-modal .ant-modal-content {
+    max-height: calc(100vh - 28px);
+  }
 }
 
 .ant-tag {
@@ -879,13 +912,19 @@ body {
   color: var(--md-primary);
 }
 
-.ai-copilot-drawer .ant-drawer-content {
+.ai-copilot-modal .ant-modal-content {
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(18px);
 }
 
-.ai-copilot-drawer .ant-drawer-close {
-  border-radius: 999px;
+.ai-copilot-modal .ant-modal-body {
+  overflow: hidden;
+  padding: 0;
+}
+
+.ai-copilot-modal .ai-copilot {
+  height: min(620px, calc(100vh - 140px));
 }
 
 .copilot-title {
@@ -1345,6 +1384,171 @@ body {
 
 .dashboard-calendar-grid .calendar-cell-body {
   margin-top: 16px;
+}
+
+@media (min-width: 961px) {
+  .calendar-home-content {
+    box-sizing: border-box;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+    padding: 12px 18px !important;
+  }
+
+  .calendar-home-content > div {
+    height: 100%;
+    max-width: none;
+  }
+
+  .calendar-home-content .dashboard-calendar-page {
+    height: 100%;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .calendar-home-content .page-title {
+    font-size: 24px !important;
+    line-height: 30px !important;
+  }
+
+  .calendar-home-content .page-subtitle {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .calendar-home-content .dashboard-calendar-toolbar {
+    padding: 4px;
+  }
+
+  .calendar-home-content .workbench-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    gap: 8px;
+  }
+
+  .calendar-home-content .workbench-ai {
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+
+  .calendar-home-content .workbench-ai-kicker {
+    font-size: 12px;
+  }
+
+  .calendar-home-content .workbench-ai-title {
+    margin-top: 4px;
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .calendar-home-content .workbench-ai-evidence {
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .calendar-home-content .workbench-ai-evidence span {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .calendar-home-content .workbench-actions {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .calendar-home-content .workbench-action {
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .calendar-home-content .workbench-metrics {
+    gap: 8px;
+  }
+
+  .calendar-home-content .metric-card {
+    border-radius: 14px;
+    padding: 9px 12px;
+  }
+
+  .calendar-home-content .metric-value {
+    font-size: 22px;
+    line-height: 26px;
+  }
+
+  .calendar-home-content .metric-hint {
+    margin-top: 2px;
+    font-size: 11px;
+  }
+
+  .calendar-home-content .calendar-summary-strip {
+    gap: 6px;
+    padding: 4px;
+  }
+
+  .calendar-home-content .calendar-summary-item {
+    min-width: 0;
+    border-radius: 12px;
+    gap: 6px;
+    padding: 5px 9px;
+  }
+
+  .calendar-home-content .calendar-summary-label {
+    font-size: 11px;
+  }
+
+  .calendar-home-content .calendar-summary-value {
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  .calendar-home-content .dashboard-calendar-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .calendar-home-content .dashboard-calendar-grid .dashboard-week-label {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .calendar-home-content .dashboard-calendar-grid .calendar-cell,
+  .calendar-home-content .dashboard-calendar-grid .calendar-empty-cell {
+    min-height: clamp(52px, calc((100vh - 350px) / 6), 96px);
+  }
+
+  .calendar-home-content .dashboard-calendar-grid .calendar-cell {
+    border-radius: 14px;
+    padding: 8px;
+  }
+
+  .calendar-home-content .dashboard-calendar-grid .calendar-empty-cell {
+    border-radius: 14px;
+  }
+
+  .calendar-home-content .dashboard-calendar-grid .calendar-cell-body {
+    gap: 3px;
+    margin-top: 6px;
+    font-size: 11px;
+  }
+
+  .calendar-home-content .calendar-risk-tag {
+    padding: 0 6px;
+    font-size: 11px;
+  }
+
+  .calendar-home-content .calendar-rate-track {
+    height: 4px;
+  }
+
+  .calendar-home-content .calendar-rate-label {
+    font-size: 10px;
+  }
 }
 
 .login-stage {

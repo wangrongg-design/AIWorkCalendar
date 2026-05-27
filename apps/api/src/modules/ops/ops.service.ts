@@ -4,6 +4,8 @@ import { PrismaService } from "../../common/prisma.service";
 import { CurrentUser } from "../../common/types/current-user";
 import { UpdateOpsAccountDto } from "./dto/update-account.dto";
 
+const activeMemberMonthlyPriceCents = 1900;
+
 @Injectable()
 export class OpsService {
   constructor(
@@ -12,7 +14,7 @@ export class OpsService {
   ) {}
 
   async overview() {
-    const [tenants, accounts, totals] = await Promise.all([
+    const [tenants, accounts, activeUsersByTenant, totals] = await Promise.all([
       this.prisma.tenant.findMany({
         where: { deletedAt: null },
         include: {
@@ -39,6 +41,11 @@ export class OpsService {
         orderBy: [{ createdAt: "desc" }],
         take: 300
       }),
+      this.prisma.user.groupBy({
+        by: ["tenantId"],
+        where: { deletedAt: null, isActive: true },
+        _count: { _all: true }
+      }),
       Promise.all([
         this.prisma.tenant.count({ where: { deletedAt: null } }),
         this.prisma.user.count({ where: { deletedAt: null } }),
@@ -49,6 +56,7 @@ export class OpsService {
     ]);
 
     const [tenantCount, accountCount, activeAccountCount, workLogCount, reportCount] = totals;
+    const activeUserCountMap = new Map(activeUsersByTenant.map((item) => [item.tenantId, item._count._all]));
 
     return {
       developerCompany: "北京七数智联科技有限公司",
@@ -59,22 +67,28 @@ export class OpsService {
         workLogs: workLogCount,
         reports: reportCount
       },
-      tenants: tenants.map((tenant) => ({
-        id: tenant.id,
-        name: tenant.name,
-        code: tenant.code,
-        createdAt: tenant.createdAt,
-        subscription: tenant.subscription
-          ? {
-              plan: tenant.subscription.plan,
-              status: tenant.subscription.status,
-              seatLimit: tenant.subscription.seatLimit,
-              currentPeriodEnd: tenant.subscription.currentPeriodEnd,
-              trialEndsAt: tenant.subscription.trialEndsAt
-            }
-          : null,
-        counts: tenant._count
-      })),
+      tenants: tenants.map((tenant) => {
+        const activeUserCount = activeUserCountMap.get(tenant.id) ?? 0;
+        return {
+          id: tenant.id,
+          name: tenant.name,
+          code: tenant.code,
+          createdAt: tenant.createdAt,
+          subscription: tenant.subscription
+            ? {
+                plan: tenant.subscription.plan,
+                status: tenant.subscription.status,
+                seatLimit: tenant.subscription.seatLimit,
+                currentPeriodEnd: tenant.subscription.currentPeriodEnd,
+                trialEndsAt: tenant.subscription.trialEndsAt,
+                activeUserCount,
+                activeMemberMonthlyPriceCents,
+                estimatedMonthlyAmountCents: activeUserCount * activeMemberMonthlyPriceCents
+              }
+            : null,
+          counts: tenant._count
+        };
+      }),
       accounts: accounts.map((account) => ({
         id: account.id,
         tenantId: account.tenantId,

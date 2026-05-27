@@ -5,13 +5,13 @@ import UIKit
 
 struct LoginView: View {
     @EnvironmentObject private var auth: AuthStore
-    @State private var tenantCode = ""
+
     @State private var account = ""
     @State private var password = ""
-    @State private var showsTenantCode = false
-    @State private var requiresTenantCode = false
+    @State private var showsPassword = false
     @State private var isLoggingIn = false
     @State private var errorMessage: String?
+    @State private var infoMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -19,13 +19,13 @@ struct LoginView: View {
                 LoginBackground()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: AITheme.Spacing.xl) {
+                    VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
                         LoginBrandMark()
-                            .padding(.top, AITheme.Spacing.md)
+                            .padding(.top, AITheme.Spacing.xs)
 
                         LoginHero()
 
-                        VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
                             VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
                                 Text("企业账号登录")
                                     .font(AITheme.Typography.section)
@@ -36,26 +36,21 @@ struct LoginView: View {
                             }
 
                             VStack(spacing: AITheme.Spacing.sm) {
-                                TextField("邮箱或手机号", text: $account)
-                                    .textFieldStyle(LoginFlatTextFieldStyle())
-                                    .emailInputTraits()
-                                    .textContentType(.username)
-                                    .submitLabel(.next)
-
-                                SecureField("密码", text: $password)
-                                    .textFieldStyle(LoginFlatTextFieldStyle())
-                                    .textContentType(.password)
-                                    .submitLabel(.go)
-                                    .onSubmit {
-                                        guard canLogin else { return }
-                                        Task { await login() }
-                                    }
-
-                                TenantCodeAdvancedField(
-                                    tenantCode: $tenantCode,
-                                    isExpanded: $showsTenantCode,
-                                    isRequired: requiresTenantCode
+                                LoginLabeledTextField(
+                                    title: "邮箱或手机号",
+                                    placeholder: "请输入邮箱或手机号",
+                                    text: $account
                                 )
+                                .emailInputTraits()
+                                .textContentType(.username)
+                                .submitLabel(.next)
+
+                                LoginPasswordField(
+                                    password: $password,
+                                    showsPassword: $showsPassword
+                                ) {
+                                    Task { await login() }
+                                }
                             }
 
                             if let errorMessage {
@@ -69,10 +64,32 @@ struct LoginView: View {
                                     .transition(.opacity.combined(with: .move(edge: .top)))
                             }
 
+                            if let infoMessage {
+                                Label(infoMessage, systemImage: "lock.shield")
+                                    .font(.footnote)
+                                    .foregroundStyle(AITheme.ColorToken.ai)
+                                    .padding(AITheme.Spacing.sm)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(AITheme.ColorToken.aiSurface)
+                                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+
                             LoginFlatActionButton(title: "登录", systemImage: "arrow.right", isLoading: isLoggingIn, isEnabled: canLogin) {
                                 Task { await login() }
                             }
                             .accessibilityHint("登录到 AI 工作日历")
+
+                            Button {
+                                errorMessage = nil
+                                infoMessage = "请联系企业管理员重置密码或找回账号。"
+                            } label: {
+                                Text("忘记密码？")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(AITheme.ColorToken.primary)
+                                    .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget * 0.82)
+                            }
+                            .buttonStyle(.plain)
                         }
 
                         LoginCapabilities()
@@ -88,30 +105,30 @@ struct LoginView: View {
             }
             .loginNavigationChrome()
             .animation(.snappy, value: errorMessage)
+            .animation(.snappy, value: infoMessage)
         }
     }
 
     private var canLogin: Bool {
         !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !password.isEmpty
-            && (!requiresTenantCode || !tenantCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func login() async {
         guard canLogin else {
-            errorMessage = requiresTenantCode ? "请填写企业代码后重试" : "请填写邮箱或手机号和密码"
+            errorMessage = "请填写邮箱或手机号和密码"
+            infoMessage = nil
             return
         }
         isLoggingIn = true
         defer { isLoggingIn = false }
         do {
-            try await auth.login(account: account, password: password, tenantCode: tenantCode)
+            try await auth.login(account: account, password: password, tenantCode: nil)
         } catch {
             let message = error.localizedDescription
+            infoMessage = nil
             if message.contains("多个企业") || message.contains("企业代码") {
-                requiresTenantCode = true
-                showsTenantCode = true
-                errorMessage = "该账号存在于多个企业，请填写企业代码后重试。"
+                errorMessage = "该账号存在于多个企业，请联系管理员或使用企业专属登录入口。"
             } else {
                 errorMessage = message
             }
@@ -157,14 +174,14 @@ private struct LoginBrandMark: View {
 
 private struct LoginHero: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
             Text("AI 工作日历")
-                .font(AITheme.Typography.title)
+                .font(.system(size: 32, weight: .bold, design: .default))
                 .foregroundStyle(.primary)
                 .minimumScaleFactor(0.75)
                 .accessibilityAddTraits(.isHeader)
 
-            Text("每日填报、团队看板和智能汇报，保持在同一个清晰节奏里。")
+            Text("用 AI 连接日报、日历、项目和汇报。")
                 .font(.body)
                 .foregroundStyle(AITheme.ColorToken.textSecondary)
                 .lineSpacing(2)
@@ -176,14 +193,15 @@ private struct LoginHero: View {
 private struct LoginCapabilities: View {
     private let items = [
         ("自动生成日报", "sparkles", AITheme.ColorToken.ai),
-        ("分析延期风险", "exclamationmark.triangle", AITheme.ColorToken.warning),
-        ("汇总团队进度", "chart.bar.xaxis", AITheme.ColorToken.primaryHover)
+        ("发现异常节奏", "waveform.path.ecg", AITheme.ColorToken.ai),
+        ("汇总团队进度", "chart.bar.xaxis", AITheme.ColorToken.ai)
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-            Text("登录后，AI 会主动整理工作信号")
+            Text("AI 可自动生成日报、发现异常、汇总团队进度")
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink800)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: AITheme.Spacing.xs), count: 3), spacing: AITheme.Spacing.xs) {
                 ForEach(items, id: \.0) { item in
                     FlatTag(title: item.0, systemImage: item.1, tint: item.2)
@@ -197,13 +215,10 @@ private struct LoginCapabilities: View {
 private struct LoginFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
-            Text("“\(AppConfig.businessQuote)”")
+            Label("企业数据加密传输，仅授权成员可访问。", systemImage: "lock.shield")
                 .font(.footnote)
                 .foregroundStyle(AITheme.ColorToken.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("— \(AppConfig.businessQuoteAuthor)")
-                .font(.caption)
-                .foregroundStyle(AITheme.ColorToken.textTertiary)
 
             VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
                 Text(AppConfig.companyName)
@@ -220,46 +235,77 @@ private struct LoginFooter: View {
     }
 }
 
-private struct TenantCodeAdvancedField: View {
-    @Binding var tenantCode: String
-    @Binding var isExpanded: Bool
-    let isRequired: Bool
+private struct LoginLabeledTextField: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
-            Button {
-                withAnimation(.snappy) {
-                    isExpanded.toggle()
+            LoginFieldLabel(title)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(LoginFlatTextFieldStyle())
+        }
+    }
+}
+
+private struct LoginPasswordField: View {
+    @Binding var password: String
+    @Binding var showsPassword: Bool
+    let onSubmit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            LoginFieldLabel("密码")
+
+            HStack(spacing: AITheme.Spacing.xs) {
+                Group {
+                    if showsPassword {
+                        TextField("请输入密码", text: $password)
+                    } else {
+                        SecureField("请输入密码", text: $password)
+                    }
                 }
-            } label: {
-                HStack(spacing: AITheme.Spacing.xs) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption.weight(.semibold))
-                    Text(isRequired ? "需要企业代码" : "高级选项")
-                    Spacer(minLength: 0)
+                .textContentType(.password)
+                .submitLabel(.go)
+                .onSubmit(onSubmit)
+
+                Button {
+                    showsPassword.toggle()
+                } label: {
+                    Image(systemName: showsPassword ? "eye.slash" : "eye")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .frame(width: AITheme.Layout.minTouchTarget, height: AITheme.Layout.minTouchTarget)
                 }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(isRequired ? AITheme.ColorToken.warning : AITheme.ColorToken.textSecondary)
+                .buttonStyle(.plain)
+                .accessibilityLabel(showsPassword ? "隐藏密码" : "显示密码")
             }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
-                    TextField("企业代码", text: $tenantCode)
-                        .textFieldStyle(LoginFlatTextFieldStyle())
-                        .plainInputTraits()
-                        .textContentType(.organizationName)
-                        .submitLabel(.next)
-
-                    Text(isRequired ? "该账号属于多个企业，请填写企业代码。": "仅在同一账号加入多个企业或调试时使用。")
-                        .font(.caption)
-                        .foregroundStyle(isRequired ? AITheme.ColorToken.warning : AITheme.ColorToken.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            .font(AITheme.Typography.body)
+            .padding(.leading, AITheme.Spacing.md)
+            .padding(.trailing, 4)
+            .frame(minHeight: AITheme.Layout.minTouchTarget + 10)
+            .background(AITheme.ColorToken.activeBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
             }
         }
-        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct LoginFieldLabel: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AITheme.ColorToken.ink700)
     }
 }
 
@@ -271,6 +317,10 @@ private struct LoginFlatTextFieldStyle: TextFieldStyle {
             .frame(minHeight: AITheme.Layout.minTouchTarget + 10)
             .background(AITheme.ColorToken.activeBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+            }
     }
 }
 
@@ -283,7 +333,7 @@ private struct LoginFlatActionButton: View {
 
     var body: some View {
         Button {
-            guard isEnabled, !isLoading else { return }
+            guard !isLoading else { return }
             action()
         } label: {
             HStack(spacing: AITheme.Spacing.xs) {
@@ -296,7 +346,7 @@ private struct LoginFlatActionButton: View {
                 }
             }
             .font(.headline)
-            .foregroundStyle(isEnabled ? .white : AITheme.ColorToken.primary)
+            .foregroundStyle(isEnabled ? .white : AITheme.ColorToken.ink700)
             .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget + 10)
             .background(isEnabled ? AITheme.ColorToken.primary : AITheme.ColorToken.primarySoft)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))

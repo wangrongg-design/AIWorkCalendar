@@ -1,16 +1,18 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Button, DatePicker, Drawer, Input, Modal, Select, Space, Table, Tag, Typography, message } from "antd";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { Bot, CalendarPlus, CheckCircle2, Paperclip, Send, UsersRound } from "lucide-react";
+import { Bot, CalendarPlus, CheckCircle2, FileText, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, WorkLog } from "@/lib/types";
+import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft } from "@/lib/types";
+import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type OrgResponse = {
   departments: Department[];
@@ -32,6 +34,27 @@ type CalendarChatResponse = {
   };
 };
 
+type WorkLogForm = {
+  date: dayjs.Dayjs;
+  title: string;
+  content: string;
+  startTime?: dayjs.Dayjs;
+  endTime?: dayjs.Dayjs;
+  hours: number;
+  projectId?: string;
+};
+
+type AiDraftMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+type PendingAttachment = {
+  uid: string;
+  file: File;
+};
+
+const attachmentMaxBytes = 8 * 1024 * 1024;
 const quickQuestions = ["本周风险", "项目进度", "人员负载", "异常工时"];
 const copilotActions = [
   { label: "提醒未填报员工", prompt: "帮我整理今天未填报员工，并给出提醒话术。" },
@@ -84,9 +107,41 @@ function chineseDateLabel(date: string) {
   return `${value.format("YYYY年M月D日")} · ${weekdayLabels[value.day()]}`;
 }
 
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result ?? "");
+      resolve(value.includes(",") ? value.split(",")[1] : value);
+    };
+    reader.onerror = () => reject(new Error("附件读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function toWorkLogPayload(values: WorkLogForm) {
+  const date = values.date;
+  return {
+    date: date.format("YYYY-MM-DD"),
+    title: values.title,
+    content: values.content,
+    startTime: values.startTime
+      ? date.hour(values.startTime.hour()).minute(values.startTime.minute()).second(0).millisecond(0).toISOString()
+      : undefined,
+    endTime: values.endTime
+      ? date.hour(values.endTime.hour()).minute(values.endTime.minute()).second(0).millisecond(0).toISOString()
+      : undefined,
+    hours: values.hours,
+    projectId: values.projectId || undefined
+  };
+}
+
 export default function CalendarPage() {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const [quickFillForm] = Form.useForm<WorkLogForm>();
+  const today = dayjs().format("YYYY-MM-DD");
   const [month, setMonth] = useState(dayjs());
   const [scope, setScope] = useState<"self" | "department" | "company">(
     user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN")
@@ -99,6 +154,15 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedWorkLog, setSelectedWorkLog] = useState<WorkLog | null>(null);
+  const [quickFillOpen, setQuickFillOpen] = useState(false);
+  const [quickFillAiInput, setQuickFillAiInput] = useState("");
+  const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([
+    {
+      role: "assistant",
+      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
+    }
+  ]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -113,6 +177,92 @@ export default function CalendarPage() {
     queryFn: () => apiFetch<OrgResponse>("/org")
   });
 
+  const projects = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => apiFetch<Project[]>("/projects")
+  });
+
+  const projectOptions = useMemo(
+    () =>
+      (projects.data ?? [])
+        .filter((item) => item.status === "ACTIVE")
+        .map((item) => ({ value: item.id, label: item.code ? `${item.code} · ${item.name}` : item.name })),
+    [projects.data]
+  );
+
+  const pendingUploadFiles: UploadFile[] = useMemo(
+    () =>
+      pendingAttachments.map((item) => ({
+        uid: item.uid,
+        name: item.file.name,
+        size: item.file.size,
+        status: "done"
+      })),
+    [pendingAttachments]
+  );
+
+  const uploadPendingAttachments = async (workLogId: string) => {
+    const files = [...pendingAttachments];
+    for (const item of files) {
+      const contentBase64 = await fileToBase64(item.file);
+      await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: item.file.name,
+          mimeType: item.file.type || "application/octet-stream",
+          fileSize: item.file.size,
+          contentBase64
+        })
+      });
+    }
+    if (files.length) {
+      setPendingAttachments([]);
+    }
+  };
+
+  const createWorkLog = useMutation({
+    mutationFn: async (values: WorkLogForm) => {
+      const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toWorkLogPayload(values)) });
+      await uploadPendingAttachments(workLog.id);
+      return workLog;
+    },
+    onSuccess: () => {
+      message.success("已保存填报");
+      setQuickFillOpen(false);
+      quickFillForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-day"] });
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "保存失败");
+    }
+  });
+
+  const draftWorkLog = useMutation({
+    mutationFn: (messages: AiDraftMessage[]) =>
+      apiFetch<WorkLogDraft>("/ai/work-log-draft", {
+        method: "POST",
+        body: JSON.stringify({
+          currentDate: dayjs().format("YYYY-MM-DD"),
+          messages
+        })
+      }),
+    onSuccess: (draft) => {
+      quickFillForm.setFieldsValue({
+        date: dayjs(draft.date),
+        title: draft.title,
+        content: draft.content,
+        hours: Number(draft.hours),
+        startTime: parseWorkLogTime(draft.startTime),
+        endTime: parseWorkLogTime(draft.endTime)
+      });
+      setQuickFillAiMessages((messages) => [...messages, { role: "assistant", content: draft.assistantMessage }]);
+      message.success(draft.kind === "PLAN" ? "已生成计划草稿" : "已生成日报草稿");
+    }
+  });
+
   const calendar = useQuery({
     queryKey: ["calendar", month.format("YYYY-MM"), scope, departmentId],
     queryFn: () => {
@@ -122,6 +272,15 @@ export default function CalendarPage() {
       });
       if (departmentId) params.set("departmentId", departmentId);
       return apiFetch<CalendarResponse>(`/analytics/calendar?${params.toString()}`);
+    }
+  });
+
+  const todayDetail = useQuery({
+    queryKey: ["calendar-today", today, scope, departmentId],
+    queryFn: () => {
+      const params = new URLSearchParams({ date: today, scope });
+      if (departmentId) params.set("departmentId", departmentId);
+      return apiFetch<CalendarDayDetail>(`/analytics/calendar/day?${params.toString()}`);
     }
   });
 
@@ -147,6 +306,19 @@ export default function CalendarPage() {
   const cells = useMemo(() => monthCells(month), [month]);
   const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
+  const todayStats = todayDetail.data?.stats;
+  const todayReferenceCount = useMemo(
+    () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
+    [todayDetail.data?.filledEmployees]
+  );
+  const todayAiSummary = useMemo(() => {
+    if (todayDetail.isFetching || calendar.isFetching) return "AI 正在汇总今日填报、风险和本月趋势。";
+    if (!todayStats || todayStats.totalEmployees === 0) return "当前范围暂无可分析成员，先完成团队和部门配置。";
+    if (todayStats.filledCount === 0) return "今天还没有提交记录，建议先提醒团队完成日报或计划。";
+    if (todayStats.riskCount > 0) return `今日发现 ${todayStats.riskCount} 条风险/阻塞，建议优先查看风险记录并同步负责人。`;
+    if (todayStats.missingCount > 0) return `今日 ${todayStats.missingCount} 位成员未填报，整体填报率 ${todayStats.fillRate}%。`;
+    return `今日填报已完成，团队合计 ${todayStats.totalHours}h，本月填报率 ${summary.rate}%。`;
+  }, [calendar.isFetching, summary.rate, todayDetail.isFetching, todayStats]);
   const detailStats = dayDetail.data?.stats;
   const selectedDateKind = selectedDate ? dateKind(selectedDate) : "today";
   const detailTitle = selectedDateKind === "future" ? "团队计划情况" : "今日团队填报情况";
@@ -246,7 +418,43 @@ export default function CalendarPage() {
   };
 
   const openQuickFill = (date: string) => {
-    router.push(`/work-logs?new=1&date=${date}`);
+    const dateValue = dayjs(date);
+    const isFuture = date > today;
+    setSelectedDate(null);
+    setPendingAttachments([]);
+    quickFillForm.resetFields();
+    quickFillForm.setFieldsValue({
+      date: dateValue,
+      title: isFuture ? "工作计划" : "工作日报",
+      content: "",
+      hours: isFuture ? 0 : 1
+    });
+    setQuickFillAiInput("");
+    setQuickFillAiMessages([
+      {
+        role: "assistant",
+        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
+      }
+    ]);
+    setQuickFillOpen(true);
+  };
+
+  const addPendingAttachment = (file: RcFile) => {
+    if (file.size > attachmentMaxBytes) {
+      message.error("单个附件不能超过 8MB");
+      return Upload.LIST_IGNORE;
+    }
+    setPendingAttachments((items) => [...items, { uid: file.uid, file }]);
+    return false;
+  };
+
+  const sendQuickFillAiMessage = () => {
+    const text = quickFillAiInput.trim();
+    if (!text) return;
+    const nextMessages = [...quickFillAiMessages, { role: "user" as const, content: text }];
+    setQuickFillAiMessages(nextMessages);
+    setQuickFillAiInput("");
+    draftWorkLog.mutate(nextMessages);
   };
 
   const goToday = () => {
@@ -324,13 +532,72 @@ export default function CalendarPage() {
               options={org.data?.departments.map((item) => ({ value: item.id, label: item.name }))}
             />
           ) : null}
-          <Button onClick={() => calendar.refetch()} loading={calendar.isFetching}>
+          <Button
+            onClick={() => {
+              calendar.refetch();
+              todayDetail.refetch();
+            }}
+            loading={calendar.isFetching || todayDetail.isFetching}
+          >
             刷新
           </Button>
-          <Button type="primary" icon={<Bot size={16} />} onClick={() => setChatOpen(true)}>
-            AI 洞察
+          <Button icon={<CalendarPlus size={16} />} onClick={() => openQuickFill(today)}>
+            新增填报
+          </Button>
+          <Button icon={<FileText size={16} />} onClick={() => router.push("/reports")}>
+            生成汇报
           </Button>
         </Space>
+      </div>
+
+      <div className="workbench-hero">
+        <div className="workbench-ai">
+          <div className="workbench-ai-kicker">
+            <Bot size={16} />
+            AI 今日摘要
+          </div>
+          <div className="workbench-ai-title">{todayAiSummary}</div>
+          <div className="workbench-ai-evidence">
+            <span>范围：{scope === "company" ? "全公司" : scope === "department" ? "本部门" : "只看自己"}</span>
+            <span>日期：{today}</span>
+            <span>参考：{todayReferenceCount} 条记录</span>
+          </div>
+        </div>
+        <div className="workbench-actions">
+          <button type="button" onClick={() => setSelectedDate(today)} className="workbench-action">
+            <CalendarPlus size={18} />
+            <span>查看今日详情</span>
+          </button>
+          <button type="button" onClick={() => setChatOpen(true)} className="workbench-action">
+            <Bot size={18} />
+            <span>打开AI洞察</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="workbench-metrics">
+        <div className="metric-card">
+          <div className="metric-label">今日填报率</div>
+          <div className="metric-value">{todayStats?.fillRate ?? 0}%</div>
+          <Progress percent={todayStats?.fillRate ?? 0} showInfo={false} strokeColor="#0B57D0" />
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">已填 / 应填</div>
+          <div className="metric-value">
+            {todayStats?.filledCount ?? 0}/{todayStats?.totalEmployees ?? 0}
+          </div>
+          <div className="metric-hint">按当前权限范围统计</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">今日风险</div>
+          <div className="metric-value text-danger">{todayStats?.riskCount ?? 0}</div>
+          <div className="metric-hint">{(todayStats?.riskCount ?? 0) > 0 ? "需要优先处理" : "暂无明显风险"}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">本月趋势</div>
+          <div className="metric-value">{summary.rate}%</div>
+          <div className="metric-hint">风险 {summary.risks} · {summary.totalHours}h</div>
+        </div>
       </div>
 
       <div className="calendar-summary-strip">
@@ -405,7 +672,105 @@ export default function CalendarPage() {
         })}
       </div>
 
-      <Drawer
+      <Modal
+        title="新增填报"
+        open={quickFillOpen}
+        onCancel={() => {
+          setQuickFillOpen(false);
+          setPendingAttachments([]);
+        }}
+        onOk={() => quickFillForm.submit()}
+        confirmLoading={createWorkLog.isPending}
+        width={880}
+      >
+        <Form
+          form={quickFillForm}
+          layout="vertical"
+          onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, quickFillForm.setFieldsValue)}
+          onFinish={(values) => createWorkLog.mutate(values)}
+        >
+          <div className="mb-5 rounded-[18px] border border-line bg-surface-container-low p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
+              <Bot size={17} className="text-primary" />
+              AI 对话填报
+            </div>
+            <div className="mb-3 max-h-48 space-y-2 overflow-auto">
+              {quickFillAiMessages.map((item, index) => (
+                <div
+                  key={`${item.role}-${index}`}
+                  className={`rounded-[14px] px-3 py-2 text-sm leading-6 ${
+                    item.role === "user" ? "ml-8 bg-primary text-white" : "mr-8 bg-white text-muted"
+                  }`}
+                >
+                  {item.content}
+                </div>
+              ))}
+            </div>
+            {draftWorkLog.error ? <Alert className="mb-3" type="error" showIcon message={(draftWorkLog.error as Error).message} /> : null}
+            <div className="flex gap-2">
+              <Input.TextArea
+                value={quickFillAiInput}
+                autoSize={{ minRows: 2, maxRows: 4 }}
+                placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
+                onChange={(event) => setQuickFillAiInput(event.target.value)}
+                onPressEnter={(event) => {
+                  if (!event.shiftKey) {
+                    event.preventDefault();
+                    sendQuickFillAiMessage();
+                  }
+                }}
+              />
+              <Button type="primary" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
+                生成草稿
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <Form.Item name="date" label="日期" rules={[{ required: true }]}>
+              <DatePicker className="w-full" />
+            </Form.Item>
+            <Form.Item name="hours" label="工时" rules={[{ required: true }]}>
+              <InputNumber className="w-full" min={0} max={24} step={0.5} />
+            </Form.Item>
+            <Form.Item name="startTime" label="开始时间">
+              <TimePicker className="w-full" format="HH:mm" />
+            </Form.Item>
+            <Form.Item name="endTime" label="结束时间">
+              <TimePicker className="w-full" format="HH:mm" />
+            </Form.Item>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <Form.Item className="md:col-span-3" name="title" label="标题" rules={[{ required: true, min: 2 }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
+              <Select allowClear placeholder="选择项目" loading={projects.isFetching} options={projectOptions} />
+            </Form.Item>
+          </div>
+          <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
+            <Input.TextArea rows={6} />
+          </Form.Item>
+          <Form.Item label="附件">
+            <Upload.Dragger
+              multiple
+              fileList={pendingUploadFiles}
+              beforeUpload={addPendingAttachment}
+              onRemove={(file) => {
+                setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+                return true;
+              }}
+            >
+              <p className="ant-upload-drag-icon">
+                <UploadCloud size={28} />
+              </p>
+              <p className="ant-upload-text">添加照片或文件</p>
+              <p className="ant-upload-hint">单个附件最大 8MB，提交后 AI 会结合附件摘要和图片内容分析。</p>
+            </Upload.Dragger>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
         title={
           <div className="copilot-title">
             <Bot size={18} />
@@ -413,10 +778,11 @@ export default function CalendarPage() {
           </div>
         }
         open={chatOpen}
-        onClose={() => setChatOpen(false)}
-        width="min(400px, calc(100vw - 24px))"
+        onCancel={() => setChatOpen(false)}
+        footer={null}
+        width={720}
         zIndex={1200}
-        className="ai-copilot-drawer"
+        className="ai-copilot-modal"
         styles={{ body: { padding: 0 }, header: { borderBottom: 0, padding: "18px 18px 8px" } }}
       >
         <div className="ai-copilot">
@@ -493,7 +859,7 @@ export default function CalendarPage() {
             </div>
           </div>
         </div>
-      </Drawer>
+      </Modal>
 
       <Modal
         title={null}

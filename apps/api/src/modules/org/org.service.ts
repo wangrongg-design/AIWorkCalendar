@@ -109,7 +109,7 @@ export class OrgService {
           tenantId: tenant.id,
           plan: SubscriptionPlan.TRIAL,
           status: SubscriptionStatus.TRIALING,
-          seatLimit: 3,
+          seatLimit: 0,
           currentPeriodStart: new Date(),
           currentPeriodEnd: periodEnd,
           trialEndsAt: periodEnd,

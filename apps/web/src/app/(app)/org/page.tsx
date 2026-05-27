@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Radio, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, QrCode, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
@@ -45,9 +45,8 @@ type SubscriptionForm = {
 };
 
 type BillingOrderForm = {
-  plan: SubscriptionPlan;
-  interval: BillingInterval;
-  seatLimit: number;
+  plan?: SubscriptionPlan;
+  interval?: BillingInterval;
   provider: PaymentProvider;
 };
 
@@ -68,23 +67,22 @@ const roleOptions: Array<{ value: RoleCode; label: string }> = [
 ];
 
 const planOptions: Array<{ value: SubscriptionPlan; label: string }> = [
-  { value: "TRIAL", label: "免费版" },
-  { value: "TEAM", label: "专业版" },
-  { value: "ENTERPRISE", label: "企业版" }
+  { value: "TRIAL", label: "免费试用" },
+  { value: "TEAM", label: "专业版" }
 ];
 
 const planLabels: Record<SubscriptionPlan, string> = {
-  TRIAL: "免费版",
+  TRIAL: "免费试用",
   TEAM: "专业版",
   BUSINESS: "专业版",
   ENTERPRISE: "企业版"
 };
 
 const freeBillingPlan = {
-  name: "免费版",
+  name: "免费试用",
   price: "¥0",
-  description: "3人以内永久免费，完整体验 AI 工作能力。",
-  features: ["完整 AI 日报、周报、月报", "AI 风险分析", "AI 工作问答", "日历看板", "项目管理", "3人以内"]
+  description: "企业免费试用 1 个月，不限制人数，完整功能开放。",
+  features: ["企业免费试用 1 个月", "不限制成员人数", "完整 AI 工作日历功能", "AI 日报、周报、月报", "AI 风险分析", "AI 工作问答"]
 };
 
 const statusOptions: Array<{ value: SubscriptionStatus; label: string; color: string }> = [
@@ -96,8 +94,7 @@ const statusOptions: Array<{ value: SubscriptionStatus; label: string; color: st
 ];
 
 const billingIntervalOptions: Array<{ value: BillingInterval; label: string }> = [
-  { value: "MONTHLY", label: "月付" },
-  { value: "YEARLY", label: "年付" }
+  { value: "MONTHLY", label: "月付" }
 ];
 
 const paymentProviderOptions: Array<{ value: PaymentProvider; label: string }> = [
@@ -111,6 +108,8 @@ const paymentProviderLabels: Record<PaymentProvider, string> = {
   WECHAT: "微信支付",
   STRIPE: "Stripe"
 };
+
+const activeMemberMonthlyPriceCents = 1900;
 
 function contactText(record: { email?: string | null; phone?: string | null }) {
   return [record.phone, record.email].filter(Boolean).join(" / ") || "-";
@@ -167,8 +166,8 @@ function moneyText(amountCents?: number, currency = "CNY") {
   }).format(amountCents / 100);
 }
 
-function planPrice(plan: BillingPlan, interval: BillingInterval) {
-  return interval === "YEARLY" ? plan.yearlyPriceCents : plan.monthlyPriceCents;
+function planPrice(plan: BillingPlan) {
+  return plan.monthlyPriceCents;
 }
 
 function fileSizeText(bytes?: number | null) {
@@ -209,9 +208,7 @@ export default function OrgPage() {
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
   const [billingOrderModalOpen, setBillingOrderModalOpen] = useState(false);
   const [dataDeletionModalOpen, setDataDeletionModalOpen] = useState(false);
-  const [checkoutInterval, setCheckoutInterval] = useState<BillingInterval>("MONTHLY");
   const [checkoutProvider, setCheckoutProvider] = useState<"ALIPAY" | "WECHAT">("WECHAT");
-  const [checkoutSeatLimit, setCheckoutSeatLimit] = useState(5);
   const [checkout, setCheckout] = useState<BillingOrderPayment | null>(null);
 
   const org = useQuery({
@@ -429,11 +426,20 @@ export default function OrgPage() {
   const startPlanCheckout = (plan: BillingPlan) => {
     createBillingOrder.mutate({
       plan: plan.plan,
-      interval: checkoutInterval,
-      seatLimit: Math.max(1, checkoutSeatLimit || plan.recommendedSeats),
+      interval: "MONTHLY",
       provider: checkoutProvider
     });
   };
+
+  const subscription = org.data?.subscription;
+  const activeMemberCount = subscription?.usedSeats ?? 0;
+  const unitPriceCents = subscription?.activeMemberMonthlyPriceCents ?? billingPlans.data?.billingPolicy?.activeMemberMonthlyPriceCents ?? activeMemberMonthlyPriceCents;
+  const estimatedMonthlyAmountCents = subscription?.estimatedMonthlyAmountCents ?? activeMemberCount * unitPriceCents;
+  const isTrialing = subscription?.status === "TRIALING";
+  const subscriptionTitle = isTrialing ? "免费试用中" : subscription?.status === "ACTIVE" ? "专业版已开通" : optionLabel(statusOptions, subscription?.status);
+  const memberBillingHint = isTrialing
+    ? "试用期内不限制成员人数。试用结束后将按启用成员数量计费。"
+    : "新增成员将立即可用，并从下个计费周期开始计费。";
 
   const departmentColumns: ColumnsType<Department> = [
     { title: "部门", dataIndex: "name" },
@@ -492,9 +498,9 @@ export default function OrgPage() {
   ];
 
   const billingOrderColumns: ColumnsType<BillingOrder> = [
-    { title: "套餐", dataIndex: "plan", width: 110, render: (value: SubscriptionPlan) => planLabel(value) },
+    { title: "版本", dataIndex: "plan", width: 110, render: (value: SubscriptionPlan) => planLabel(value) },
     { title: "周期", dataIndex: "interval", width: 90, render: (value: BillingInterval) => optionLabel(billingIntervalOptions, value) },
-    { title: "席位", dataIndex: "seatLimit", width: 90 },
+    { title: "计费人数", dataIndex: "seatLimit", width: 100, render: (value: number) => `${value} 人` },
     { title: "金额", dataIndex: "amountCents", width: 130, render: (value: number, record) => moneyText(value, record.currency) },
     { title: "支付方式", dataIndex: "provider", width: 120, render: (value: PaymentProvider) => paymentProviderLabels[value] ?? value },
     {
@@ -635,24 +641,26 @@ export default function OrgPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="metric-card">
-          <div className="metric-label">当前套餐</div>
-          <div className="metric-value text-[24px]">{planLabel(org.data?.subscription.plan)}</div>
+          <div className="metric-label">当前状态</div>
+          <div className="metric-value text-[24px]">{subscriptionTitle}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">订阅状态</div>
+          <div className="metric-label">{isTrialing ? "试用到期" : "服务到期"}</div>
           <div className="mt-2">
-            <Tag color={statusColor(org.data?.subscription.status)}>{optionLabel(statusOptions, org.data?.subscription.status)}</Tag>
+            <Tag color={statusColor(subscription?.status)}>{dateText(isTrialing ? subscription?.trialEndsAt : subscription?.currentPeriodEnd)}</Tag>
           </div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">席位用量</div>
+          <div className="metric-label">当前启用成员</div>
           <div className="metric-value">
-            {org.data?.subscription.usedSeats ?? 0}/{org.data?.subscription.seatLimit ?? 0}
+            {activeMemberCount} 人
           </div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">服务到期</div>
-          <div className="mt-2 text-lg font-medium">{dateText(org.data?.subscription.currentPeriodEnd)}</div>
+          <div className="metric-label">{isTrialing ? "试用结束后预计月费" : "当前预计月费"}</div>
+          <div className="mt-2 text-lg font-medium">
+            {activeMemberCount} × ¥{(unitPriceCents / 100).toFixed(0)} = {moneyText(estimatedMonthlyAmountCents)} / 月
+          </div>
         </div>
       </div>
 
@@ -661,7 +669,7 @@ export default function OrgPage() {
           type="warning"
           showIcon
           message="当前企业订阅不可用"
-          description="订阅已到期、取消或处于待续费状态。新增员工会被限制，请联系平台管理员续费或调整套餐。"
+          description="试用或服务周期已结束。请完成专业版续费后继续使用，专业版按启用成员数量计费。"
         />
       ) : null}
 
@@ -764,33 +772,19 @@ export default function OrgPage() {
                       <div className="surface-panel p-5">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                           <div>
-                            <div className="text-base font-medium text-ink">选择套餐并支付</div>
-                            <div className="mt-1 text-sm text-muted">免费版和专业版开放完整功能，专业版按团队固定月费开通；企业版请联系销售。</div>
+                            <div className="text-base font-medium text-ink">订阅与支付</div>
+                            <div className="mt-1 text-sm text-muted">企业免费试用1个月，正式使用 ¥19 / 启用成员 / 月。</div>
                           </div>
                           <Space wrap>
-                            <Radio.Group
-                              optionType="button"
-                              buttonStyle="solid"
-                              value={checkoutInterval}
-                              options={billingIntervalOptions}
-                              onChange={(event) => setCheckoutInterval(event.target.value)}
-                            />
                             <Select
                               value={checkoutProvider}
                               style={{ width: 128 }}
                               options={paymentProviderOptions}
                               onChange={setCheckoutProvider}
                             />
-                            <InputNumber
-                              addonBefore="成员容量"
-                              min={1}
-                              max={100000}
-                              value={checkoutSeatLimit}
-                              onChange={(value) => setCheckoutSeatLimit(Number(value) || 1)}
-                            />
                           </Space>
                         </div>
-                        <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                        <div className="mt-4 grid gap-3 xl:grid-cols-2">
                           <div className="rounded-[8px] border border-line bg-white p-4 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
                               <div>
@@ -802,7 +796,7 @@ export default function OrgPage() {
                             <div className="mt-4 flex items-end gap-2">
                               <span className="text-3xl font-semibold text-ink">{freeBillingPlan.price}</span>
                             </div>
-                            <div className="mt-2 text-sm text-muted">适合体验和小团队早期使用</div>
+                            <div className="mt-2 text-sm text-muted">注册后自动获得，试用期内不限制成员人数。</div>
                             <div className="mt-4 space-y-2">
                               {freeBillingPlan.features.map((feature) => (
                                 <div key={feature} className="flex items-center gap-2 text-sm text-muted">
@@ -812,13 +806,12 @@ export default function OrgPage() {
                               ))}
                             </div>
                             <Button className="mt-4 w-full" disabled>
-                              3人以内永久免费
+                              当前试用规则
                             </Button>
                           </div>
-                          {(billingPlans.data?.plans ?? []).filter((plan) => plan.plan !== "BUSINESS").map((plan) => {
-                            const amount = planPrice(plan, checkoutInterval);
+                          {(billingPlans.data?.plans ?? []).map((plan) => {
+                            const amount = Math.max(1, activeMemberCount) * planPrice(plan);
                             const isCurrent = org.data?.subscription.plan === plan.plan;
-                            const isEnterprise = plan.plan === "ENTERPRISE";
                             return (
                               <div key={plan.plan} className={`rounded-[8px] border bg-white p-4 shadow-sm ${plan.plan === "TEAM" ? "border-primary bg-primary-container/40" : "border-line"}`}>
                                 <div className="flex items-start justify-between gap-3">
@@ -829,11 +822,11 @@ export default function OrgPage() {
                                   {isCurrent ? <Tag color="green">当前</Tag> : null}
                                 </div>
                                 <div className="mt-4 flex items-end gap-2">
-                                  <span className="text-3xl font-semibold text-ink">{isEnterprise ? "联系销售" : moneyText(planPrice(plan, checkoutInterval))}</span>
-                                  {!isEnterprise ? <span className="pb-1 text-xs text-muted">/{checkoutInterval === "YEARLY" ? "年" : "月"}</span> : null}
+                                  <span className="text-3xl font-semibold text-ink">¥{(planPrice(plan) / 100).toFixed(0)}</span>
+                                  <span className="pb-1 text-xs text-muted">/ 启用成员 / 月</span>
                                 </div>
                                 <div className="mt-2 text-sm text-muted">
-                                  {isEnterprise ? "私有化部署、安全合规和专属支持" : `${checkoutSeatLimit} 人成员容量 · 合计 ${moneyText(amount)}`}
+                                  当前启用成员：{activeMemberCount} 人 · 应付金额：{moneyText(amount)} / 月
                                 </div>
                                 <div className="mt-4 space-y-2">
                                   {plan.features.map((feature) => (
@@ -847,16 +840,12 @@ export default function OrgPage() {
                                   className="mt-4 w-full"
                                   type={plan.plan === "TEAM" ? "primary" : "default"}
                                   icon={<ReceiptText size={16} />}
-                                  loading={!isEnterprise && createBillingOrder.isPending}
+                                  loading={createBillingOrder.isPending}
                                   onClick={() => {
-                                    if (isEnterprise) {
-                                      message.info("请联系销售获取企业版方案。");
-                                      return;
-                                    }
                                     startPlanCheckout(plan);
                                   }}
                                 >
-                                  {isEnterprise ? "联系销售" : plan.plan === "TEAM" ? "升级专业版" : "选择并支付"}
+                                  {isTrialing ? "试用结束后支付" : "续费专业版"}
                                 </Button>
                               </div>
                             );
@@ -1074,7 +1063,13 @@ export default function OrgPage() {
               <Input.Password placeholder={editingUser ? "留空不修改" : "默认 Passw0rd!"} />
             </Form.Item>
           </div>
-          <Alert className="mb-4" type="info" showIcon message="邮箱和手机号至少填写一个。管理员等无需日报统计的账号，可关闭“需要填报”。" />
+          <Alert
+            className="mb-4"
+            type="info"
+            showIcon
+            message="邮箱和手机号至少填写一个。管理员等无需日报统计的账号，可关闭“需要填报”。"
+            description={memberBillingHint}
+          />
           <Form.Item name="roles" label="角色" rules={[{ required: true }]}>
             <Select mode="multiple" options={roleOptions} />
           </Form.Item>
@@ -1098,14 +1093,14 @@ export default function OrgPage() {
       >
         <Form form={subscriptionForm} layout="vertical" onFinish={(values) => saveSubscription.mutate(values)}>
           <div className="grid grid-cols-2 gap-3">
-            <Form.Item name="plan" label="套餐" rules={[{ required: true }]}>
+            <Form.Item name="plan" label="订阅版本" rules={[{ required: true }]}>
               <Select options={planOptions} />
             </Form.Item>
             <Form.Item name="status" label="状态" rules={[{ required: true }]}>
               <Select options={statusOptions.map(({ value, label }) => ({ value, label }))} />
             </Form.Item>
-            <Form.Item name="seatLimit" label="席位上限" rules={[{ required: true }]}>
-              <InputNumber className="w-full" min={1} max={100000} />
+            <Form.Item name="seatLimit" label="计费人数记录" rules={[{ required: true }]}>
+              <InputNumber className="w-full" min={0} max={100000} />
             </Form.Item>
             <Form.Item name="provider" label="开通渠道">
               <Input placeholder="manual / alipay / stripe" />
@@ -1121,7 +1116,7 @@ export default function OrgPage() {
       </Modal>
 
       <Modal
-        title="创建订阅订单"
+        title="创建专业版订单"
         open={billingOrderModalOpen}
         onCancel={() => setBillingOrderModalOpen(false)}
         onOk={() => billingOrderForm.submit()}
@@ -1129,16 +1124,7 @@ export default function OrgPage() {
       >
         {createBillingOrder.error ? <Alert className="mb-4" type="error" showIcon message={(createBillingOrder.error as Error).message} /> : null}
         <Form form={billingOrderForm} layout="vertical" onFinish={(values) => createBillingOrder.mutate(values)}>
-          <div className="grid grid-cols-2 gap-3">
-            <Form.Item name="plan" label="套餐" rules={[{ required: true }]}>
-              <Select options={planOptions.filter((item) => item.value === "TEAM")} />
-            </Form.Item>
-            <Form.Item name="interval" label="付费周期" rules={[{ required: true }]}>
-              <Select options={billingIntervalOptions} />
-            </Form.Item>
-            <Form.Item name="seatLimit" label="成员容量" rules={[{ required: true }]}>
-              <InputNumber className="w-full" min={1} max={100000} />
-            </Form.Item>
+          <div className="grid grid-cols-1 gap-3">
             <Form.Item name="provider" label="支付方式" rules={[{ required: true }]}>
               <Select options={paymentProviderOptions} />
             </Form.Item>
@@ -1147,7 +1133,7 @@ export default function OrgPage() {
             type="info"
             showIcon
             message="价格规则"
-            description="专业版 ¥299/月，按团队固定月费开通；免费版 3 人以内永久免费；企业版请联系销售。"
+            description={`专业版 ¥19 / 启用成员 / 月。当前启用成员 ${activeMemberCount} 人，应付 ${moneyText(Math.max(1, activeMemberCount) * unitPriceCents)} / 月。`}
           />
         </Form>
       </Modal>
@@ -1170,7 +1156,7 @@ export default function OrgPage() {
                 <Tag color={checkout.order.status === "PAID" ? "green" : "orange"}>{checkout.order.status}</Tag>
               </div>
               <div className="mt-2 text-sm text-muted">
-                {planLabel(checkout.order.plan)} · {optionLabel(billingIntervalOptions, checkout.order.interval)} · {checkout.order.seatLimit} 人成员容量
+                {planLabel(checkout.order.plan)} · {optionLabel(billingIntervalOptions, checkout.order.interval)} · {checkout.order.seatLimit} 位启用成员
               </div>
             </div>
             <div className="flex flex-col items-center rounded-[8px] border border-line bg-white p-5 text-center">

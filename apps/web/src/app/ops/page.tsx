@@ -20,6 +20,9 @@ type OpsTenant = {
     plan: SubscriptionPlan;
     status: SubscriptionStatus;
     seatLimit: number;
+    activeUserCount?: number;
+    activeMemberMonthlyPriceCents?: number;
+    estimatedMonthlyAmountCents?: number;
     currentPeriodEnd?: string | null;
     trialEndsAt?: string | null;
   } | null;
@@ -73,6 +76,15 @@ function dateText(value?: string | null) {
 
 function subscriptionStatusColor(status?: SubscriptionStatus) {
   return status === "ACTIVE" || status === "TRIALING" ? "green" : status === "PAST_DUE" ? "orange" : status ? "red" : "default";
+}
+
+function moneyText(amountCents?: number) {
+  if (amountCents === undefined) return "-";
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    minimumFractionDigits: 2
+  }).format(amountCents / 100);
 }
 
 export default function OpsPage() {
@@ -150,7 +162,10 @@ export default function OpsPage() {
         <Space direction="vertical" size={4}>
           <Tag color={subscriptionStatusColor(record.subscription?.status)}>{record.subscription?.status ?? "未开通"}</Tag>
           <span className="text-xs text-muted">
-            {record.subscription?.plan ?? "-"} · {record.subscription?.seatLimit ?? 0} 席
+            {record.subscription?.plan === "TRIAL" ? "免费试用" : "专业版"} · 启用 {record.subscription?.activeUserCount ?? 0} 人
+          </span>
+          <span className="text-xs text-muted">
+            预计 {moneyText(record.subscription?.estimatedMonthlyAmountCents)} / 月
           </span>
         </Space>
       )

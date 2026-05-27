@@ -52,7 +52,7 @@ Default local API URL is configured in `AIWorkCalendar/Info.plist` as `AIWCAPIBa
    - Account: `admin@example.com`
    - Password: `Passw0rd!`
 
-   The login page does not require a tenant code by default. If the API reports that the account exists in multiple companies, expand `高级选项` and enter tenant code `demo`.
+   The iOS login page does not ask for tenant code. If an account belongs to multiple companies, use the company-specific login entry or ask an administrator to disambiguate the account.
 
 4. Smoke-test the first version:
 

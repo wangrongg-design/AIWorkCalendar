@@ -4,20 +4,23 @@ import Combine
 @MainActor
 final class AuthStore: ObservableObject {
     @Published var user: AuthUser?
+    @Published private var accessToken: String?
     let apiBaseURL: String
     @Published var isRefreshing = false
 
     init() {
+        self.accessToken = SessionStore.loadToken()
         self.user = SessionStore.loadUser()
         self.apiBaseURL = AppConfig.apiBaseURL
     }
 
     var isAuthenticated: Bool {
-        user != nil && SessionStore.loadToken() != nil
+        user != nil && accessToken != nil
     }
 
     func client() throws -> APIClient {
-        guard let client = APIClient(baseURLString: apiBaseURL, accessToken: SessionStore.loadToken()) else {
+        let token = accessToken ?? SessionStore.loadToken()
+        guard let client = APIClient(baseURLString: apiBaseURL, accessToken: token) else {
             throw APIError.invalidBaseURL
         }
         return client
@@ -36,12 +39,13 @@ final class AuthStore: ObservableObject {
         )
         let response: LoginResponse = try await client.request("/auth/login", method: .post, body: request)
         SessionStore.saveToken(response.accessToken)
+        accessToken = response.accessToken
         SessionStore.saveUser(response.user)
         user = response.user
     }
 
     func refreshMeIfPossible() async {
-        guard SessionStore.loadToken() != nil else {
+        guard accessToken ?? SessionStore.loadToken() != nil else {
             return
         }
         isRefreshing = true
@@ -59,6 +63,7 @@ final class AuthStore: ObservableObject {
 
     func logout() {
         SessionStore.clearSession()
+        accessToken = nil
         user = nil
     }
 }

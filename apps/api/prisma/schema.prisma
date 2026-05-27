@@ -162,7 +162,7 @@ model Subscription {
   tenantId               String             @unique @map("tenant_id")
   plan                   SubscriptionPlan   @default(TRIAL)
   status                 SubscriptionStatus @default(TRIALING)
-  seatLimit              Int                @default(3) @map("seat_limit")
+  seatLimit              Int                @default(0) @map("seat_limit")
   currentPeriodStart     DateTime?          @map("current_period_start") @db.Date
   currentPeriodEnd       DateTime?          @map("current_period_end") @db.Date
   trialEndsAt            DateTime?          @map("trial_ends_at") @db.Date

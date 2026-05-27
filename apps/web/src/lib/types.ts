@@ -77,8 +77,12 @@ export type Subscription = {
   status: SubscriptionStatus;
   seatLimit: number;
   usedSeats: number;
-  remainingSeats: number;
+  remainingSeats: number | null;
   isUsable: boolean;
+  billingModel?: "ACTIVE_MEMBER_MONTHLY";
+  activeMemberMonthlyPriceCents?: number;
+  estimatedMonthlyAmountCents?: number;
+  trialUnlimited?: boolean;
   currentPeriodStart?: string | null;
   currentPeriodEnd?: string | null;
   trialEndsAt?: string | null;
@@ -128,6 +132,13 @@ export type BillingPlan = {
 export type BillingPlansResponse = {
   currency: string;
   plans: BillingPlan[];
+  billingPolicy?: {
+    model: "ACTIVE_MEMBER_MONTHLY";
+    trialDays: number;
+    trialUnlimitedMembers: boolean;
+    activeMemberMonthlyPriceCents: number;
+    copy: string;
+  };
   paymentProviders: Array<{
     provider: "ALIPAY" | "WECHAT";
     enabled: boolean;

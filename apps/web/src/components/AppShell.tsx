@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
-import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, Home, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -13,7 +13,6 @@ import { Notification } from "@/lib/types";
 const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
-  { key: "/dashboard", icon: <Home size={19} />, label: "工作台" },
   { key: "/calendar", icon: <CalendarDays size={19} />, label: "AI日历" },
   { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报" },
   { key: "/reports", icon: <FileText size={19} />, label: "AI汇报" }
@@ -118,12 +117,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const canUseAdminMenu = user.roles.includes("COMPANY_ADMIN") || user.roles.includes("SUPER_ADMIN");
   const selectedKeys = [pathname];
+  const isCalendarHome = pathname === "/calendar" || pathname === "/dashboard";
   const mobileNavItems = [...(dailyNavItems ?? []), ...(canUseAdminMenu ? (adminNavItems ?? []) : [])];
   const roleText = user.roles.map((role) => roleLabels[role] ?? role).join(" / ");
   const navigateTo = (key: string) => {
     router.push(key);
     setMobileNavOpen(false);
   };
+  const collapseControl = (
+    <Tooltip title={collapsed ? "展开侧边栏" : "收起侧边栏"} placement={collapsed ? "right" : "top"}>
+      <Button
+        className="text-muted"
+        type="text"
+        shape="circle"
+        size="small"
+        icon={collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        onClick={() => setCollapsed((value) => !value)}
+      />
+    </Tooltip>
+  );
 
   return (
     <Layout className="min-h-screen">
@@ -149,9 +161,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="px-3">
             <Tooltip title={collapsed ? (user.departmentName ?? "全公司") : undefined} placement="right">
-              <div className={`mb-3 rounded-[18px] bg-surface-container px-4 py-3 ${collapsed ? "text-center" : ""}`}>
-                {!collapsed ? <div className="text-xs font-medium text-muted">可见范围</div> : null}
-                <div className="truncate text-sm font-medium text-ink">{collapsed ? (user.departmentName ? user.departmentName.slice(0, 1) : "全") : (user.departmentName ?? "全公司")}</div>
+              <div className={`mb-3 rounded-[18px] bg-surface-container ${collapsed ? "px-2 py-2 text-center" : "flex items-center justify-between gap-2 px-4 py-3"}`}>
+                <div className="min-w-0">
+                  {!collapsed ? <div className="text-xs font-medium text-muted">可见范围</div> : null}
+                  <div className="truncate text-sm font-medium text-ink">{collapsed ? (user.departmentName ? user.departmentName.slice(0, 1) : "全") : (user.departmentName ?? "全公司")}</div>
+                </div>
+                {collapseControl}
               </div>
             </Tooltip>
           </div>
@@ -256,18 +271,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Tooltip>
             ) : null}
 
-            <div className={`flex ${collapsed ? "justify-center" : "justify-end"}`}>
-              <Tooltip title={collapsed ? "展开侧边栏" : "收起侧边栏"} placement={collapsed ? "right" : "top"}>
-                <Button
-                  className="text-muted"
-                  type="text"
-                  shape="circle"
-                  size="small"
-                  icon={collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-                  onClick={() => setCollapsed((value) => !value)}
-                />
-              </Tooltip>
-            </div>
           </div>
         </div>
       </Sider>
@@ -335,7 +338,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             退出登录
           </Button>
         </Drawer>
-        <Content className="app-content px-6 py-5">
+        <Content className={`app-content px-6 py-5 ${isCalendarHome ? "calendar-home-content" : ""}`}>
           <div className="mx-auto max-w-[1440px]">{children}</div>
         </Content>
       </Layout>

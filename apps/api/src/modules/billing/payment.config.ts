@@ -10,6 +10,8 @@ export type BillingPlanConfig = {
   features: string[];
 };
 
+export const activeMemberMonthlyPriceCents = 1900;
+
 export type PaymentProviderConfig = {
   provider: "ALIPAY" | "WECHAT";
   enabled: boolean;
@@ -24,20 +26,11 @@ export const billingPlans: BillingPlanConfig[] = [
   {
     plan: SubscriptionPlan.TEAM,
     name: "专业版",
-    description: "适合正式团队协作使用，一个团队每月 299。",
-    monthlyPriceCents: 29900,
-    yearlyPriceCents: 299000,
-    recommendedSeats: 20,
-    features: ["免费版全部功能", "更多成员容量", "更高 AI 使用额度", "完整历史数据", "团队管理", "数据导出", "适合中小企业团队长期使用"]
-  },
-  {
-    plan: SubscriptionPlan.ENTERPRISE,
-    name: "企业版",
-    description: "适合需要私有化部署、安全合规和专属支持的企业。",
-    monthlyPriceCents: 0,
+    description: "¥19 / 启用成员 / 月，按企业内启用成员数量计费。",
+    monthlyPriceCents: activeMemberMonthlyPriceCents,
     yearlyPriceCents: 0,
-    recommendedSeats: 100,
-    features: ["专业版全部功能", "私有化部署", "API 接入", "SSO / LDAP", "审计日志", "专属部署与运维支持", "本地模型或专属模型支持"]
+    recommendedSeats: 1,
+    features: ["完整 AI 工作日历功能", "AI 日报、周报、月报", "AI 风险分析", "AI 工作问答", "日历看板", "项目管理", "数据导出", "可随时新增或停用成员"]
   }
 ];
 

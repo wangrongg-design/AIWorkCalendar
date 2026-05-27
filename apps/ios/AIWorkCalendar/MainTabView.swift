@@ -20,35 +20,52 @@ struct RootView: View {
 }
 
 struct MainTabView: View {
+    @State private var selectedTab: AppTab = .calendar
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
+            CalendarDashboardView {
+                selectedTab = .entry
+            }
+                .tabItem {
+                    Label("AI日历", systemImage: "calendar")
+                }
+                .tag(AppTab.calendar)
+
             ReportEntryView()
                 .tabItem {
-                    Label("今日", systemImage: "checklist")
+                    Label("填报", systemImage: "square.and.pencil")
                 }
-
-            CalendarDashboardView()
-                .tabItem {
-                    Label("日历", systemImage: "calendar")
-                }
+                .tag(AppTab.entry)
 
             WorkLogsView()
                 .tabItem {
                     Label("记录", systemImage: "list.bullet.rectangle")
                 }
+                .tag(AppTab.logs)
 
             ProjectsView()
                 .tabItem {
                     Label("项目", systemImage: "folder")
                 }
+                .tag(AppTab.projects)
 
             ProfileView()
                 .tabItem {
                     Label("我的", systemImage: "person.crop.circle")
                 }
+                .tag(AppTab.profile)
         }
         .tint(AITheme.ColorToken.primary)
     }
+}
+
+private enum AppTab: Hashable {
+    case calendar
+    case entry
+    case logs
+    case projects
+    case profile
 }
 
 struct ProfileView: View {

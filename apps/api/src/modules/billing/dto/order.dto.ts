@@ -2,16 +2,19 @@ import { BillingInterval, PaymentProvider, SubscriptionPlan } from "@prisma/clie
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class CreateBillingOrderDto {
-  @IsIn([SubscriptionPlan.TEAM, SubscriptionPlan.BUSINESS, SubscriptionPlan.ENTERPRISE])
-  plan: SubscriptionPlan;
+  @IsOptional()
+  @IsIn([SubscriptionPlan.TEAM])
+  plan?: SubscriptionPlan;
 
-  @IsIn(Object.values(BillingInterval))
-  interval: BillingInterval;
+  @IsOptional()
+  @IsIn([BillingInterval.MONTHLY])
+  interval?: BillingInterval;
 
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100000)
-  seatLimit: number;
+  seatLimit?: number;
 
   @IsIn([PaymentProvider.ALIPAY, PaymentProvider.WECHAT, PaymentProvider.MANUAL])
   provider: PaymentProvider;

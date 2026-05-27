@@ -54,6 +54,34 @@ enum DateHelpers {
         return monthFormatter.string(from: next)
     }
 
+    static func monthTitle(_ month: String) -> String {
+        guard let date = monthFormatter.date(from: month) else {
+            return month
+        }
+        let calendar = Calendar(identifier: .gregorian)
+        let year = calendar.component(.year, from: date)
+        let monthValue = calendar.component(.month, from: date)
+        return "\(year)年\(monthValue)月"
+    }
+
+    static func shortDayTitle(_ day: String) -> String {
+        guard let date = dayFormatter.date(from: day) else {
+            return day
+        }
+        let calendar = Calendar(identifier: .gregorian)
+        let monthValue = calendar.component(.month, from: date)
+        let dayValue = calendar.component(.day, from: date)
+        return "\(monthValue)月\(dayValue)日"
+    }
+
+    static func isFutureDay(_ day: String) -> Bool {
+        guard let date = dayFormatter.date(from: day) else {
+            return false
+        }
+        let calendar = Calendar(identifier: .gregorian)
+        return calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
+    }
+
     static func buildMonthGrid(month: String, days: [CalendarDay]) -> [MonthGridItem] {
         guard let firstDay = monthFormatter.date(from: month),
               let range = Calendar(identifier: .gregorian).range(of: .day, in: .month, for: firstDay) else {
@@ -85,6 +113,11 @@ enum DateHelpers {
                 tone = .empty
             }
             items.append(MonthGridItem(id: key, day: day, data: data, isToday: key == today, tone: tone))
+        }
+
+        while items.count < 42 {
+            let index = items.count
+            items.append(MonthGridItem(id: "blank-trailing-\(index)", day: nil, data: nil, isToday: false, tone: .empty))
         }
 
         return items

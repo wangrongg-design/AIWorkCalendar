@@ -36,29 +36,22 @@ const aiInsightExamples = [
 
 const pricingPlans = [
   {
-    name: "免费版",
+    name: "免费试用",
     price: "¥0",
-    description: "3人以内永久免费，完整体验 AI 工作能力。",
-    features: ["完整 AI 日报、周报、月报", "AI 风险分析", "AI 工作问答", "日历看板", "项目管理", "3人以内", "适合小团队试用"],
-    note: "适合体验和小团队早期使用",
-    cta: "免费创建团队"
+    description: "企业免费试用1个月，不限制人数，完整功能开放。",
+    features: ["企业免费试用 1 个月", "不限制成员人数", "完整 AI 工作日历功能", "AI 日报、周报、月报", "AI 风险分析", "AI 工作问答"],
+    note: "试用期内开放完整功能",
+    cta: "免费创建企业"
   },
   {
     name: "专业版",
-    price: "¥299",
-    period: "/月",
+    price: "¥19",
+    period: "/ 启用成员 / 月",
     badge: "推荐",
-    description: "适合正式团队协作使用，一个团队每月 299。",
-    features: ["免费版全部功能", "更多成员容量", "更高 AI 使用额度", "完整历史数据", "团队管理", "数据导出", "适合中小企业团队长期使用"],
+    description: "正式使用按企业内启用成员数量计费，简单透明。",
+    features: ["按启用成员计费", "可随时新增或停用成员", "本周期新增成员立即可用", "下个周期开始计费", "本周期停用成员不退款", "下个周期不再计费"],
     cta: "升级专业版",
     recommended: true
-  },
-  {
-    name: "企业版",
-    price: "联系销售",
-    description: "适合需要私有化部署、安全合规和专属支持的企业。",
-    features: ["专业版全部功能", "私有化部署", "API 接入", "SSO / LDAP", "审计日志", "专属部署与运维支持", "本地模型或专属模型支持"],
-    cta: "联系销售"
   }
 ];
 
@@ -77,7 +70,7 @@ export default function HomePage() {
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
       message.success("企业已创建，已进入 AI 工作空间。");
-      router.replace("/dashboard");
+      router.replace("/calendar");
     }
   });
 
@@ -98,7 +91,7 @@ export default function HomePage() {
           </div>
           <Space>
             {token ? (
-              <Button type="primary" onClick={() => router.push("/dashboard")}>
+              <Button type="primary" onClick={() => router.push("/calendar")}>
                 进入系统
               </Button>
             ) : (
@@ -149,7 +142,7 @@ export default function HomePage() {
             <div className="mt-6 rounded-[18px] bg-surface-container-low p-4">
               <div className="mb-3 text-sm font-medium text-ink">降低团队使用成本</div>
               <div className="grid gap-2 md:grid-cols-3">
-                {["3人以内永久免费", "完整功能开放", "正式团队每月299"].map((item) => (
+                {["免费试用1个月", "试用期不限制人数", "正式版 ¥19/启用成员/月"].map((item) => (
                   <div key={item} className="flex items-center gap-2 text-sm text-muted">
                     <CheckCircle2 size={16} className="text-secondary" />
                     {item}
@@ -173,7 +166,7 @@ export default function HomePage() {
 
           <div className="surface-panel bg-white p-7">
             <Typography.Title level={3} className="!mb-1 !font-medium">
-              免费创建团队
+              免费创建企业
             </Typography.Title>
             <Typography.Text className="text-muted">创建企业管理员账号，进入你的 AI 工作空间。</Typography.Text>
             {register.error ? <Alert className="mt-5" type="error" showIcon message={(register.error as Error).message} /> : null}
@@ -206,7 +199,7 @@ export default function HomePage() {
                 <Input.Password placeholder="至少 6 位" />
               </Form.Item>
               <Button type="primary" htmlType="submit" block icon={<ArrowRight size={16} />} loading={register.isPending}>
-                免费创建团队
+                免费创建企业
               </Button>
             </Form>
           </div>
@@ -216,13 +209,13 @@ export default function HomePage() {
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <Typography.Title level={3} className="!mb-1 !font-medium">
-                套餐价格
+                价格
               </Typography.Title>
               <Typography.Text className="text-muted">
-                免费版和专业版都开放完整功能，差异只体现在人数、AI额度、数据保留和企业服务上。
+                企业免费试用1个月，正式使用 ¥19 / 启用成员 / 月。
               </Typography.Text>
             </div>
-            <Tag color="green">免费版：3人以内永久免费</Tag>
+            <Tag color="green">免费试用：1个月不限人数</Tag>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {pricingPlans.map((plan) => (
@@ -257,10 +250,6 @@ export default function HomePage() {
                   type={plan.recommended ? "primary" : "default"}
                   block
                   onClick={() => {
-                    if (plan.name === "企业版") {
-                      message.info("请联系销售获取企业版方案。");
-                      return;
-                    }
                     form.submit();
                   }}
                 >

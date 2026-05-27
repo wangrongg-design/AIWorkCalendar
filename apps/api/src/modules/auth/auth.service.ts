@@ -79,7 +79,7 @@ export class AuthService {
           tenantId: tenant.id,
           plan: SubscriptionPlan.TRIAL,
           status: SubscriptionStatus.TRIALING,
-          seatLimit: 3,
+          seatLimit: 0,
           currentPeriodStart: dateOnly(),
           currentPeriodEnd: periodEnd,
           trialEndsAt: periodEnd,
@@ -184,7 +184,7 @@ export class AuthService {
     });
 
     if (users.length > 1 && !dto.tenantCode) {
-      throw new BadRequestException("该账号存在于多个企业，请填写企业代码");
+      throw new BadRequestException("该账号存在于多个企业，请联系管理员确认账号归属");
     }
     const user = users[0];
     if (!user || !user.isActive) {
