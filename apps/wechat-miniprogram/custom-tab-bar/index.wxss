@@ -1,0 +1,186 @@
+.tabbar-host {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 22rpx;
+  z-index: 9999;
+  padding: 0 40rpx env(safe-area-inset-bottom);
+  pointer-events: none;
+}
+
+.tabbar-pill {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  height: 128rpx;
+  border: 1rpx solid rgba(230, 230, 230, 0.72);
+  border-radius: 72rpx;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22rpx 54rpx rgba(60, 64, 67, 0.18);
+  pointer-events: auto;
+}
+
+.tab-item {
+  display: flex;
+  height: 108rpx;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8rpx;
+  margin: 0 6rpx;
+  border-radius: 58rpx;
+  color: #1A1A1A;
+}
+
+.tab-item.active {
+  background: #EDEDED;
+  color: #0B57D0;
+}
+
+.tab-label {
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tab-icon {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+  color: currentColor;
+}
+
+.icon-part {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.calendar {
+  border: 5rpx solid currentColor;
+  border-radius: 8rpx;
+}
+
+.calendar .a,
+.calendar .b,
+.calendar .c {
+  width: 5rpx;
+  height: 5rpx;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.calendar .a {
+  left: 10rpx;
+  top: 18rpx;
+  box-shadow: 11rpx 0 0 currentColor, 22rpx 0 0 currentColor;
+}
+
+.calendar .b {
+  left: 10rpx;
+  top: 28rpx;
+  box-shadow: 11rpx 0 0 currentColor, 22rpx 0 0 currentColor;
+}
+
+.calendar .c {
+  display: none;
+}
+
+.edit {
+  border: 5rpx solid currentColor;
+  border-radius: 9rpx;
+}
+
+.edit .a {
+  right: -3rpx;
+  top: 0;
+  width: 28rpx;
+  height: 7rpx;
+  border-radius: 6rpx;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
+.edit .b {
+  right: 4rpx;
+  top: 5rpx;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 2rpx;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
+.edit .c {
+  display: none;
+}
+
+.list {
+  border: 5rpx solid currentColor;
+  border-radius: 8rpx;
+}
+
+.list .a,
+.list .b,
+.list .c {
+  left: 12rpx;
+  width: 20rpx;
+  height: 5rpx;
+  border-radius: 5rpx;
+  background: currentColor;
+}
+
+.list .a {
+  top: 12rpx;
+}
+
+.list .b {
+  top: 21rpx;
+}
+
+.list .c {
+  top: 30rpx;
+}
+
+.folder {
+  top: 7rpx;
+  height: 34rpx;
+  border: 5rpx solid currentColor;
+  border-radius: 8rpx;
+}
+
+.folder .a {
+  left: 2rpx;
+  top: -12rpx;
+  width: 18rpx;
+  height: 12rpx;
+  border-radius: 7rpx 7rpx 0 0;
+  background: currentColor;
+}
+
+.folder .b,
+.folder .c {
+  display: none;
+}
+
+.profile .a {
+  left: 12rpx;
+  top: 2rpx;
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.profile .b {
+  left: 5rpx;
+  bottom: 1rpx;
+  width: 34rpx;
+  height: 24rpx;
+  border-radius: 24rpx 24rpx 9rpx 9rpx;
+  background: currentColor;
+}
+
+.profile .c {
+  display: none;
+}

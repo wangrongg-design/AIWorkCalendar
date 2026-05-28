@@ -63,6 +63,176 @@ fileprivate struct CalendarPeriodSummary {
     let suggestedAction: String
 }
 
+fileprivate func weekDatesFor(_ anchor: Date) -> [Date] {
+    let calendar = Calendar(identifier: .gregorian)
+    let startOfDay = calendar.startOfDay(for: anchor)
+    let weekday = calendar.component(.weekday, from: startOfDay)
+    let diffFromMonday = (weekday + 5) % 7
+    let monday = calendar.date(byAdding: .day, value: -diffFromMonday, to: startOfDay) ?? startOfDay
+    return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: monday) }
+}
+
+fileprivate func formatShortDate(_ date: Date) -> String {
+    let calendar = Calendar(identifier: .gregorian)
+    return "\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日"
+}
+
+fileprivate func formatWeekday(_ date: Date) -> String {
+    let symbols = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+    let weekday = Calendar(identifier: .gregorian).component(.weekday, from: date)
+    return symbols[max(0, min(weekday - 1, symbols.count - 1))]
+}
+
+fileprivate enum CalendarMobileDayStatus {
+    case complete
+    case partial
+    case unreported
+    case risk
+    case futurePlan
+    case futureEmpty
+
+    var title: String {
+        switch self {
+        case .complete:
+            return "已完成"
+        case .partial:
+            return "部分完成"
+        case .unreported:
+            return "未填报"
+        case .risk:
+            return "风险"
+        case .futurePlan:
+            return "已计划"
+        case .futureEmpty:
+            return "未计划"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .complete:
+            return AITheme.ColorToken.success
+        case .partial:
+            return AITheme.ColorToken.primary
+        case .unreported:
+            return AITheme.ColorToken.warning
+        case .risk:
+            return AITheme.ColorToken.danger
+        case .futurePlan, .futureEmpty:
+            return AITheme.ColorToken.ai
+        }
+    }
+
+    var surface: Color {
+        switch self {
+        case .complete:
+            return AITheme.ColorToken.successSurface
+        case .partial:
+            return AITheme.ColorToken.primarySurface
+        case .unreported:
+            return AITheme.ColorToken.warningSurface
+        case .risk:
+            return AITheme.ColorToken.dangerSurface
+        case .futurePlan, .futureEmpty:
+            return AITheme.ColorToken.aiSurface
+        }
+    }
+}
+
+fileprivate struct CalendarMobileDayItem: Identifiable {
+    let date: Date
+    let data: CalendarDay?
+    let detail: CalendarDayDetail?
+    let isSelected: Bool
+
+    var id: String { dateKey }
+    var dateKey: String { DateHelpers.dayKey(date) }
+    var isToday: Bool { dateKey == DateHelpers.dayKey() }
+    var isFuture: Bool { DateHelpers.isFutureDay(dateKey) }
+
+    var filledCount: Int {
+        detail?.stats.filledCount ?? data?.filledCount ?? 0
+    }
+
+    var missingCount: Int {
+        detail?.stats.missingCount ?? data?.missingCount ?? 0
+    }
+
+    var riskCount: Int {
+        detail?.stats.riskCount ?? data?.riskCount ?? 0
+    }
+
+    var totalHours: Double? {
+        detail?.stats.totalHours
+    }
+
+    var totalCount: Int {
+        let total = filledCount + missingCount
+        return total > 0 ? total : (detail?.stats.totalEmployees ?? 0)
+    }
+
+    var fillRate: Double {
+        if let detail {
+            return detail.stats.fillRate
+        }
+        if let data {
+            return data.fillRate
+        }
+        return 0
+    }
+
+    var referenceRecordCount: Int {
+        if let detail {
+            return detail.filledEmployees.reduce(0) { $0 + $1.logs.count }
+        }
+        return filledCount
+    }
+
+    var status: CalendarMobileDayStatus {
+        if riskCount > 0 {
+            return .risk
+        }
+        if isFuture {
+            return filledCount > 0 ? .futurePlan : .futureEmpty
+        }
+        if fillRate >= 80 {
+            return .complete
+        }
+        if fillRate > 0 {
+            return .partial
+        }
+        return .unreported
+    }
+
+    var hoursText: String {
+        guard let totalHours else {
+            return "--h"
+        }
+        let rounded = (totalHours * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return "\(Int(rounded))h"
+        }
+        return String(format: "%.1fh", rounded)
+    }
+
+    var progress: Double {
+        max(0, min(fillRate / 100, 1))
+    }
+
+    var summaryText: String {
+        if isFuture {
+            if totalCount > 0 {
+                return "计划 \(filledCount)/\(totalCount) · 风险 \(riskCount) · 工时 \(hoursText)"
+            }
+            return "未计划 · 风险 \(riskCount) · 工时 \(hoursText)"
+        }
+        if totalCount > 0 {
+            return "填报 \(filledCount)/\(totalCount) · 未填 \(missingCount) · 风险 \(riskCount) · 工时 \(hoursText)"
+        }
+        return "暂无填报记录 · 风险 \(riskCount) · 工时 \(hoursText)"
+    }
+}
+
 @MainActor
 final class CalendarViewModel: ObservableObject {
     @Published var month = DateHelpers.monthKey()
@@ -70,6 +240,9 @@ final class CalendarViewModel: ObservableObject {
     @Published var totalEmployees = 0
     @Published var days: [CalendarDay] = []
     @Published var grid: [MonthGridItem] = []
+    @Published var selectedDateKey = DateHelpers.dayKey()
+    @Published var weekAnchorDate = Date()
+    @Published var dayDetails: [String: CalendarDayDetail] = [:]
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -96,6 +269,12 @@ final class CalendarViewModel: ObservableObject {
         }
     }
 
+    func refresh(auth: AuthStore) async {
+        await load(auth: auth)
+        await loadWeekDetails(auth: auth)
+        await loadDetailIfNeeded(selectedDateKey, auth: auth)
+    }
+
     func moveMonth(by diff: Int, auth: AuthStore) async {
         month = DateHelpers.addMonths(to: month, diff: diff)
         await load(auth: auth)
@@ -106,8 +285,103 @@ final class CalendarViewModel: ObservableObject {
         await load(auth: auth)
     }
 
+    func moveWeek(by diff: Int, auth: AuthStore) async {
+        guard let nextAnchor = Calendar.current.date(byAdding: .day, value: diff * 7, to: weekAnchorDate) else {
+            return
+        }
+        weekAnchorDate = nextAnchor
+        selectedDateKey = DateHelpers.dayKey(nextAnchor)
+        await ensureLoadedMonth(for: nextAnchor, auth: auth)
+        await loadWeekDetails(auth: auth)
+        await loadDetailIfNeeded(selectedDateKey, auth: auth)
+    }
+
+    func moveToCurrentWeek(auth: AuthStore) async {
+        let today = Date()
+        weekAnchorDate = today
+        selectedDateKey = DateHelpers.dayKey(today)
+        await ensureLoadedMonth(for: today, auth: auth)
+        await loadWeekDetails(auth: auth)
+        await loadDetailIfNeeded(selectedDateKey, auth: auth)
+    }
+
+    func selectDate(_ date: Date, auth: AuthStore) async {
+        weekAnchorDate = date
+        selectedDateKey = DateHelpers.dayKey(date)
+        await ensureLoadedMonth(for: date, auth: auth)
+        await loadWeekDetails(auth: auth)
+        await loadDetailIfNeeded(selectedDateKey, auth: auth)
+    }
+
+    func loadWeekDetails(auth: AuthStore) async {
+        for date in weekDates {
+            await loadDetailIfNeeded(DateHelpers.dayKey(date), auth: auth)
+        }
+    }
+
+    private func loadDetailIfNeeded(_ dateKey: String, auth: AuthStore) async {
+        guard dayDetails[dateKey] == nil else {
+            return
+        }
+        do {
+            let detail: CalendarDayDetail = try await auth.client().request("/analytics/calendar/day?date=\(dateKey)&scope=\(scope.rawValue)")
+            dayDetails[dateKey] = detail
+        } catch {
+            // The weekly list can still render from monthly aggregates when a single day detail fails.
+        }
+    }
+
+    private func ensureLoadedMonth(for date: Date, auth: AuthStore) async {
+        let dateMonth = DateHelpers.monthKey(date)
+        guard dateMonth != month else {
+            return
+        }
+        month = dateMonth
+        dayDetails = [:]
+        await load(auth: auth)
+    }
+
     var monthTitle: String {
         DateHelpers.monthTitle(month)
+    }
+
+    var dayMap: [String: CalendarDay] {
+        Dictionary(uniqueKeysWithValues: days.map { ($0.date, $0) })
+    }
+
+    var weekDates: [Date] {
+        weekDatesFor(weekAnchorDate)
+    }
+
+    var weekRangeTitle: String {
+        guard let first = weekDates.first, let last = weekDates.last else {
+            return monthTitle
+        }
+        return "\(formatShortDate(first)) - \(formatShortDate(last))"
+    }
+
+    fileprivate var selectedMobileDay: CalendarMobileDayItem {
+        let date = DateHelpers.dayFormatter.date(from: selectedDateKey) ?? Date()
+        return mobileDayItem(for: date)
+    }
+
+    fileprivate var todayMobileDay: CalendarMobileDayItem {
+        let date = DateHelpers.dayFormatter.date(from: DateHelpers.dayKey()) ?? Date()
+        return mobileDayItem(for: date)
+    }
+
+    fileprivate var weekMobileDays: [CalendarMobileDayItem] {
+        weekDates.map { mobileDayItem(for: $0) }
+    }
+
+    fileprivate func mobileDayItem(for date: Date) -> CalendarMobileDayItem {
+        let key = DateHelpers.dayKey(date)
+        return CalendarMobileDayItem(
+            date: date,
+            data: dayMap[key],
+            detail: dayDetails[key],
+            isSelected: key == selectedDateKey
+        )
     }
 
     var monthFillRate: Double {
@@ -239,10 +513,8 @@ struct CalendarDashboardView: View {
     @State private var showsOverallAnalysis = false
     @State private var actionMessage: String?
     @State private var selectedDetailRoute: CalendarDetailRoute?
-    var onCreateReport: (() -> Void)?
+    var onCreateReport: ((String) -> Void)?
     var onOpenProjects: (() -> Void)?
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
 
     var body: some View {
         NavigationStack {
@@ -250,31 +522,55 @@ struct CalendarDashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
                         CalendarTopBar(
-                            monthTitle: viewModel.monthTitle,
+                            weekRangeTitle: viewModel.weekRangeTitle,
                             scope: $viewModel.scope,
                             scopes: auth.user?.availableScopes ?? [.selfScope],
-                            onPrevious: {
-                                Task { await viewModel.moveMonth(by: -1, auth: auth) }
-                            },
-                            onNext: {
-                                Task { await viewModel.moveMonth(by: 1, auth: auth) }
-                            },
                             onToday: {
-                                Task { await viewModel.moveToCurrentMonth(auth: auth) }
+                                Task { await viewModel.moveToCurrentWeek(auth: auth) }
                             },
                             onSearch: {
                                 showsSearchHint = true
+                            },
+                            onRefresh: {
+                                Task { await viewModel.refresh(auth: auth) }
                             }
                         )
 
-                        CalendarInsightBanner(viewModel: viewModel)
+                        CalendarInsightBanner(
+                            viewModel: viewModel,
+                            onOpenAI: {
+                                showsOverallAnalysis = true
+                            },
+                            onCreateReport: {
+                                onCreateReport?(viewModel.selectedDateKey)
+                            }
+                        )
 
-                        CalendarStatusSummary(viewModel: viewModel)
+                        CalendarMobileWeekHeader(
+                            rangeTitle: viewModel.weekRangeTitle,
+                            onPrevious: {
+                                Task { await viewModel.moveWeek(by: -1, auth: auth) }
+                            },
+                            onCurrent: {
+                                Task { await viewModel.moveToCurrentWeek(auth: auth) }
+                            },
+                            onNext: {
+                                Task { await viewModel.moveWeek(by: 1, auth: auth) }
+                            }
+                        )
 
-                        CalendarMonthGrid(
-                            grid: viewModel.grid,
-                            columns: columns,
-                            scope: viewModel.scope
+                        CalendarMobileWeekStrip(days: viewModel.weekMobileDays) { date in
+                            Task { await viewModel.selectDate(date, auth: auth) }
+                        }
+
+                        CalendarMobileDateList(
+                            days: viewModel.weekMobileDays,
+                            onShowDetail: { dateKey in
+                                selectedDetailRoute = CalendarDetailRoute(date: dateKey)
+                            },
+                            onCreateReport: { dateKey in
+                                onCreateReport?(dateKey)
+                            }
                         )
 
                         CalendarOverallAnalysisEntry(viewModel: viewModel) {
@@ -287,7 +583,9 @@ struct CalendarDashboardView: View {
                 }
 
                 if let onCreateReport {
-                    CalendarCreateButton(action: onCreateReport)
+                    CalendarCreateButton {
+                        onCreateReport(viewModel.selectedDateKey)
+                    }
                         .padding(.trailing, AITheme.Spacing.lg)
                         .padding(.bottom, AITheme.Spacing.lg)
                 }
@@ -305,13 +603,14 @@ struct CalendarDashboardView: View {
             }
             .task {
                 viewModel.configure(for: auth.user)
-                await viewModel.load(auth: auth)
+                await viewModel.refresh(auth: auth)
             }
             .refreshable {
-                await viewModel.load(auth: auth)
+                await viewModel.refresh(auth: auth)
             }
             .onChange(of: viewModel.scope) {
-                Task { await viewModel.load(auth: auth) }
+                viewModel.dayDetails = [:]
+                Task { await viewModel.refresh(auth: auth) }
             }
             .alert("搜索", isPresented: $showsSearchHint) {
                 Button("知道了", role: .cancel) {}
@@ -427,49 +726,45 @@ private struct CalendarDetailRoute: Identifiable, Hashable {
 }
 
 private struct CalendarTopBar: View {
-    let monthTitle: String
+    let weekRangeTitle: String
     @Binding var scope: Scope
     let scopes: [Scope]
-    let onPrevious: () -> Void
-    let onNext: () -> Void
     let onToday: () -> Void
     let onSearch: () -> Void
+    let onRefresh: () -> Void
 
     var body: some View {
-        HStack(spacing: AITheme.Spacing.xs) {
-            Menu {
-                Button("上个月", action: onPrevious)
-                Button("回到本月", action: onToday)
-                Button("下个月", action: onNext)
-            } label: {
-                HStack(spacing: 4) {
-                    Text(monthTitle)
-                        .font(.system(size: 28, weight: .semibold, design: .default))
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.xs) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AI日历")
+                        .font(AITheme.Typography.pageTitle)
                         .foregroundStyle(AITheme.ColorToken.ink900)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
+                    Text(weekRangeTitle)
+                        .font(AITheme.Typography.footnote)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("选择月份")
 
-            Spacer(minLength: AITheme.Spacing.xs)
+                Spacer(minLength: AITheme.Spacing.xs)
 
-            Button(action: onSearch) {
-                CalendarToolbarGlyph(systemImage: "magnifyingglass")
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("搜索")
+                Button(action: onSearch) {
+                    CalendarToolbarGlyph(systemImage: "magnifyingglass")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("搜索")
 
-            Button(action: onToday) {
-                CalendarToolbarGlyph(systemImage: "calendar.badge.clock")
+                Button(action: onToday) {
+                    CalendarToolbarGlyph(systemImage: "calendar.badge.clock")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("回到本周")
+
+                Button(action: onRefresh) {
+                    CalendarToolbarGlyph(systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("刷新")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("回到本月")
 
             Menu {
                 ForEach(scopes) { item in
@@ -480,7 +775,22 @@ private struct CalendarTopBar: View {
                     }
                 }
             } label: {
-                CalendarToolbarGlyph(systemImage: scope == .selfScope ? "person" : "person.2")
+                HStack(spacing: AITheme.Spacing.xs) {
+                    Image(systemName: scope == .selfScope ? "person" : "person.2")
+                    Text(scope.title)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink800)
+                .padding(.vertical, 9)
+                .padding(.horizontal, AITheme.Spacing.sm)
+                .background(AITheme.ColorToken.cardBackground)
+                .clipShape(Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("切换范围")
@@ -507,59 +817,106 @@ private struct CalendarToolbarGlyph: View {
 
 private struct CalendarInsightBanner: View {
     let viewModel: CalendarViewModel
+    let onOpenAI: () -> Void
+    let onCreateReport: () -> Void
 
     var body: some View {
-        if let firstRiskDay = viewModel.firstRiskDay {
-            NavigationLink {
-                DayDetailView(date: firstRiskDay.date, scope: viewModel.scope)
-            } label: {
-                content(showChevron: true)
-            }
-            .buttonStyle(.plain)
-        } else {
-            content(showChevron: false)
-        }
+        content
     }
 
-    private func content(showChevron: Bool) -> some View {
-        HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
-            Image(systemName: viewModel.riskDayCount > 0 ? "exclamationmark.triangle.fill" : "sparkles")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(viewModel.riskDayCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ai)
-                .frame(width: 30, height: 30)
-                .background((viewModel.riskDayCount > 0 ? AITheme.ColorToken.dangerSurface : AITheme.ColorToken.aiSurface))
-                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+    private var content: some View {
+        let selectedDay = viewModel.selectedMobileDay
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("AI 今日摘要")
-                    .font(AITheme.Typography.eyebrow)
-                    .foregroundStyle(AITheme.ColorToken.ai)
-                Text(viewModel.dashboardConclusion)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AITheme.ColorToken.ink900)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(viewModel.dashboardRisk)
-                    .font(.caption)
-                    .foregroundStyle(AITheme.ColorToken.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        return VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
+                Image(systemName: selectedDay.riskCount > 0 ? "exclamationmark.triangle.fill" : "sparkles")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(selectedDay.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ai)
+                    .frame(width: 30, height: 30)
+                    .background(selectedDay.riskCount > 0 ? AITheme.ColorToken.dangerSurface : AITheme.ColorToken.aiSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AI 今日摘要")
+                        .font(AITheme.Typography.eyebrow)
+                        .foregroundStyle(AITheme.ColorToken.ai)
+                    Text(viewModel.dashboardConclusion)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(viewModel.dashboardRisk)
+                        .font(.caption)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: AITheme.Spacing.xs)
             }
 
-            Spacer(minLength: AITheme.Spacing.xs)
+            HStack(spacing: AITheme.Spacing.xs) {
+                CalendarMiniFact(title: "日期", value: "\(formatShortDate(selectedDay.date)) \(formatWeekday(selectedDay.date))")
+                CalendarMiniFact(title: "范围", value: viewModel.scope.title)
+            }
 
-            if showChevron {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AITheme.ColorToken.textSecondary)
-                    .padding(.top, AITheme.Spacing.sm)
+            HStack(spacing: AITheme.Spacing.xs) {
+                CalendarMiniFact(title: "参考记录", value: "\(selectedDay.referenceRecordCount)")
+                CalendarMiniFact(title: "已填/未填", value: "\(selectedDay.filledCount)/\(selectedDay.missingCount)")
+                CalendarMiniFact(title: "风险", value: "\(selectedDay.riskCount)")
+                CalendarMiniFact(title: "工时", value: selectedDay.hoursText)
+            }
+
+            HStack(spacing: AITheme.Spacing.xs) {
+                Button(action: onOpenAI) {
+                    Label("打开 AI 洞察", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ai)
+                .background(AITheme.ColorToken.aiSurface)
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+
+                Button(action: onCreateReport) {
+                    Label(selectedDay.isFuture ? "填写计划" : "填写日报", systemImage: "square.and.pencil")
+                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .background(AITheme.ColorToken.primary)
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
             }
         }
-        .padding(AITheme.Spacing.sm)
+        .padding(AITheme.Spacing.md)
         .background(AITheme.ColorToken.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
                 .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
         }
+    }
+}
+
+private struct CalendarMiniFact: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
+                .lineLimit(1)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink900)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AITheme.ColorToken.activeBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
     }
 }
 
@@ -616,6 +973,231 @@ private struct CalendarStatusMetric: View {
             RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
                 .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
         }
+    }
+}
+
+private struct CalendarMobileWeekHeader: View {
+    let rangeTitle: String
+    let onPrevious: () -> Void
+    let onCurrent: () -> Void
+    let onNext: () -> Void
+
+    var body: some View {
+        HStack(spacing: AITheme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("本周")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+                Text(rangeTitle)
+                    .font(AITheme.Typography.footnote)
+                    .foregroundStyle(AITheme.ColorToken.textSecondary)
+            }
+
+            Spacer(minLength: AITheme.Spacing.xs)
+
+            Button(action: onPrevious) {
+                Image(systemName: "chevron.left")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AITheme.ColorToken.ink800)
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(Circle())
+            .overlay { Circle().stroke(AITheme.ColorToken.separator, lineWidth: 0.5) }
+            .accessibilityLabel("上一周")
+
+            Button("本周", action: onCurrent)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.primary)
+                .frame(minHeight: 36)
+                .padding(.horizontal, AITheme.Spacing.sm)
+                .background(AITheme.ColorToken.primarySurface)
+                .clipShape(Capsule())
+
+            Button(action: onNext) {
+                Image(systemName: "chevron.right")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AITheme.ColorToken.ink800)
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(Circle())
+            .overlay { Circle().stroke(AITheme.ColorToken.separator, lineWidth: 0.5) }
+            .accessibilityLabel("下一周")
+        }
+    }
+}
+
+private struct CalendarMobileWeekStrip: View {
+    let days: [CalendarMobileDayItem]
+    let onSelect: (Date) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AITheme.Spacing.xs) {
+                ForEach(days) { day in
+                    Button {
+                        onSelect(day.date)
+                    } label: {
+                        CalendarMobileDayChip(day: day)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .scrollClipDisabled()
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct CalendarMobileDayChip: View {
+    let day: CalendarMobileDayItem
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(formatWeekday(day.date).replacingOccurrences(of: "周", with: ""))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(day.isSelected ? AITheme.ColorToken.primary : AITheme.ColorToken.textSecondary)
+
+            ZStack(alignment: .topTrailing) {
+                Text("\(Calendar(identifier: .gregorian).component(.day, from: day.date))")
+                    .font(.headline.weight(day.isToday ? .bold : .semibold))
+                    .foregroundStyle(day.isSelected ? AITheme.ColorToken.primary : AITheme.ColorToken.ink900)
+                    .frame(width: 34, height: 30)
+
+                if day.riskCount > 0 {
+                    Text("\(day.riskCount)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 15, minHeight: 15)
+                        .background(AITheme.ColorToken.danger)
+                        .clipShape(Capsule())
+                        .offset(x: 8, y: -4)
+                }
+            }
+
+            Circle()
+                .fill(day.status.tint)
+                .frame(width: 6, height: 6)
+        }
+        .frame(width: 52, height: 72)
+        .background(day.isSelected ? AITheme.ColorToken.primarySurface : AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                .stroke(day.isToday ? AITheme.ColorToken.primary : AITheme.ColorToken.separator, lineWidth: day.isToday ? 1.3 : 0.5)
+        }
+        .accessibilityLabel("\(formatShortDate(day.date))，\(formatWeekday(day.date))，\(day.status.title)")
+    }
+}
+
+private struct CalendarMobileDateList: View {
+    let days: [CalendarMobileDayItem]
+    let onShowDetail: (String) -> Void
+    let onCreateReport: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            Text("本周日期")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink900)
+
+            ForEach(days) { day in
+                CalendarMobileDateCard(
+                    day: day,
+                    onShowDetail: {
+                        onShowDetail(day.dateKey)
+                    },
+                    onCreateReport: {
+                        onCreateReport(day.dateKey)
+                    }
+                )
+            }
+        }
+    }
+}
+
+private struct CalendarMobileDateCard: View {
+    let day: CalendarMobileDayItem
+    let onShowDetail: () -> Void
+    let onCreateReport: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(formatShortDate(day.date)) \(formatWeekday(day.date))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+
+                    Text(day.summaryText)
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                Text(day.status.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(day.status.tint)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .background(day.status.surface)
+                    .clipShape(Capsule())
+            }
+
+            CalendarProgressBar(progress: day.progress, tint: day.status.tint)
+
+            HStack(spacing: AITheme.Spacing.xs) {
+                Button(action: onShowDetail) {
+                    Text("查看详情")
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.primary)
+                .background(AITheme.ColorToken.primarySurface)
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                if day.isToday || day.isFuture {
+                    Button(action: onCreateReport) {
+                        Text(day.isFuture ? "填写计划" : "填写日报")
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .background(AITheme.ColorToken.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                }
+            }
+        }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
+    }
+}
+
+private struct CalendarProgressBar: View {
+    let progress: Double
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(AITheme.ColorToken.separator.opacity(0.5))
+                Capsule()
+                    .fill(tint)
+                    .frame(width: max(6, proxy.size.width * progress))
+            }
+        }
+        .frame(height: 5)
+        .accessibilityLabel("填报进度 \(Int((progress * 100).rounded()))%")
     }
 }
 

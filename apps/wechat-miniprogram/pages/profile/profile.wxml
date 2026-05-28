@@ -6,20 +6,32 @@
 
   <view class="metric-grid">
     <view class="metric-card">
-      <view class="metric-value">{{todayCount}}</view>
-      <view class="metric-label">今日填报</view>
+      <view class="metric-icon document-icon"></view>
+      <view>
+        <view class="metric-label">今日填报</view>
+        <view class="metric-value">{{todayCount}}</view>
+      </view>
     </view>
     <view class="metric-card">
-      <view class="metric-value">{{todayHours}}h</view>
-      <view class="metric-label">今日工时</view>
+      <view class="metric-icon clock-icon"></view>
+      <view>
+        <view class="metric-label">今日工时</view>
+        <view class="metric-value">{{todayHours}}h</view>
+      </view>
     </view>
     <view class="metric-card">
-      <view class="metric-value risk">{{todayRiskCount}}</view>
-      <view class="metric-label">风险信号</view>
+      <view class="metric-icon warning-icon"></view>
+      <view>
+        <view class="metric-label">风险信号</view>
+        <view class="metric-value risk">{{todayRiskCount}}</view>
+      </view>
     </view>
     <view class="metric-card">
-      <view class="metric-value ai">{{weeklyHours}}h</view>
-      <view class="metric-label">近 7 日</view>
+      <view class="metric-icon trend-icon"></view>
+      <view>
+        <view class="metric-label">近 7 日</view>
+        <view class="metric-value ai">{{weeklyHours}}h</view>
+      </view>
     </view>
   </view>
 

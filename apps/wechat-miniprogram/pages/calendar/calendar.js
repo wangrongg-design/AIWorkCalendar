@@ -50,6 +50,9 @@ Page({
       wx.reLaunch({ url: "/pages/login/login" });
       return;
     }
+    if (typeof this.getTabBar === "function" && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 0 });
+    }
     const scopes = roleScopes(getUser());
     this.setData({
       scopeOptions: scopes,
@@ -98,6 +101,12 @@ Page({
     this.loadCalendar();
   },
 
+  onMonthChange(event) {
+    const month = event.detail.value;
+    this.setData({ month, monthTitle: monthTitle(month) });
+    this.loadCalendar();
+  },
+
   goToday() {
     const month = monthKey();
     this.setData({ month, monthTitle: monthTitle(month) });
@@ -106,6 +115,10 @@ Page({
 
   openSearch() {
     wx.switchTab({ url: "/pages/work-logs/work-logs" });
+  },
+
+  createReport() {
+    wx.switchTab({ url: "/pages/report/report" });
   },
 
   onScopeChange(event) {

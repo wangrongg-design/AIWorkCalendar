@@ -98,9 +98,9 @@ export default function LoginPage() {
                   <CalendarCheck2 size={22} />
                 </div>
                 <Typography.Title level={1} className="system-login-title">
-                  登录系统
+                  登录工作台
                 </Typography.Title>
-                <Typography.Text className="system-login-subtitle">进入 Work Calendar AI 工作台</Typography.Text>
+                <Typography.Text className="system-login-subtitle">已有账号进入 Work Calendar AI 工作台</Typography.Text>
 
                 {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
                 <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
@@ -120,16 +120,14 @@ export default function LoginPage() {
                     忘记密码
                   </Button>
                   <button type="button" onClick={() => router.push("/")}>
-                    <span>没有企业账号？</span>
-                    <strong>免费创建企业</strong>
+                    <span>了解产品与免费试用</span>
                     <ArrowRight size={15} />
                   </button>
                 </div>
               </div>
             </Card>
             <div className="system-login-note">
-              <strong>系统入口</strong>
-              <span>官网负责产品介绍与免费试用，登录页仅用于已有账号进入工作台。</span>
+              系统入口：官网负责产品介绍与免费试用，登录页仅用于已有账号进入工作台。
             </div>
           </div>
         </div>

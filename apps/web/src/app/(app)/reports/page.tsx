@@ -5,7 +5,7 @@ import { Button, DatePicker, Empty, Form, Select, Space, Table, Tag, Typography,
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { FileDown, RotateCw, WandSparkles } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, humanizeApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { Department, Report, ReportType } from "@/lib/types";
 
@@ -87,6 +87,10 @@ function downloadReportWord(report: Report) {
   URL.revokeObjectURL(url);
 }
 
+function reportErrorText(value?: string | null) {
+  return humanizeApiError(value || "报告生成失败，请调整时间范围后重试。");
+}
+
 export default function ReportsPage() {
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
@@ -137,7 +141,7 @@ export default function ReportsPage() {
     {
       title: "内容",
       render: (_, record) => {
-        if (record.status === "FAILED") return <Typography.Text type="danger">{record.error}</Typography.Text>;
+        if (record.status === "FAILED") return <Typography.Text type="danger">{reportErrorText(record.error)}</Typography.Text>;
         if (!record.content) return <Typography.Text className="text-muted">等待 AI 生成</Typography.Text>;
         return (
           <div className="space-y-3">
@@ -188,14 +192,14 @@ export default function ReportsPage() {
           <Typography.Title level={3} className="page-title">
             AI 汇报
           </Typography.Title>
-          <Typography.Text className="page-subtitle">用 AI 把日报、计划、风险和工时整理成可复盘的团队汇报。</Typography.Text>
+          <Typography.Text className="page-subtitle">可下载报告入口：把日报、计划、风险和工时整理成 Word 报告，用于汇报和归档。</Typography.Text>
         </div>
       </div>
 
       <div className="surface-panel report-guide">
         <div className="report-guide-copy">
           <div className="section-title">生成报告向导</div>
-          <div className="section-subtitle">选择报告类型、时间范围和部门后，AI 会生成摘要、已完成工作、风险问题、后续计划和工时统计。</div>
+          <div className="section-subtitle">选择报告类型、时间范围和部门后，AI 会生成可下载报告；实时状态请看 AI日历，周期复盘请看 AI整体分析。</div>
         </div>
         <Form
           form={form}

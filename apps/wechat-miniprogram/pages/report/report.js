@@ -53,6 +53,9 @@ Page({
       wx.reLaunch({ url: "/pages/login/login" });
       return;
     }
+    if (typeof this.getTabBar === "function" && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 1 });
+    }
     this.setData({
       user: getUser() || {},
       date: this.data.date || dateKey()
@@ -89,6 +92,11 @@ Page({
     } catch (error) {
       this.applyTodayStatus([]);
     }
+  },
+
+  refreshPage() {
+    this.loadProjects();
+    this.loadWorkLogs();
   },
 
   applyTodayStatus(workLogs) {

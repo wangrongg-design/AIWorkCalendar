@@ -1,15 +1,26 @@
 <view class="page calendar-page bottom-safe">
   <view class="calendar-topbar">
-    <view class="month-switcher">
-      <button class="month-step" bindtap="prevMonth">‹</button>
-      <view class="month-title">{{monthTitle}}</view>
-      <button class="month-step" bindtap="nextMonth">›</button>
-    </view>
+    <picker mode="date" fields="month" value="{{month}}" bindchange="onMonthChange">
+      <view class="month-trigger">
+        <view class="month-title">{{monthTitle}}</view>
+        <view class="month-chevron"></view>
+      </view>
+    </picker>
     <view class="toolbar-actions">
-      <button class="toolbar-button search-button" bindtap="openSearch">搜</button>
-      <button class="toolbar-button today-button" bindtap="goToday">今</button>
+      <button class="toolbar-button search-button" bindtap="openSearch">
+        <view class="top-icon search-icon"></view>
+      </button>
+      <button class="toolbar-button today-button" bindtap="goToday">
+        <view class="top-icon today-icon">
+          <view></view>
+        </view>
+      </button>
       <picker range="{{scopeOptions}}" range-key="label" value="{{scopeIndex}}" bindchange="onScopeChange">
-        <view class="toolbar-button scope-icon">{{scopeLabel}}</view>
+        <view class="toolbar-button">
+          <view class="top-icon scope-person">
+            <view></view>
+          </view>
+        </view>
       </picker>
     </view>
   </view>
@@ -39,7 +50,7 @@
     </view>
   </view>
 
-  <view class="surface calendar-card">
+  <view class="calendar-card">
     <view class="week-row">
       <text wx:for="{{weekdays}}" wx:key="*this">{{item}}</text>
     </view>
@@ -56,18 +67,11 @@
             <text class="day">{{item.day}}</text>
           </view>
           <view class="cell-spacer"></view>
-          <view class="cell-status {{item.tone}}">{{item.primaryText}}</view>
           <view class="cell-foot">
             <view class="status-bar {{item.tone}}"></view>
           </view>
         </block>
       </view>
-    </view>
-    <view class="legend-row">
-      <view class="legend-item"><text class="dot good"></text>已完成</view>
-      <view class="legend-item"><text class="dot normal"></text>部分填报</view>
-      <view class="legend-item"><text class="dot empty"></text>未填报</view>
-      <view class="legend-item"><text class="dot risk"></text>风险</view>
     </view>
   </view>
 
@@ -82,4 +86,5 @@
   </view>
 
   <view wx:if="{{loading}}" class="loading">加载中...</view>
+  <button class="calendar-fab" bindtap="createReport">+</button>
 </view>

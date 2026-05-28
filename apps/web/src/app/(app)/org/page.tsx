@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
-import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, QrCode, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
 import { normalizeUnifiedSocialCreditCode, unifiedSocialCreditCodeMessage, unifiedSocialCreditCodePattern } from "@/lib/unified-social-credit-code";
@@ -98,7 +98,7 @@ const billingIntervalOptions: Array<{ value: BillingInterval; label: string }> =
   { value: "MONTHLY", label: "月付" }
 ];
 
-const paymentProviderOptions: Array<{ value: PaymentProvider; label: string }> = [
+const paymentProviderOptions: Array<{ value: "ALIPAY" | "WECHAT"; label: string }> = [
   { value: "ALIPAY", label: "支付宝" },
   { value: "WECHAT", label: "微信支付" }
 ];
@@ -123,11 +123,25 @@ const orderStatusColors: Record<string, string> = {
   EXPIRED: "red"
 };
 
+const orderStatusLabels: Record<string, string> = {
+  PENDING: "待支付",
+  PAID: "已支付",
+  CANCELED: "已取消",
+  EXPIRED: "已过期"
+};
+
 const deletionStatusColors: Record<string, string> = {
   REQUESTED: "orange",
   PROCESSING: "blue",
   COMPLETED: "green",
   CANCELED: "default"
+};
+
+const deletionStatusLabels: Record<string, string> = {
+  REQUESTED: "已提交",
+  PROCESSING: "处理中",
+  COMPLETED: "已完成",
+  CANCELED: "已取消"
 };
 
 const exportTaskStatusColors: Record<ExportTaskStatus, string> = {
@@ -136,6 +150,14 @@ const exportTaskStatusColors: Record<ExportTaskStatus, string> = {
   COMPLETED: "green",
   FAILED: "red",
   EXPIRED: "default"
+};
+
+const exportTaskStatusLabels: Record<ExportTaskStatus, string> = {
+  PENDING: "排队中",
+  PROCESSING: "生成中",
+  COMPLETED: "可下载",
+  FAILED: "生成失败",
+  EXPIRED: "已过期"
 };
 
 function optionLabel<T extends string>(options: Array<{ value: T; label: string }>, value?: T) {
@@ -211,6 +233,7 @@ export default function OrgPage() {
   const [dataDeletionModalOpen, setDataDeletionModalOpen] = useState(false);
   const [checkoutProvider, setCheckoutProvider] = useState<"ALIPAY" | "WECHAT">("WECHAT");
   const [checkout, setCheckout] = useState<BillingOrderPayment | null>(null);
+  const [checkoutRefreshing, setCheckoutRefreshing] = useState(false);
 
   const org = useQuery({
     queryKey: ["org"],
@@ -234,6 +257,19 @@ export default function OrgPage() {
     enabled: canManage
   });
 
+  const availablePaymentProviderOptions = useMemo(() => {
+    const configs = billingPlans.data?.paymentProviders ?? [];
+    return paymentProviderOptions.map((option) => {
+      const config = configs.find((item) => item.provider === option.value);
+      const enabled = config?.enabled ?? true;
+      return {
+        ...option,
+        disabled: !enabled,
+        label: enabled ? option.label : `${option.label}（暂未配置）`
+      };
+    });
+  }, [billingPlans.data?.paymentProviders]);
+
   const auditLogs = useQuery({
     queryKey: ["audit-logs"],
     queryFn: () => apiFetch<AuditLog[]>("/audit-logs?limit=100"),
@@ -252,6 +288,44 @@ export default function OrgPage() {
     enabled: Boolean(user),
     refetchInterval: 5000
   });
+
+  useEffect(() => {
+    const selected = availablePaymentProviderOptions.find((item) => item.value === checkoutProvider);
+    if (selected?.disabled) {
+      const next = availablePaymentProviderOptions.find((item) => !item.disabled);
+      if (next) {
+        setCheckoutProvider(next.value);
+      }
+    }
+  }, [availablePaymentProviderOptions, checkoutProvider]);
+
+  useEffect(() => {
+    if (!checkout || checkout.order.status !== "PENDING" || checkout.payment?.mode !== "live") {
+      return;
+    }
+    let stopped = false;
+    const refresh = async () => {
+      try {
+        const latest = await apiFetch<BillingOrderPayment>(`/billing/orders/${checkout.order.id}/payment`);
+        if (stopped) return;
+        if (latest.order.status === "PAID") {
+          message.success("支付已到账，订阅已自动开通。");
+          setCheckout(null);
+          queryClient.invalidateQueries({ queryKey: ["billing-orders"] });
+          queryClient.invalidateQueries({ queryKey: ["org"] });
+          return;
+        }
+        setCheckout(latest);
+      } catch {
+        // Keep polling; transient network or callback timing issues should not interrupt checkout.
+      }
+    };
+    const timer = window.setInterval(refresh, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [checkout, queryClient]);
 
   const saveDepartment = useMutation({
     mutationFn: (values: { name: string; parentId?: string }) => {
@@ -341,7 +415,7 @@ export default function OrgPage() {
       billingOrderForm.resetFields();
       apiFetch<BillingOrderPayment>(`/billing/orders/${order.id}/payment`)
         .then(setCheckout)
-        .catch((error) => message.error(error instanceof Error ? error.message : "支付信息获取失败"));
+        .catch((error) => message.error(error instanceof Error ? error.message : "支付信息获取失败，请刷新订单后重试。"));
       queryClient.invalidateQueries({ queryKey: ["billing-orders"] });
     }
   });
@@ -355,7 +429,7 @@ export default function OrgPage() {
       queryClient.invalidateQueries({ queryKey: ["org"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "支付确认失败");
+      message.error(error instanceof Error ? error.message : "支付确认失败，请确认支付状态后重试。");
     }
   });
 
@@ -409,7 +483,7 @@ export default function OrgPage() {
       queryClient.invalidateQueries({ queryKey: ["export-tasks"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "导出任务创建失败");
+      message.error(error instanceof Error ? error.message : "导出任务创建失败，请缩小导出范围后重试。");
     }
   });
 
@@ -420,7 +494,7 @@ export default function OrgPage() {
       message.success("备份压缩包已开始下载");
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "下载失败");
+      message.error(error instanceof Error ? error.message : "下载失败，请确认文件仍在有效期内。");
     }
   });
 
@@ -432,6 +506,27 @@ export default function OrgPage() {
     });
   };
 
+  const refreshCheckout = async () => {
+    if (!checkout) return;
+    setCheckoutRefreshing(true);
+    try {
+      const latest = await apiFetch<BillingOrderPayment>(`/billing/orders/${checkout.order.id}/payment`);
+      if (latest.order.status === "PAID") {
+        message.success("支付已到账，订阅已自动开通。");
+        setCheckout(null);
+        queryClient.invalidateQueries({ queryKey: ["billing-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["org"] });
+      } else {
+        setCheckout(latest);
+        message.info("订单仍在等待支付回调，请完成扫码支付后稍等几秒。");
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "支付状态刷新失败，请稍后重试。");
+    } finally {
+      setCheckoutRefreshing(false);
+    }
+  };
+
   const subscription = org.data?.subscription;
   const activeMemberCount = subscription?.usedSeats ?? 0;
   const unitPriceCents = subscription?.activeMemberMonthlyPriceCents ?? billingPlans.data?.billingPolicy?.activeMemberMonthlyPriceCents ?? activeMemberMonthlyPriceCents;
@@ -441,6 +536,9 @@ export default function OrgPage() {
   const memberBillingHint = isTrialing
     ? "试用期内不限制成员人数。试用结束后将按启用成员数量计费。"
     : "新增成员将立即可用，并从下个计费周期开始计费。";
+  const checkoutPaymentCode = checkout?.payment?.qrCodeText ?? checkout?.payment?.paymentUrl ?? "";
+  const checkoutIsLive = checkout?.payment?.mode === "live";
+  const checkoutIsMock = checkout?.payment?.mode === "mock" || !checkout?.payment?.mode;
 
   const departmentColumns: ColumnsType<Department> = [
     { title: "部门", dataIndex: "name" },
@@ -508,7 +606,7 @@ export default function OrgPage() {
       title: "状态",
       dataIndex: "status",
       width: 100,
-      render: (value: string) => <Tag color={orderStatusColors[value] ?? "default"}>{value}</Tag>
+      render: (value: string) => <Tag color={orderStatusColors[value] ?? "default"}>{orderStatusLabels[value] ?? "未知状态"}</Tag>
     },
     { title: "创建时间", dataIndex: "createdAt", width: 170, render: dateTimeText },
     {
@@ -525,7 +623,7 @@ export default function OrgPage() {
             onClick={() =>
               apiFetch<BillingOrderPayment>(`/billing/orders/${record.id}/payment`)
                 .then(setCheckout)
-                .catch((error) => message.error(error instanceof Error ? error.message : "支付信息获取失败"))
+                .catch((error) => message.error(error instanceof Error ? error.message : "支付信息获取失败，请刷新订单后重试。"))
             }
           >
             支付
@@ -561,7 +659,7 @@ export default function OrgPage() {
       title: "状态",
       dataIndex: "status",
       width: 120,
-      render: (value: string) => <Tag color={deletionStatusColors[value] ?? "default"}>{value}</Tag>
+      render: (value: string) => <Tag color={deletionStatusColors[value] ?? "default"}>{deletionStatusLabels[value] ?? "未知状态"}</Tag>
     },
     { title: "原因", dataIndex: "reason", render: (value?: string | null) => value || "-" },
     { title: "申请时间", dataIndex: "requestedAt", width: 170, render: dateTimeText }
@@ -573,7 +671,7 @@ export default function OrgPage() {
       title: "状态",
       dataIndex: "status",
       width: 120,
-      render: (value: ExportTaskStatus) => <Tag color={exportTaskStatusColors[value]}>{value}</Tag>
+      render: (value: ExportTaskStatus) => <Tag color={exportTaskStatusColors[value]}>{exportTaskStatusLabels[value]}</Tag>
     },
     { title: "文件", dataIndex: "fileName", render: (value?: string | null) => value || "-" },
     { title: "大小", dataIndex: "fileSize", width: 100, render: fileSizeText },
@@ -775,15 +873,15 @@ export default function OrgPage() {
                           <div>
                             <div className="text-base font-medium text-ink">订阅与支付</div>
                             <div className="mt-1 text-sm text-muted">企业免费试用1个月，正式使用 ¥19 / 启用成员 / 月。</div>
-                          </div>
-                          <Space wrap>
-                            <Select
-                              value={checkoutProvider}
-                              style={{ width: 128 }}
-                              options={paymentProviderOptions}
-                              onChange={setCheckoutProvider}
-                            />
-                          </Space>
+                            </div>
+                            <Space wrap>
+                              <Select
+                                value={checkoutProvider}
+                                style={{ width: 128 }}
+                                options={availablePaymentProviderOptions}
+                                onChange={setCheckoutProvider}
+                              />
+                            </Space>
                         </div>
                         <div className="mt-4 grid gap-3 xl:grid-cols-2">
                           <div className="rounded-[8px] border border-line bg-white p-4 shadow-sm">
@@ -1130,12 +1228,12 @@ export default function OrgPage() {
         confirmLoading={createBillingOrder.isPending}
       >
         {createBillingOrder.error ? <Alert className="mb-4" type="error" showIcon message={(createBillingOrder.error as Error).message} /> : null}
-        <Form form={billingOrderForm} layout="vertical" onFinish={(values) => createBillingOrder.mutate(values)}>
-          <div className="grid grid-cols-1 gap-3">
-            <Form.Item name="provider" label="支付方式" rules={[{ required: true }]}>
-              <Select options={paymentProviderOptions} />
-            </Form.Item>
-          </div>
+          <Form form={billingOrderForm} layout="vertical" onFinish={(values) => createBillingOrder.mutate(values)}>
+            <div className="grid grid-cols-1 gap-3">
+              <Form.Item name="provider" label="支付方式" rules={[{ required: true }]}>
+                <Select options={availablePaymentProviderOptions} />
+              </Form.Item>
+            </div>
           <Alert
             type="info"
             showIcon
@@ -1160,44 +1258,50 @@ export default function OrgPage() {
                   <div className="text-sm text-muted">{paymentProviderLabels[checkout.order.provider] ?? checkout.order.provider}</div>
                   <div className="mt-1 text-2xl font-semibold text-ink">{moneyText(checkout.order.amountCents, checkout.order.currency)}</div>
                 </div>
-                <Tag color={checkout.order.status === "PAID" ? "green" : "orange"}>{checkout.order.status}</Tag>
+                <Tag color={checkout.order.status === "PAID" ? "green" : "orange"}>{orderStatusLabels[checkout.order.status] ?? "未知状态"}</Tag>
               </div>
               <div className="mt-2 text-sm text-muted">
                 {planLabel(checkout.order.plan)} · {optionLabel(billingIntervalOptions, checkout.order.interval)} · {checkout.order.seatLimit} 位启用成员
               </div>
             </div>
-            <div className="flex flex-col items-center rounded-[8px] border border-line bg-white p-5 text-center">
-              <div className="flex h-32 w-32 items-center justify-center rounded-[8px] border border-line bg-surface-container-low text-primary">
-                <QrCode size={74} />
+              <div className="flex flex-col items-center rounded-[8px] border border-line bg-white p-5 text-center">
+                <div className="flex min-h-44 w-44 items-center justify-center rounded-[8px] border border-line bg-white p-2">
+                  {checkoutPaymentCode ? (
+                    <QRCode value={checkoutPaymentCode} size={160} bordered={false} />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="等待支付二维码" />
+                  )}
+                </div>
+                <div className="mt-3 text-sm font-medium text-ink">
+                  {checkoutIsMock ? "本地模拟支付码" : "请使用微信扫码支付"}
+                </div>
+                <Typography.Text className="mt-2 max-w-full break-all text-xs text-muted">
+                  {checkoutPaymentCode || "等待支付信息"}
+                </Typography.Text>
               </div>
-              <div className="mt-3 text-sm font-medium text-ink">
-                {checkout.payment?.mode === "mock" ? "本地模拟支付码" : "请使用对应支付 App 扫码"}
-              </div>
-              <Typography.Text className="mt-2 max-w-full break-all text-xs text-muted">
-                {checkout.payment?.qrCodeText ?? checkout.payment?.paymentUrl ?? "等待支付信息"}
-              </Typography.Text>
-            </div>
-            <Space className="w-full justify-end" wrap>
-              {checkout.payment?.paymentUrl ? (
-                <Button href={checkout.payment.paymentUrl} target="_blank">
-                  打开支付链接
+              <Space className="w-full justify-end" wrap>
+                {checkout.payment?.paymentUrl && !checkoutIsLive ? (
+                  <Button href={checkout.payment.paymentUrl} target="_blank">
+                    打开支付链接
+                  </Button>
+                ) : null}
+                <Button onClick={refreshCheckout} loading={checkoutRefreshing}>
+                  刷新支付状态
                 </Button>
+                {checkoutIsMock ? (
+                  <Button
+                    type="primary"
+                    loading={confirmOnlinePayment.isPending}
+                    disabled={checkout.order.status === "PAID"}
+                    onClick={() => confirmOnlinePayment.mutate(checkout.order.id)}
+                  >
+                    模拟支付完成
+                  </Button>
+                ) : null}
+              </Space>
+              {checkoutIsLive ? (
+                <Alert type="info" showIcon message="系统会自动轮询订单状态，微信回调验签成功后会自动开通订阅。" />
               ) : null}
-              <Button onClick={() => billingOrders.refetch()} loading={billingOrders.isFetching}>
-                刷新订单
-              </Button>
-              <Button
-                type="primary"
-                loading={confirmOnlinePayment.isPending}
-                disabled={checkout.order.status === "PAID"}
-                onClick={() => confirmOnlinePayment.mutate(checkout.order.id)}
-              >
-                {checkout.payment?.mode === "mock" ? "模拟支付完成" : "我已完成支付"}
-              </Button>
-            </Space>
-            {checkout.payment?.mode === "live" ? (
-              <Alert type="info" showIcon message="生产支付应由微信/支付宝回调确认，本按钮不会绕过平台验签。" />
-            ) : null}
           </div>
         ) : null}
       </Modal>

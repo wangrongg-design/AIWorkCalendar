@@ -2,6 +2,10 @@
   padding: 4rpx 0 8rpx;
 }
 
+.profile-page {
+  padding-bottom: calc(206rpx + env(safe-area-inset-bottom));
+}
+
 .profile-name {
   max-width: 100%;
   color: #1A1A1A;
@@ -27,6 +31,10 @@
 }
 
 .metric-card {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  min-height: 118rpx;
   border: 1rpx solid #E6E6E6;
   border-radius: 32rpx;
   background: #FFFFFF;
@@ -34,7 +42,102 @@
   box-shadow: 0 6rpx 20rpx rgba(60, 64, 67, 0.035);
 }
 
+.metric-icon {
+  position: relative;
+  width: 58rpx;
+  height: 58rpx;
+  flex: 0 0 58rpx;
+  border-radius: 18rpx;
+  background: #EEF5FF;
+  color: #0B57D0;
+}
+
+.document-icon::before {
+  position: absolute;
+  left: 17rpx;
+  top: 11rpx;
+  width: 24rpx;
+  height: 34rpx;
+  border: 5rpx solid currentColor;
+  border-radius: 4rpx;
+  content: "";
+}
+
+.clock-icon {
+  background: #ECFDF9;
+  color: #0B57D0;
+}
+
+.clock-icon::before {
+  position: absolute;
+  left: 14rpx;
+  top: 14rpx;
+  width: 30rpx;
+  height: 30rpx;
+  border: 5rpx solid currentColor;
+  border-radius: 50%;
+  content: "";
+}
+
+.clock-icon::after {
+  position: absolute;
+  left: 28rpx;
+  top: 20rpx;
+  width: 5rpx;
+  height: 17rpx;
+  border-radius: 5rpx;
+  background: currentColor;
+  box-shadow: 8rpx 12rpx 0 -1rpx currentColor;
+  content: "";
+}
+
+.warning-icon {
+  background: #FEF2F2;
+  color: #D97706;
+}
+
+.warning-icon::before {
+  position: absolute;
+  left: 14rpx;
+  top: 12rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border-left: 5rpx solid currentColor;
+  border-bottom: 5rpx solid currentColor;
+  content: "";
+  transform: rotate(135deg) skew(10deg, 10deg);
+}
+
+.trend-icon {
+  background: #ECFDF9;
+  color: #0F766E;
+}
+
+.trend-icon::before {
+  position: absolute;
+  left: 14rpx;
+  bottom: 15rpx;
+  width: 31rpx;
+  height: 24rpx;
+  border-left: 5rpx solid currentColor;
+  border-bottom: 5rpx solid currentColor;
+  content: "";
+}
+
+.trend-icon::after {
+  position: absolute;
+  right: 12rpx;
+  top: 15rpx;
+  width: 22rpx;
+  height: 5rpx;
+  border-radius: 5rpx;
+  background: currentColor;
+  content: "";
+  transform: rotate(-38deg);
+}
+
 .metric-value {
+  margin-top: 4rpx;
   overflow: hidden;
   color: #0B57D0;
   font-size: 38rpx;
@@ -53,7 +156,7 @@
 }
 
 .metric-label {
-  margin-top: 8rpx;
+  margin-top: 0;
   color: #737373;
   font-size: 23rpx;
 }

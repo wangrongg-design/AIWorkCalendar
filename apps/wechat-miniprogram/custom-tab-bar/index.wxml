@@ -1,0 +1,18 @@
+<view class="tabbar-host">
+  <view class="tabbar-pill">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="pagePath"
+      class="tab-item {{selected === index ? 'active' : ''}}"
+      data-index="{{index}}"
+      bindtap="switchTab"
+    >
+      <view class="tab-icon {{item.icon}}">
+        <view class="icon-part a"></view>
+        <view class="icon-part b"></view>
+        <view class="icon-part c"></view>
+      </view>
+      <view class="tab-label">{{item.label}}</view>
+    </view>
+  </view>
+</view>

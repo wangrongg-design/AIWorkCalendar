@@ -2,9 +2,14 @@
   display: flex;
   flex-direction: column;
   gap: 32rpx;
+  padding-bottom: calc(206rpx + env(safe-area-inset-bottom));
 }
 
 .report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
   padding: 4rpx 0 0;
 }
 
@@ -14,6 +19,40 @@
   font-weight: 800;
   line-height: 1.25;
   word-break: break-all;
+}
+
+.refresh-button {
+  position: relative;
+  width: 88rpx;
+  height: 88rpx;
+  flex: 0 0 88rpx;
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: #0B57D0;
+  box-shadow: 0 18rpx 42rpx rgba(60, 64, 67, 0.12);
+}
+
+.refresh-icon {
+  position: relative;
+  width: 38rpx;
+  height: 38rpx;
+  border: 6rpx solid currentColor;
+  border-left-color: transparent;
+  border-radius: 50%;
+  transform: rotate(-28deg);
+}
+
+.refresh-icon::after {
+  position: absolute;
+  right: -8rpx;
+  top: -5rpx;
+  width: 0;
+  height: 0;
+  border-left: 12rpx solid currentColor;
+  border-top: 8rpx solid transparent;
+  border-bottom: 8rpx solid transparent;
+  content: "";
+  transform: rotate(30deg);
 }
 
 .today-status-panel {

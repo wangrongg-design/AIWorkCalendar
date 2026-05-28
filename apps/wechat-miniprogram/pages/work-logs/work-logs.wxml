@@ -1,5 +1,8 @@
 <view class="page list-page bottom-safe">
-  <view class="page-title">填报记录</view>
+  <view class="search-shell">
+    <view class="search-leading"></view>
+    <input class="search-input" value="{{searchText}}" placeholder="搜索标题、内容或项目" bindinput="onSearchInput" />
+  </view>
 
   <view class="segmented-control log-filter-tabs">
     <view
@@ -12,8 +15,6 @@
       {{item.label}}
     </view>
   </view>
-
-  <input class="search-input" value="{{searchText}}" placeholder="搜索标题、内容或项目" bindinput="onSearchInput" />
 
   <view wx:if="{{!filteredLogs.length && !loading}}" class="empty-state">
     <view class="empty-title">{{emptyTitle}}</view>

@@ -105,7 +105,7 @@ final class ReportEntryViewModel: ObservableObject {
         defer { isDrafting = false }
 
         do {
-            let request = WorkLogDraftRequest(messages: messages, currentDate: DateHelpers.dayKey())
+            let request = WorkLogDraftRequest(messages: messages, currentDate: DateHelpers.dayKey(selectedDate))
             let draft: WorkLogDraft = try await auth.client().request("/ai/work-log-draft", method: .post, body: request)
             if let date = DateHelpers.dayFormatter.date(from: draft.date) {
                 selectedDate = date
@@ -209,6 +209,11 @@ final class ReportEntryViewModel: ObservableObject {
 struct ReportEntryView: View {
     @EnvironmentObject private var auth: AuthStore
     @StateObject private var viewModel = ReportEntryViewModel()
+    let prefillDateKey: String?
+
+    init(prefillDateKey: String? = nil) {
+        self.prefillDateKey = prefillDateKey
+    }
 
     var body: some View {
         NavigationStack {
@@ -253,7 +258,11 @@ struct ReportEntryView: View {
                 }
             }
             .task {
+                applyPrefillDate()
                 await viewModel.load(auth: auth)
+            }
+            .onChange(of: prefillDateKey) {
+                applyPrefillDate()
             }
             .refreshable {
                 await viewModel.load(auth: auth)
@@ -289,6 +298,14 @@ struct ReportEntryView: View {
                 viewModel.errorMessage = nil
             }
         }
+    }
+
+    private func applyPrefillDate() {
+        guard let prefillDateKey,
+              let date = DateHelpers.dayFormatter.date(from: prefillDateKey) else {
+            return
+        }
+        viewModel.selectedDate = date
     }
 }
 

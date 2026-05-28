@@ -235,7 +235,7 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : "保存失败，请检查内容后重试。");
     }
   });
 
@@ -395,7 +395,7 @@ export default function CalendarPage() {
       ]);
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "AI 问答失败");
+      message.error(error instanceof Error ? error.message : "AI 暂时无法回答，请稍后重试。");
     }
   });
 
@@ -443,7 +443,7 @@ export default function CalendarPage() {
 
   const addPendingAttachment = (file: RcFile) => {
     if (file.size > attachmentMaxBytes) {
-      message.error("单个附件不能超过 8MB");
+      message.error("单个附件不能超过 8MB，请压缩后重新上传。");
       return Upload.LIST_IGNORE;
     }
     setPendingAttachments((items) => [...items, { uid: file.uid, file }]);
@@ -472,7 +472,7 @@ export default function CalendarPage() {
           <Typography.Title level={3} className="page-title">
             AI日历
           </Typography.Title>
-          <Typography.Text className="page-subtitle">进入后先看今天、最近日期、填报状态和风险提醒。</Typography.Text>
+          <Typography.Text className="page-subtitle">当日和具体日期的团队状态入口：看今天谁填了、谁缺填、哪里有风险。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel dashboard-calendar-toolbar">
           <DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} allowClear={false} />
@@ -529,7 +529,7 @@ export default function CalendarPage() {
             <div className="workbench-actions is-ai-only">
               <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button">
                 <Bot size={18} />
-                <span>打开AI洞察</span>
+                <span>打开今日 AI 助手</span>
               </button>
             </div>
           </div>
@@ -710,7 +710,7 @@ export default function CalendarPage() {
           </div>
 
           <div className="ai-copilot-section">
-            <div className="ai-copilot-section-title">{selectedDate ? "AI 今日洞察" : "AI 月度洞察"}</div>
+            <div className="ai-copilot-section-title">{selectedDate ? "AI 今日洞察" : "AI 当月日历洞察"}</div>
             <ul className="ai-copilot-insights">
               {copilotObservations.map((item) => (
                 <li key={item}>{item}</li>
@@ -790,141 +790,150 @@ export default function CalendarPage() {
               <div className="workday-date">{chineseDateLabel(selectedDate)}</div>
               <div className="workday-subtitle">{detailTitle}</div>
             </div>
-            <Space>
+            <div className="workday-hero-actions">
               <Button type="primary" icon={<CalendarPlus size={16} />} onClick={() => openQuickFill(selectedDate)}>
                 {dateKind(selectedDate) === "future" ? "填写计划" : "填写日报"}
               </Button>
-            </Space>
+            </div>
           </div>
         ) : null}
-        <div className="workday-metrics">
-          <div className="workday-metric is-filled">
-            <div className="workday-metric-label">{selectedDate && dateKind(selectedDate) === "future" ? "已计划" : "已填报"}</div>
-            <div className="workday-metric-value">{detailStats?.filledCount ?? 0}</div>
-          </div>
-          <div className="workday-metric is-missing">
-            <div className="workday-metric-label">{selectedDate && dateKind(selectedDate) === "future" ? "未计划" : "未填报"}</div>
-            <div className="workday-metric-value">{detailStats?.missingCount ?? 0}</div>
-          </div>
-          <div className="workday-metric is-hours">
-            <div className="workday-metric-label">工时合计</div>
-            <div className="workday-metric-value">{detailStats?.totalHours ?? 0}h</div>
-          </div>
-          <div className="workday-metric is-risk">
-            <div className="workday-metric-label">风险数量</div>
-            <div className="workday-metric-value">{detailStats?.riskCount ?? 0}</div>
-          </div>
-        </div>
-        <div className="workday-focus-row">
-          <div className={`workday-risk-panel ${(detailStats?.riskCount ?? 0) > 0 ? "has-risk" : ""}`}>
-            <div className="workday-section-kicker">异常 / 风险</div>
-            <div className="workday-risk-title">
-              {(detailStats?.riskCount ?? 0) > 0 ? `发现 ${detailStats?.riskCount ?? 0} 条风险信号` : "暂未发现明显风险"}
-            </div>
-            <div className="workday-risk-copy">
-              {(detailStats?.missingCount ?? 0) > 0
-                ? `${detailStats?.missingCount ?? 0} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
-                : "团队提交状态正常，可以继续查看具体记录。"}
-            </div>
-          </div>
-          <div className="workday-ai-panel">
-            <div className="workday-ai-header">
-              <div>
-                <div className="workday-section-kicker">AI 工作洞察</div>
-                <div className="workday-ai-title">AI 今日观察</div>
-              </div>
-              {calendarChat.isPending || dayDetail.isFetching ? <span className="ai-shimmer">AI 正在分析团队日报…</span> : null}
-            </div>
-            <ul className="workday-ai-list">
-              {aiObservations.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <div className="workday-ai-pills">
-              {["本周风险", "项目进度", "人员负载", "异常工时"].map((item) => (
-                <button key={item} type="button" className="workday-ai-pill" onClick={() => runCopilotPrompt(item)}>
-                  {item}
-                </button>
-              ))}
-            </div>
-            <div className="workday-ai-copilot-link">
-              <span>需要继续追问时，AI 会带着当前日期和团队填报上下文打开右侧助手。</span>
-              <Button className="ai-soft-button" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
-                打开 AI 工作助手
-              </Button>
-            </div>
-          </div>
-        </div>
-        {(detailStats?.filledCount ?? 0) === 0 && !dayDetail.isFetching ? (
-          <div className="workday-empty-state">
-            <div>
-              <div className="workday-empty-title">
-                {selectedDateKind === "future" ? "这一天还没有团队成员提交计划" : "今天还没有团队成员提交日报"}
-              </div>
-              <div className="workday-empty-copy">提醒员工填写后，AI 会自动生成团队观察和风险提示。</div>
-            </div>
-            <Button type="primary" onClick={() => message.success("已生成提醒动作，后续可接入通知发送。")}>
-              提醒员工填写
-            </Button>
-          </div>
-        ) : (
-          <div className="workday-detail-data">
-            <div className="workday-records-heading">
-              <div>
-                <div className="workday-section-heading">{selectedDateKind === "future" ? "计划记录" : "日报记录"}</div>
-                <div className="workday-records-subtitle">{detailLogCount} 条记录 · {detailFilledEmployees.length} 位成员</div>
-              </div>
-              {dayDetail.isFetching ? <span className="ai-shimmer">正在同步记录…</span> : null}
-            </div>
-            <div className="workday-records-list">
-              {detailFilledEmployees.map((employee) => (
-                <div key={employee.id} className="workday-employee-record">
-                  <div className="workday-employee-meta">
-                    <div className="workday-employee-name">{employee.name}</div>
-                    <div className="workday-employee-dept">{employee.departmentName ?? "未分配部门"}</div>
-                    <div className="workday-employee-count">{employee.logs.length} 条</div>
+        <div className="workday-content-grid">
+          <div className="workday-records-column">
+            {(detailStats?.filledCount ?? 0) === 0 && !dayDetail.isFetching ? (
+              <div className="workday-empty-state">
+                <div>
+                  <div className="workday-empty-title">
+                    {selectedDateKind === "future" ? "这一天还没有团队成员提交计划" : "今天还没有团队成员提交日报"}
                   </div>
-                  <div className="workday-log-stack">
-                    {employee.logs.map((log) => (
-                      <button key={log.id} type="button" className="workday-log-card" onClick={() => setSelectedWorkLog(log)}>
-                        <div className="workday-log-main">
-                          <div className="workday-log-title-row">
-                            <div className="workday-log-title">{log.title}</div>
-                            <div className="workday-log-meta">
-                              <span>{Number(log.hours).toFixed(1)} 小时</span>
-                              {log.attachments?.length ? (
-                                <span className="workday-log-attachment"><Paperclip size={13} /> 附件 {log.attachments.length}</span>
-                              ) : null}
+                  <div className="workday-empty-copy">提醒员工填写后，AI 会自动生成团队观察和风险提示。</div>
+                </div>
+                <Button type="primary" onClick={() => message.success("已生成提醒动作，后续可接入通知发送。")}>
+                  提醒员工填写
+                </Button>
+              </div>
+            ) : (
+              <div className="workday-detail-data">
+                <div className="workday-records-heading">
+                  <div>
+                    <div className="workday-section-heading">{selectedDateKind === "future" ? "计划记录" : "日报记录"}</div>
+                    <div className="workday-records-subtitle">{detailLogCount} 条记录 · {detailFilledEmployees.length} 位成员</div>
+                  </div>
+                  {dayDetail.isFetching ? <span className="ai-shimmer">正在同步记录…</span> : null}
+                </div>
+                <div className="workday-records-list">
+                  {detailFilledEmployees.map((employee) => (
+                    <div key={employee.id} className="workday-employee-record">
+                      <div className="workday-employee-meta">
+                        <div className="workday-employee-name">{employee.name}</div>
+                        <div className="workday-employee-dept">{employee.departmentName ?? "未分配部门"}</div>
+                        <div className="workday-employee-count">{employee.logs.length} 条</div>
+                      </div>
+                      <div className="workday-log-stack">
+                        {employee.logs.map((log) => (
+                          <button key={log.id} type="button" className="workday-log-card" onClick={() => setSelectedWorkLog(log)}>
+                            <div className="workday-log-main">
+                              <div className="workday-log-title-row">
+                                <div className="workday-log-title">{log.title}</div>
+                                <div className="workday-log-meta">
+                                  <span>{Number(log.hours).toFixed(1)} 小时</span>
+                                  {log.attachments?.length ? (
+                                    <span className="workday-log-attachment"><Paperclip size={13} /> 附件 {log.attachments.length}</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="workday-log-content">{log.content}</div>
+                              <div className="workday-log-tags">
+                                {log.project ? (
+                                  <span className="workday-log-project">{log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name}</span>
+                                ) : null}
+                                {log.aiAnalysis?.achievements?.slice(0, 3).map((item) => (
+                                  <span className="workday-log-achievement" key={item}>{item}</span>
+                                ))}
+                                {log.aiAnalysis?.risks?.slice(0, 3).map((item) => (
+                                  <span className="workday-log-risk" key={item}>{item}</span>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                          <div className="workday-log-content">{log.content}</div>
-                          <div className="workday-log-tags">
-                            {log.project ? (
-                              <span className="workday-log-project">{log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name}</span>
-                            ) : null}
-                            {log.aiAnalysis?.achievements?.slice(0, 3).map((item) => (
-                              <span className="workday-log-achievement" key={item}>{item}</span>
-                            ))}
-                            {log.aiAnalysis?.risks?.slice(0, 3).map((item) => (
-                              <span className="workday-log-risk" key={item}>{item}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="workday-insight-column">
+            <div className="workday-ai-panel workday-ai-panel-complete">
+              <div className="workday-ai-header">
+                <div>
+                  <div className="workday-section-kicker">AI 工作洞察</div>
+                  <div className="workday-ai-title-line">
+                    <div className="workday-ai-title">AI 今日观察</div>
+                    <Button className="ai-soft-button workday-ai-title-action" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
+                      打开 AI 工作助手
+                    </Button>
                   </div>
                 </div>
-              ))}
+                {calendarChat.isPending || dayDetail.isFetching ? <span className="ai-shimmer">AI 正在分析团队日报…</span> : null}
+              </div>
+              <div className="workday-ai-stat-grid">
+                <div className="workday-ai-stat is-filled">
+                  <span>{selectedDate && dateKind(selectedDate) === "future" ? "已计划" : "已填报"}</span>
+                  <strong>{detailStats?.filledCount ?? 0}</strong>
+                </div>
+                <div className="workday-ai-stat is-missing">
+                  <span>{selectedDate && dateKind(selectedDate) === "future" ? "未计划" : "未填报"}</span>
+                  <strong>{detailStats?.missingCount ?? 0}</strong>
+                </div>
+                <div className="workday-ai-stat is-hours">
+                  <span>工时合计</span>
+                  <strong>{detailStats?.totalHours ?? 0}h</strong>
+                </div>
+                <div className="workday-ai-stat is-risk">
+                  <span>风险数量</span>
+                  <strong>{detailStats?.riskCount ?? 0}</strong>
+                </div>
+              </div>
+              <div className={`workday-ai-risk-summary ${(detailStats?.riskCount ?? 0) > 0 ? "has-risk" : ""}`}>
+                <div className="workday-ai-subheading">异常 / 风险</div>
+                <strong>{(detailStats?.riskCount ?? 0) > 0 ? `发现 ${detailStats?.riskCount ?? 0} 条风险信号` : "暂未发现明显风险"}</strong>
+                <p>
+                  {(detailStats?.missingCount ?? 0) > 0
+                    ? `${detailStats?.missingCount ?? 0} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
+                    : "团队提交状态正常，可以继续查看具体记录。"}
+                </p>
+              </div>
+              <div className="workday-ai-missing-summary">
+                <div className="workday-ai-subheading">{selectedDateKind === "future" ? "未提交计划" : "未提交日报"}</div>
+                <div className="workday-ai-missing-list">
+                  {detailMissingEmployees.length ? (
+                    detailMissingEmployees.map((item) => (
+                      <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
+                    ))
+                  ) : (
+                    <span className="workday-ai-empty-tag">全部已提交</span>
+                  )}
+                </div>
+              </div>
+              <div className="workday-ai-observation-block">
+                <div className="workday-ai-subheading">关键证据</div>
+                <ul className="workday-ai-list">
+                  {aiObservations.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="workday-ai-pills">
+                {["本周风险", "项目进度", "人员负载", "异常工时"].map((item) => (
+                  <button key={item} type="button" className="workday-ai-pill" onClick={() => runCopilotPrompt(item)}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+              <div className="workday-ai-context-note">AI 助手会带着当前日期、记录、缺填和风险上下文继续分析。</div>
             </div>
           </div>
-        )}
-        <div className="workday-missing-row">
-          <div className="workday-section-heading">{selectedDateKind === "future" ? "未提交计划" : "未提交日报"}</div>
-          <Space wrap>
-            {detailMissingEmployees.map((item) => (
-              <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
-            ))}
-          </Space>
         </div>
       </Modal>
 

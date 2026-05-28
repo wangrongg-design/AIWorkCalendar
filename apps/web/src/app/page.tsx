@@ -89,7 +89,7 @@ export default function HomePage() {
         </nav>
         <div className="premium-nav-actions">
           <Button icon={<LogIn size={16} />} onClick={() => router.push(token ? "/calendar" : "/login")}>
-            {token ? "进入系统" : "登录"}
+            {token ? "进入工作台" : "已有账号登录"}
           </Button>
           <Button type="primary" icon={<ArrowRight size={16} />} onClick={scrollToSignup}>
             免费试用
@@ -112,7 +112,7 @@ export default function HomePage() {
             免费创建企业
           </Button>
           <Button size="large" icon={<LogIn size={18} />} onClick={() => router.push("/login")}>
-            登录系统
+            已有账号登录
           </Button>
         </div>
         <div className="premium-price-line">

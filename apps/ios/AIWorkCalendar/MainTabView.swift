@@ -21,11 +21,13 @@ struct RootView: View {
 
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .calendar
+    @State private var reportDateKey: String?
 
     var body: some View {
         TabView(selection: $selectedTab) {
             CalendarDashboardView(
-                onCreateReport: {
+                onCreateReport: { dateKey in
+                    reportDateKey = dateKey
                     selectedTab = .entry
                 },
                 onOpenProjects: {
@@ -37,7 +39,7 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.calendar)
 
-            ReportEntryView()
+            ReportEntryView(prefillDateKey: reportDateKey)
                 .tabItem {
                     Label("填报", systemImage: "square.and.pencil")
                 }

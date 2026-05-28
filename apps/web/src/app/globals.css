@@ -745,10 +745,15 @@ body {
 }
 
 .dashboard-calendar-grid .calendar-cell > div:first-child span {
-  color: var(--color-gray-7);
-  font-size: 16px;
-  font-weight: 760;
+  color: var(--color-gray-5);
+  font-size: 15px;
+  font-weight: 600;
   line-height: 22px;
+}
+
+.dashboard-calendar-grid .calendar-cell.is-today > div:first-child span {
+  color: var(--color-primary);
+  font-weight: 700;
 }
 
 .dashboard-calendar-grid .calendar-cell-body svg {
@@ -4089,53 +4094,79 @@ body {
 .workday-detail-modal .ant-modal-body {
   max-height: calc(100vh - 36px);
   overflow: auto;
-  padding: 18px 24px 22px;
+  padding: 12px 24px 18px;
   background: var(--color-gray-1);
 }
 
 .workday-detail-modal .ant-modal-close {
-  top: 14px;
+  top: 10px;
   right: 16px;
   color: var(--color-gray-5);
 }
 
 .workday-detail-modal .workday-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
   align-items: center;
-  padding: 0 44px 14px 0;
+  gap: 18px;
+  padding: 0 44px 8px 0;
   border-bottom: 1px solid var(--color-gray-2);
+}
+
+.workday-detail-modal .workday-hero-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.workday-detail-modal .workday-hero-actions .ant-btn {
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  font-weight: 700;
 }
 
 .workday-detail-modal .workday-product {
   color: var(--color-ai);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
+  line-height: 18px;
 }
 
 .workday-detail-modal .workday-date {
-  margin-top: 6px;
+  margin-top: 3px;
   color: var(--color-black);
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 38px;
+  font-size: 24px;
+  font-weight: 760;
+  line-height: 30px;
 }
 
 .workday-detail-modal .workday-subtitle {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--color-gray-6);
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .workday-detail-modal .workday-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0;
+  gap: 8px;
+  margin: 0;
+}
+
+.workday-detail-modal .workday-hero-metrics {
+  min-width: min(620px, 100%);
+  flex: 1 1 auto;
 }
 
 .workday-detail-modal .workday-metric {
-  min-height: 68px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  padding: 10px 14px;
+  min-height: 52px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  padding: 7px 11px;
   box-shadow: none;
 }
 
@@ -4145,22 +4176,49 @@ body {
 }
 
 .workday-detail-modal .workday-metric-label {
-  color: var(--color-gray-6);
+  color: var(--color-gray-5);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .workday-detail-modal .workday-metric-value {
-  margin-top: 6px;
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 34px;
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 760;
+  line-height: 28px;
+}
+
+.workday-detail-modal .workday-metric.is-filled,
+.workday-detail-modal .workday-metric.is-missing,
+.workday-detail-modal .workday-metric.is-hours,
+.workday-detail-modal .workday-metric.is-risk {
+  background: var(--color-white);
 }
 
 .workday-detail-modal .workday-focus-row {
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  grid-template-columns: 1fr;
   gap: 10px;
-  margin-bottom: 12px;
+  align-items: start;
+  margin-bottom: 0;
+}
+
+.workday-detail-modal .workday-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.88fr) minmax(340px, 0.72fr);
+  gap: 12px;
+  align-items: start;
+  padding-top: 10px;
+}
+
+.workday-detail-modal .workday-records-column,
+.workday-detail-modal .workday-insight-column {
+  min-width: 0;
+}
+
+.workday-detail-modal .workday-insight-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .workday-detail-modal .workday-risk-panel,
@@ -4175,41 +4233,184 @@ body {
 }
 
 .workday-detail-modal .workday-risk-panel {
-  min-height: 112px;
-  padding: 14px;
-  background: var(--color-warning-bg);
+  min-height: 0;
+  border-left: 4px solid var(--color-warning);
+  padding: 12px 14px;
+  background: var(--color-white);
 }
 
 .workday-detail-modal .workday-risk-panel.has-risk {
-  background: var(--color-danger-bg);
+  border-left-color: var(--color-danger);
+  background: var(--color-white);
+}
+
+.workday-detail-modal .workday-risk-panel.has-risk .workday-section-kicker {
+  color: var(--color-danger);
 }
 
 .workday-detail-modal .workday-risk-title,
 .workday-detail-modal .workday-ai-title {
-  margin-top: 6px;
-  font-size: 17px;
-  line-height: 24px;
+  margin-top: 4px;
+  font-size: 16px;
+  line-height: 23px;
 }
 
 .workday-detail-modal .workday-risk-copy {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 13px;
   line-height: 20px;
 }
 
 .workday-detail-modal .workday-ai-panel {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: linear-gradient(180deg, var(--color-ai-bg), var(--color-white) 30%);
   padding: 14px;
 }
 
+.workday-detail-modal .workday-ai-panel-complete {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .workday-detail-modal .workday-ai-header {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.workday-detail-modal .workday-ai-title-line {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.workday-detail-modal .workday-ai-title-line .workday-ai-title {
+  margin-top: 0;
+}
+
+.workday-detail-modal .workday-ai-title-action {
+  height: 32px;
+  border-color: var(--color-ai-soft) !important;
+  border-radius: 999px;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workday-detail-modal .workday-ai-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workday-detail-modal .workday-ai-stat {
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  padding: 8px 10px;
+}
+
+.workday-detail-modal .workday-ai-stat span {
+  display: block;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-ai-stat strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 22px;
+  font-weight: 760;
+  line-height: 28px;
+}
+
+.workday-detail-modal .workday-ai-stat.is-filled strong {
+  color: var(--color-success);
+}
+
+.workday-detail-modal .workday-ai-stat.is-missing strong {
+  color: var(--color-warning);
+}
+
+.workday-detail-modal .workday-ai-stat.is-hours strong {
+  color: var(--color-primary);
+}
+
+.workday-detail-modal .workday-ai-stat.is-risk strong {
+  color: var(--color-danger);
+}
+
+.workday-detail-modal .workday-ai-risk-summary,
+.workday-detail-modal .workday-ai-missing-summary,
+.workday-detail-modal .workday-ai-observation-block {
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  padding: 10px 12px;
+}
+
+.workday-detail-modal .workday-ai-risk-summary {
+  border-left: 4px solid var(--color-warning);
+}
+
+.workday-detail-modal .workday-ai-risk-summary.has-risk {
+  border-left-color: var(--color-danger);
+}
+
+.workday-detail-modal .workday-ai-risk-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-black);
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 22px;
+}
+
+.workday-detail-modal .workday-ai-risk-summary p {
+  margin: 6px 0 0;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-ai-subheading {
+  color: var(--color-ai);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-ai-risk-summary.has-risk .workday-ai-subheading {
+  color: var(--color-danger);
+}
+
+.workday-detail-modal .workday-ai-missing-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.workday-detail-modal .workday-ai-empty-tag {
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--color-success-bg);
+  padding: 4px 9px;
+  color: var(--color-success);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
 }
 
 .workday-detail-modal .workday-ai-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 14px;
-  margin: 10px 0 0;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
   color: var(--color-gray-6);
@@ -4230,7 +4431,7 @@ body {
 
 .workday-detail-modal .workday-ai-pills {
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .workday-detail-modal .workday-ai-pill {
@@ -4242,7 +4443,7 @@ body {
 }
 
 .workday-detail-modal .workday-ai-copilot-link {
-  margin-top: 10px;
+  margin-top: 8px;
   border: 1px solid var(--color-gray-2);
   border-radius: var(--radius-md);
   background: var(--color-gray-1);
@@ -4252,9 +4453,18 @@ body {
   line-height: 18px;
 }
 
+.workday-detail-modal .workday-ai-context-note {
+  border-radius: var(--radius-md);
+  background: var(--color-gray-1);
+  padding: 8px 10px;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .workday-detail-modal .workday-detail-data {
   margin-top: 0;
-  padding: 16px;
+  padding: 14px;
 }
 
 .workday-detail-modal .workday-records-heading {
@@ -4282,7 +4492,7 @@ body {
 
 .workday-detail-modal .workday-records-list {
   display: flex;
-  max-height: min(52vh, 620px);
+  max-height: min(68vh, 760px);
   flex-direction: column;
   gap: 10px;
   overflow: auto;
@@ -4291,7 +4501,7 @@ body {
 
 .workday-detail-modal .workday-employee-record {
   display: grid;
-  grid-template-columns: 156px minmax(0, 1fr);
+  grid-template-columns: 124px minmax(0, 1fr);
   gap: 12px;
   border: 1px solid var(--color-gray-2);
   border-radius: var(--radius-lg);
@@ -4329,9 +4539,9 @@ body {
 
 .workday-detail-modal .workday-log-card {
   width: 100%;
-  border: 1px solid transparent;
+  border: 1px solid var(--color-gray-2);
   border-radius: var(--radius-md);
-  background: var(--color-gray-1);
+  background: var(--color-white);
   padding: 12px;
   color: inherit;
   cursor: pointer;
@@ -4341,7 +4551,7 @@ body {
 
 .workday-detail-modal .workday-log-card:hover {
   border-color: var(--color-primary-soft);
-  background: var(--color-white);
+  background: var(--color-primary-bg);
   transform: translateY(-1px);
 }
 
@@ -4384,7 +4594,7 @@ body {
   font-size: 13px;
   line-height: 21px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
 .workday-detail-modal .workday-log-tags {
@@ -4419,10 +4629,11 @@ body {
 
 .workday-detail-modal .workday-missing-row {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 10px;
-  padding: 10px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 0;
+  padding: 12px 14px;
 }
 
 .workday-detail-modal .workday-missing-row .workday-section-heading {
@@ -4432,10 +4643,17 @@ body {
 }
 
 @media (max-width: 900px) {
+  .workday-detail-modal .workday-detail-hero,
+  .workday-detail-modal .workday-content-grid,
   .workday-detail-modal .workday-focus-row,
   .workday-detail-modal .workday-metrics,
   .workday-detail-modal .workday-employee-record {
     grid-template-columns: 1fr;
+  }
+
+  .workday-detail-modal .workday-hero-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .workday-detail-modal .workday-ai-list {
@@ -5170,6 +5388,8 @@ body {
   display: block;
   margin-top: 6px;
   color: var(--color-gray-5);
+  font-size: clamp(12px, 3vw, 14px);
+  white-space: nowrap;
 }
 
 .system-login-form .ant-btn-primary {
@@ -5196,6 +5416,7 @@ body {
   cursor: pointer;
   font: inherit;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .system-login-links strong {
@@ -5208,23 +5429,20 @@ body {
 }
 
 .system-login-note {
-  display: flex;
+  display: block;
   width: min(100%, 430px);
-  align-items: flex-start;
-  gap: 10px;
   margin-top: 16px;
   border: 1px solid var(--color-gray-2);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
   padding: 12px;
   color: var(--color-gray-6);
-  font-size: 12px;
+  overflow-x: auto;
+  font-size: 10px;
+  font-weight: 650;
   line-height: 18px;
-}
-
-.system-login-note strong {
-  flex: 0 0 auto;
-  color: var(--color-black);
+  text-align: center;
+  white-space: nowrap;
 }
 
 .system-login-footer {

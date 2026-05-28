@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { RoleCode } from "@prisma/client";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/types/current-user";
+import { Public } from "../../common/decorators/public.decorator";
 import { BillingService } from "./billing.service";
 import { ConfirmManualPaymentDto, CreateBillingOrderDto } from "./dto/order.dto";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
@@ -68,5 +69,17 @@ export class BillingController {
     @Body() dto: ConfirmManualPaymentDto
   ) {
     return this.billingService.confirmManualPayment(user, orderId, dto);
+  }
+
+  @Public()
+  @Post("payments/wechat/notify")
+  @HttpCode(200)
+  async handleWechatNotify(
+    @Req() req: { rawBody?: Buffer; body?: unknown },
+    @Headers() headers: Record<string, string | string[] | undefined>
+  ) {
+    const rawBody = req.rawBody?.toString("utf8") ?? JSON.stringify(req.body ?? {});
+    await this.billingService.handleWechatNotify(rawBody, headers);
+    return { code: "SUCCESS", message: "成功" };
   }
 }

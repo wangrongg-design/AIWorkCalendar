@@ -82,6 +82,17 @@ function subscriptionStatusColor(status?: SubscriptionStatus) {
   return status === "ACTIVE" || status === "TRIALING" ? "green" : status === "PAST_DUE" ? "orange" : status ? "red" : "default";
 }
 
+function subscriptionStatusLabel(status?: SubscriptionStatus) {
+  const labels: Record<SubscriptionStatus, string> = {
+    TRIALING: "试用中",
+    ACTIVE: "已开通",
+    PAST_DUE: "待续费",
+    EXPIRED: "已到期",
+    CANCELED: "已取消"
+  };
+  return status ? labels[status] : "未开通";
+}
+
 function moneyText(amountCents?: number) {
   if (amountCents === undefined) return "-";
   return new Intl.NumberFormat("zh-CN", {
@@ -127,7 +138,7 @@ export default function OpsPage() {
       queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "账号更新失败");
+      message.error(error instanceof Error ? error.message : "账号更新失败，请刷新账号列表后重试。");
     }
   });
 
@@ -145,7 +156,7 @@ export default function OpsPage() {
       queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "企业 Logo 更新失败");
+      message.error(error instanceof Error ? error.message : "企业 Logo 更新失败，请检查图片规格后重试。");
     }
   });
 
@@ -166,7 +177,7 @@ export default function OpsPage() {
       router.replace("/ops/login");
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "密码更新失败");
+      message.error(error instanceof Error ? error.message : "密码更新失败，请检查当前密码后重试。");
     }
   });
 
@@ -187,7 +198,7 @@ export default function OpsPage() {
       setLogoFileList([{ uid: file.uid, name: file.name, status: "done", size: file.size }]);
       message.success("企业 Logo 已读取，保存后生效");
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "企业 Logo 不符合规格");
+      message.error(error instanceof Error ? error.message : "企业 Logo 不符合规格，请使用 512 x 512px PNG 文件。");
     }
     return false;
   };
@@ -212,7 +223,7 @@ export default function OpsPage() {
       width: 180,
       render: (_, record) => (
         <Space direction="vertical" size={4}>
-          <Tag color={subscriptionStatusColor(record.subscription?.status)}>{record.subscription?.status ?? "未开通"}</Tag>
+          <Tag color={subscriptionStatusColor(record.subscription?.status)}>{subscriptionStatusLabel(record.subscription?.status)}</Tag>
           <span className="text-xs text-muted">
             {record.subscription?.plan === "TRIAL" ? "免费试用" : "专业版"} · 启用 {record.subscription?.activeUserCount ?? 0} 人
           </span>

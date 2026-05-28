@@ -18,6 +18,13 @@ export type PaymentProviderConfig = {
   mode: "mock" | "live";
   appId?: string;
   merchantId?: string;
+  merchantSerialNo?: string;
+  privateKey?: string;
+  privateKeyPath?: string;
+  apiV3Key?: string;
+  platformSerialNo?: string;
+  platformPublicKey?: string;
+  platformPublicKeyPath?: string;
   notifyUrl?: string;
   returnUrl?: string;
 };
@@ -56,9 +63,26 @@ export function getPaymentProviderConfigs(): PaymentProviderConfig[] {
     {
       provider: "WECHAT",
       mode,
-      enabled: mode === "mock" || Boolean(process.env.WECHAT_PAY_MCH_ID && process.env.WECHAT_PAY_API_V3_KEY),
+      enabled:
+        mode === "mock" ||
+        Boolean(
+          process.env.WECHAT_PAY_APP_ID &&
+            process.env.WECHAT_PAY_MCH_ID &&
+            process.env.WECHAT_PAY_API_V3_KEY &&
+            process.env.WECHAT_PAY_MCH_SERIAL_NO &&
+            (process.env.WECHAT_PAY_PRIVATE_KEY || process.env.WECHAT_PAY_PRIVATE_KEY_PATH) &&
+            process.env.WECHAT_PAY_PLATFORM_SERIAL_NO &&
+            (process.env.WECHAT_PAY_PLATFORM_PUBLIC_KEY || process.env.WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH)
+        ),
       appId: process.env.WECHAT_PAY_APP_ID,
       merchantId: process.env.WECHAT_PAY_MCH_ID,
+      merchantSerialNo: process.env.WECHAT_PAY_MCH_SERIAL_NO,
+      privateKey: process.env.WECHAT_PAY_PRIVATE_KEY,
+      privateKeyPath: process.env.WECHAT_PAY_PRIVATE_KEY_PATH,
+      apiV3Key: process.env.WECHAT_PAY_API_V3_KEY,
+      platformSerialNo: process.env.WECHAT_PAY_PLATFORM_SERIAL_NO,
+      platformPublicKey: process.env.WECHAT_PAY_PLATFORM_PUBLIC_KEY,
+      platformPublicKeyPath: process.env.WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH,
       notifyUrl: process.env.WECHAT_PAY_NOTIFY_URL ?? `${apiBaseUrl}/billing/payments/wechat/notify`,
       returnUrl: process.env.WECHAT_PAY_RETURN_URL ?? `${publicBaseUrl}/org?tab=billing`
     }

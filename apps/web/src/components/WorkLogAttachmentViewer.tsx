@@ -73,7 +73,7 @@ export function WorkLogAttachmentViewer({
         return { attachment, filename: download.filename || attachment.fileName, url, mode };
       });
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "附件预览失败");
+      message.error(error instanceof Error ? error.message : "附件预览失败，请刷新页面后重试。");
     } finally {
       setLoadingId(null);
     }
@@ -88,7 +88,7 @@ export function WorkLogAttachmentViewer({
       triggerDownload(url, download.filename || attachment.fileName);
       window.setTimeout(() => URL.revokeObjectURL(url), 1200);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "附件下载失败");
+      message.error(error instanceof Error ? error.message : "附件下载失败，请刷新页面后重试。");
     } finally {
       setLoadingId(null);
     }

@@ -118,12 +118,18 @@ ALIPAY_RETURN_URL=
 
 WECHAT_PAY_APP_ID=
 WECHAT_PAY_MCH_ID=
+WECHAT_PAY_MCH_SERIAL_NO=
+WECHAT_PAY_PRIVATE_KEY_PATH=
+WECHAT_PAY_PRIVATE_KEY=
 WECHAT_PAY_API_V3_KEY=
+WECHAT_PAY_PLATFORM_SERIAL_NO=
+WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=
+WECHAT_PAY_PLATFORM_PUBLIC_KEY=
 WECHAT_PAY_NOTIFY_URL=
 WECHAT_PAY_RETURN_URL=
 ```
 
-`BILLING_PAYMENT_MODE=mock` 用于本地联调，会生成模拟支付链接并允许在后台点击“模拟支付完成”。`live` 模式需要接入微信/支付宝回调验签后确认支付。
+`BILLING_PAYMENT_MODE=mock` 用于本地联调，会生成模拟支付链接并允许在后台点击“模拟支付完成”。`live` 模式下，微信支付使用 Native 下单生成二维码，支付成功后由 `/billing/payments/wechat/notify` 回调验签、解密、校验金额并自动开通订阅。生产密钥建议通过 `*_PATH` 指向挂载的密钥文件，不要写进仓库。
 
 ## 冒烟测试
 
@@ -199,6 +205,7 @@ pnpm build
 - `POST /billing/orders`
 - `GET /billing/orders/:orderId/payment`
 - `POST /billing/orders/:orderId/confirm-online-payment` 本地 mock 支付确认，生产支付应使用平台回调确认
+- `POST /billing/payments/wechat/notify` 微信支付回调，公开接口，内部执行验签、解密和金额校验
 - `POST /billing/orders/:orderId/confirm-manual-payment` 超级管理员确认线下收款
 - `PATCH /billing/subscription` 超级管理员调整当前企业订阅
 - `PATCH /billing/tenants/:tenantId/subscription` 超级管理员调整指定企业订阅
@@ -216,7 +223,7 @@ pnpm build
 
 第一版采用“企业免费试用 1 个月，正式使用 ¥19 / 启用成员 / 月”的订阅模式。新企业可在首页自助注册，默认获得 `TRIAL` 套餐、`TRIALING` 状态和 1 个月试用期；试用期内不限制成员人数，并开放完整 AI 工作日历功能。试用结束后进入专业版，按企业内启用成员数量计费；本周期新增成员立即可用，下个周期开始计费，本周期停用成员不退款，下个周期不再计费。
 
-当前版本已补齐手动商业化闭环：企业管理员可按启用成员数创建订阅订单，平台超级管理员可确认线下收款，系统会写入支付记录并自动开通对应专业版。支付宝、微信支付和 Stripe Provider 已在数据结构中预留，后续接入支付网关时应把支付回调落到 `billing_orders`、`payment_records`，再更新 `subscriptions`。
+当前版本已补齐商业化闭环：企业管理员可按启用成员数创建订阅订单，平台超级管理员可确认线下收款；微信支付可在生产环境通过 Native 扫码支付和回调自动开通专业版。支付宝和 Stripe Provider 仍为后续扩展预留。
 
 ## 数据保密与导出
 

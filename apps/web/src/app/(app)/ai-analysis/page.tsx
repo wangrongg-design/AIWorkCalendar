@@ -133,7 +133,7 @@ export default function AIAnalysisPage() {
           <Typography.Title level={3} className="page-title">
             AI整体分析
           </Typography.Title>
-          <Typography.Text className="page-subtitle">从周期维度理解团队填报、风险、工时和缺填压力。</Typography.Text>
+          <Typography.Text className="page-subtitle">周期复盘入口：按周、月、季度和年度分析团队节奏、风险趋势和投入变化。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel">
           <DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} allowClear={false} />

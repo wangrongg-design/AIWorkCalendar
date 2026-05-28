@@ -11,7 +11,12 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN?.split(",") ?? true,
     credentials: true
   });
-  app.useBodyParser("json", { limit: "12mb" });
+  app.useBodyParser("json", {
+    limit: "12mb",
+    verify: (req: { rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
+      req.rawBody = Buffer.from(buf);
+    }
+  });
   app.useBodyParser("urlencoded", { extended: true, limit: "12mb" });
   app.useGlobalPipes(
     new ValidationPipe({

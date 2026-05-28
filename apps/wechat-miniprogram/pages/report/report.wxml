@@ -4,6 +4,9 @@
       <view class="report-greeting">你好，{{user.name || "同事"}}</view>
       <view class="page-subtitle">{{user.tenantName || ""}}</view>
     </view>
+    <button class="refresh-button" bindtap="refreshPage">
+      <view class="refresh-icon"></view>
+    </button>
   </view>
 
   <view class="ai-action-card today-status-panel">

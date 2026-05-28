@@ -5,7 +5,7 @@ import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Popc
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { Bot, Download, Edit2, Paperclip, Plus, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
+import { Bot, Download, Edit2, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiDownload, apiFetch } from "@/lib/api";
@@ -148,7 +148,7 @@ export default function WorkLogsPage() {
 
   const addPendingAttachment = (file: RcFile) => {
     if (file.size > ATTACHMENT_MAX_BYTES) {
-      message.error("单个附件不能超过 8MB");
+      message.error("单个附件不能超过 8MB，请压缩后重新上传。");
       return Upload.LIST_IGNORE;
     }
     setPendingAttachments((items) => [...items, { uid: file.uid, file }]);
@@ -178,7 +178,7 @@ export default function WorkLogsPage() {
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error((error as Error).message || "保存失败");
+      message.error((error as Error).message || "保存失败，请检查内容后重试。");
     }
   });
 
@@ -195,7 +195,7 @@ export default function WorkLogsPage() {
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error((error as Error).message || "更新失败");
+      message.error((error as Error).message || "更新失败，请刷新页面后重试。");
     }
   });
 
@@ -212,7 +212,7 @@ export default function WorkLogsPage() {
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error((error as Error).message || "删除附件失败");
+      message.error((error as Error).message || "删除附件失败，请刷新页面后重试。");
     }
   });
 
@@ -382,13 +382,10 @@ export default function WorkLogsPage() {
       <div className="page-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            工作填报
+            填报记录
           </Typography.Title>
           <Typography.Text className="page-subtitle">每天可填写多条工作记录，提交后自动进入 AI 分析队列。</Typography.Text>
         </div>
-        <Button type="primary" icon={<Plus size={16} />} onClick={() => openCreate()}>
-          新增填报
-        </Button>
       </div>
 
       <div className="toolbar-panel flex flex-wrap items-center justify-between gap-3">
@@ -424,7 +421,7 @@ export default function WorkLogsPage() {
         loading={logs.isFetching}
         dataSource={filteredLogs}
         columns={columns}
-        locale={{ emptyText: <Empty description="暂无工作填报" /> }}
+        locale={{ emptyText: <Empty description="暂无填报记录" /> }}
         pagination={{ pageSize: 8 }}
       />
 
@@ -528,7 +525,7 @@ export default function WorkLogsPage() {
                         size="small"
                         icon={<Download size={14} />}
                         onClick={() =>
-                          downloadAttachment(editing.id, attachment).catch((error) => message.error((error as Error).message || "下载失败"))
+                          downloadAttachment(editing.id, attachment).catch((error) => message.error((error as Error).message || "下载失败，请刷新页面后重试。"))
                         }
                       />
                       <Popconfirm title="确认删除这个附件？" onConfirm={() => deleteAttachment.mutate({ workLogId: editing.id, attachmentId: attachment.id })}>

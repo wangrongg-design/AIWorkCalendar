@@ -1,5 +1,8 @@
 <view class="page projects-page bottom-safe">
-  <view class="page-title">项目</view>
+  <view class="search-shell">
+    <view class="search-leading"></view>
+    <input class="search-input" value="{{searchText}}" placeholder="搜索项目、负责人" bindinput="onSearchInput" />
+  </view>
 
   <view class="ai-action-card project-ai-panel">
     <view class="ai-action-icon">AI</view>
@@ -10,8 +13,6 @@
       <button class="project-ai-action {{riskToggleClass}}" bindtap="toggleRiskOnly">{{riskToggleText}}</button>
     </view>
   </view>
-
-  <input class="search-input" value="{{searchText}}" placeholder="搜索项目、负责人" bindinput="onSearchInput" />
 
   <view wx:if="{{!filteredProjects.length && !loading}}" class="empty-state">
     <view class="empty-title">{{emptyTitle}}</view>

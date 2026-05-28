@@ -53,7 +53,13 @@
     "wechatPay": {
       "appId": "",
       "merchantId": "",
+      "merchantSerialNo": "",
+      "privateKey": "",
+      "privateKeyPath": "",
       "apiV3Key": "",
+      "platformSerialNo": "",
+      "platformPublicKey": "",
+      "platformPublicKeyPath": "",
       "notifyUrl": "",
       "returnUrl": ""
     }
