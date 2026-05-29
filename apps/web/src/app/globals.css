@@ -202,8 +202,32 @@ body {
   border-inline-end: 0 !important;
 }
 
-.app-sidebar .ant-layout-sider-children {
+.app-frame {
+  height: 100vh;
+  max-height: 100vh;
   overflow: hidden;
+}
+
+.app-sidebar {
+  position: sticky !important;
+  top: 0;
+  height: 100vh;
+  max-height: 100vh;
+  align-self: flex-start;
+  overflow: hidden;
+}
+
+.app-sidebar .ant-layout-sider-children {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-content {
+  overscroll-behavior: contain;
+}
+
+.material-nav.ant-menu-inline-collapsed {
+  width: auto !important;
 }
 
 .app-sidebar-subtext {
@@ -832,6 +856,22 @@ body {
   line-height: 48px;
 }
 
+.ai-analysis-score-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ai-analysis-score-foot span {
+  border-radius: 999px;
+  background: var(--color-primary-bg);
+  padding: 4px 9px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .ai-analysis-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -915,6 +955,46 @@ body {
   justify-content: flex-start;
   border-radius: var(--radius-md);
   font-weight: 700;
+}
+
+.ai-analysis-bucket-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ai-analysis-bucket {
+  display: grid;
+  gap: 7px;
+  border-radius: var(--radius-md);
+  background: var(--color-gray-1);
+  padding: 12px;
+}
+
+.ai-analysis-bucket > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-analysis-bucket span {
+  color: var(--color-gray-5);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-analysis-bucket strong {
+  color: var(--color-black);
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.ai-analysis-bucket p {
+  margin: 0;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .ai-analysis-day-list {
@@ -1806,13 +1886,59 @@ body {
     font-size: 18px;
   }
 
-  .dashboard-calendar-grid {
-    min-width: 860px;
+  .calendar-home-content,
+  .calendar-home-content > div,
+  .dashboard-calendar-page,
+  .calendar-main-panel,
+  .calendar-main-panel-full,
+  .surface-panel,
+  .workbench-hero,
+  .workbench-ai {
+    max-width: 100%;
+    min-width: 0;
   }
 
-  .dashboard-calendar-grid-wrap,
+  .calendar-board-scroll {
+    overflow-x: hidden;
+  }
+
   .dashboard-calendar-grid {
-    overflow-x: auto;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 5px;
+    overflow: hidden;
+    padding: 6px;
+  }
+
+  .dashboard-calendar-grid .dashboard-week-label {
+    padding: 4px 0;
+    font-size: 11px;
+    line-height: 16px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell,
+  .dashboard-calendar-grid .calendar-empty-cell {
+    min-width: 0;
+    min-height: 52px;
+    border-radius: 12px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell {
+    padding: 6px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell > div:first-child {
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body {
+    display: none;
+  }
+
+  .dashboard-calendar-grid .calendar-risk-tag {
+    display: none;
   }
 }
 

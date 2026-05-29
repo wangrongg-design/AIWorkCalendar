@@ -70,6 +70,9 @@ const reports = [];
 const notifications = [];
 const billingOrders = [];
 const dataDeletionRequests = [];
+const workLogAttachments = [];
+const exportTasks = [];
+const feedbackRequests = [];
 const auditLogs = [];
 const passwordResetTokens = new Map();
 
@@ -104,6 +107,12 @@ const server = http.createServer(async (req, res) => {
     if (route === "PATCH /billing/subscription") return json(res, updateSubscription(requireUser(currentUser), body));
     if (route === "GET /billing/orders") return json(res, listBillingOrders(requireUser(currentUser)));
     if (route === "POST /billing/orders") return json(res, createBillingOrder(requireUser(currentUser), body));
+    if (req.method === "GET" && url.pathname.startsWith("/billing/orders/") && url.pathname.endsWith("/payment")) {
+      return json(res, getBillingOrderPayment(requireUser(currentUser), url.pathname.split("/")[3]));
+    }
+    if (req.method === "POST" && url.pathname.startsWith("/billing/orders/") && url.pathname.endsWith("/confirm-online-payment")) {
+      return json(res, confirmOnlinePayment(requireUser(currentUser), url.pathname.split("/")[3]));
+    }
     if (route === "GET /ops/overview") return json(res, opsOverview(requireUser(currentUser)));
     if (req.method === "PATCH" && url.pathname.startsWith("/ops/tenants/") && url.pathname.endsWith("/logo")) {
       return json(res, updateOpsTenantLogo(requireUser(currentUser), url.pathname.split("/")[3], body));
@@ -117,7 +126,17 @@ const server = http.createServer(async (req, res) => {
     if (route === "GET /audit-logs") return json(res, listAuditLogs(requireUser(currentUser), url));
     if (route === "GET /privacy/data-deletion-requests") return json(res, listDataDeletionRequests(requireUser(currentUser)));
     if (route === "POST /privacy/data-deletion-requests") return json(res, requestDataDeletion(requireUser(currentUser), body));
+    if (route === "GET /exports/data-tasks") return json(res, listExportTasks(requireUser(currentUser)));
+    if (route === "POST /exports/data-tasks") return json(res, createExportTask(requireUser(currentUser), url));
+    if (req.method === "GET" && url.pathname.startsWith("/exports/data-tasks/") && url.pathname.endsWith("/download")) {
+      return downloadExportTask(res, requireUser(currentUser), url.pathname.split("/")[3]);
+    }
     if (route === "GET /exports/data") return json(res, exportData(requireUser(currentUser), url));
+    if (route === "GET /feedback/requests") return json(res, listFeedbackRequests(requireUser(currentUser)));
+    if (route === "POST /feedback/requests") return json(res, createFeedbackRequest(requireUser(currentUser), body));
+    if (req.method === "PATCH" && url.pathname.startsWith("/feedback/requests/") && url.pathname.endsWith("/status")) {
+      return json(res, updateFeedbackStatus(requireUser(currentUser), url.pathname.split("/")[3], body));
+    }
     if (route === "POST /org/tenants") return json(res, createTenant(requireUser(currentUser), body));
     if (route === "POST /org/departments") return json(res, createDepartment(requireUser(currentUser), body));
     if (req.method === "PATCH" && url.pathname.startsWith("/org/departments/")) {
@@ -139,6 +158,15 @@ const server = http.createServer(async (req, res) => {
 
     if (route === "GET /work-logs") return json(res, listWorkLogs(requireUser(currentUser), url));
     if (route === "POST /work-logs") return json(res, createWorkLog(requireUser(currentUser), body));
+    if (req.method === "POST" && url.pathname.match(/^\/work-logs\/[^/]+\/attachments$/)) {
+      return json(res, createWorkLogAttachment(requireUser(currentUser), url.pathname.split("/")[2], body));
+    }
+    if (req.method === "GET" && url.pathname.match(/^\/work-logs\/[^/]+\/attachments\/[^/]+\/download$/)) {
+      return downloadWorkLogAttachment(res, requireUser(currentUser), url.pathname.split("/")[2], url.pathname.split("/")[4]);
+    }
+    if (req.method === "DELETE" && url.pathname.match(/^\/work-logs\/[^/]+\/attachments\/[^/]+$/)) {
+      return json(res, deleteWorkLogAttachment(requireUser(currentUser), url.pathname.split("/")[2], url.pathname.split("/")[4]));
+    }
     if (req.method === "GET" && url.pathname.startsWith("/work-logs/")) {
       return json(res, getWorkLog(requireUser(currentUser), lastPath(url.pathname)));
     }
@@ -429,6 +457,9 @@ function clearLocalData(user) {
   notifications.length = 0;
   billingOrders.length = 0;
   dataDeletionRequests.length = 0;
+  workLogAttachments.length = 0;
+  exportTasks.length = 0;
+  feedbackRequests.length = 0;
   auditLogs.length = 0;
   passwordResetTokens.clear();
 
@@ -753,6 +784,7 @@ function createBillingOrder(user, body) {
   const activeMemberCount = subscriptionSummary(user.tenantId).usedSeats;
   const billedMemberCount = Math.max(1, activeMemberCount);
   const amountCents = planUnitPriceCents(plan, interval) * billedMemberCount;
+  const paymentUrl = mockPaymentUrl(body.provider, amountCents);
   const order = {
     id: `order-${Date.now()}`,
     tenantId: user.tenantId,
@@ -764,9 +796,26 @@ function createBillingOrder(user, body) {
     provider: body.provider ?? "MANUAL",
     amountCents,
     currency: "CNY",
-    paymentUrl: body.provider === "MANUAL" || !body.provider ? null : "PAYMENT_PROVIDER_NOT_CONFIGURED",
+    paymentUrl,
     paidAt: null,
     expiresAt: addDays(new Date(), 7).toISOString(),
+    metadata: {
+      billingModel: "ACTIVE_MEMBER_MONTHLY",
+      unitPriceCents: planUnitPriceCents(plan, interval),
+      activeMemberCount,
+      billedMemberCount,
+      subscriptionPeriodPreview: subscriptionPeriodFrom(new Date(), interval),
+      payment: paymentUrl
+        ? {
+            provider: body.provider,
+            mode: "mock",
+            paymentUrl,
+            qrCodeText: paymentUrl,
+            transactionId: `mock-${Date.now()}`,
+            amountCents
+          }
+        : null
+    },
     payments: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -777,23 +826,57 @@ function createBillingOrder(user, body) {
   return order;
 }
 
+function getBillingOrderPayment(user, orderId) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const order = billingOrders.find((item) => item.id === orderId && item.tenantId === user.tenantId);
+  if (!order) throw httpError(404, "Billing order not found");
+  return {
+    order,
+    subscriptionPeriod: subscriptionPeriodForOrder(order),
+    payment: order.metadata?.payment ?? (order.paymentUrl ? {
+      provider: order.provider,
+      mode: "mock",
+      paymentUrl: order.paymentUrl,
+      qrCodeText: order.paymentUrl,
+      amountCents: order.amountCents
+    } : null)
+  };
+}
+
+function confirmOnlinePayment(user, orderId) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const order = billingOrders.find((item) => item.id === orderId && item.tenantId === user.tenantId);
+  if (!order) throw httpError(404, "Billing order not found");
+  if (order.status !== "PENDING") return order;
+  if (!["ALIPAY", "WECHAT"].includes(order.provider)) throw httpError(400, "当前订单不是线上支付订单");
+  return applyPaidBillingOrder(user, order, order.provider, `mock-paid-${order.id}`);
+}
+
 function confirmManualPayment(user, orderId, body) {
   requireRole(user, ["SUPER_ADMIN"]);
   const order = billingOrders.find((item) => item.id === orderId && item.tenantId === user.tenantId);
   if (!order) throw httpError(404, "Billing order not found");
   if (order.status !== "PENDING") throw httpError(400, "Billing order is not pending");
+  return applyPaidBillingOrder(user, order, "MANUAL", body.transactionId ?? null);
+}
+
+function applyPaidBillingOrder(user, order, provider, transactionId) {
   order.status = "PAID";
   order.paidAt = new Date().toISOString();
   order.updatedAt = new Date().toISOString();
+  order.metadata = {
+    ...(order.metadata ?? {}),
+    subscriptionPeriod: subscriptionPeriodFrom(new Date(order.paidAt), order.interval)
+  };
   order.payments.push({
     id: `pay-${Date.now()}`,
     tenantId: order.tenantId,
     orderId: order.id,
-    provider: "MANUAL",
+    provider,
     status: "SUCCEEDED",
     amountCents: order.amountCents,
     currency: order.currency,
-    transactionId: body.transactionId ?? null,
+    transactionId,
     paidAt: order.paidAt,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -802,13 +885,36 @@ function confirmManualPayment(user, orderId, body) {
   item.plan = order.plan;
   item.status = "ACTIVE";
   item.seatLimit = order.seatLimit;
-  item.currentPeriodStart = todayKey;
-  item.currentPeriodEnd = dateKey(addMonths(new Date(), order.interval === "YEARLY" ? 12 : 1));
-  item.provider = "manual";
+  item.currentPeriodStart = order.metadata.subscriptionPeriod.startDate;
+  item.currentPeriodEnd = order.metadata.subscriptionPeriod.endDate;
+  item.provider = String(provider).toLowerCase();
   item.updatedAt = new Date().toISOString();
   subscriptions.set(order.tenantId, item);
-  audit(user, "BILLING_MANUAL_PAYMENT_CONFIRMED", "BillingOrder", order.id, { transactionId: body.transactionId ?? null });
+  audit(user, provider === "MANUAL" ? "BILLING_MANUAL_PAYMENT_CONFIRMED" : "BILLING_ONLINE_PAYMENT_CONFIRMED", "BillingOrder", order.id, {
+    transactionId,
+    subscriptionPeriod: order.metadata.subscriptionPeriod
+  });
   return order;
+}
+
+function mockPaymentUrl(provider, amountCents) {
+  if (!provider || provider === "MANUAL") return null;
+  const token = Math.random().toString(36).slice(2, 12);
+  if (provider === "WECHAT") return `weixin://wxpay/bizpayurl?pr=${token}`;
+  if (provider === "ALIPAY") return `alipay://platformapi/startapp?appId=20000067&amount=${amountCents}&tradeNo=${token}`;
+  return null;
+}
+
+function subscriptionPeriodFrom(startDate, interval) {
+  const start = dateKey(startDate);
+  const end = dateKey(addMonths(startDate, interval === "YEARLY" ? 12 : 1));
+  return { startDate: start, endDate: end };
+}
+
+function subscriptionPeriodForOrder(order) {
+  if (order.metadata?.subscriptionPeriod) return order.metadata.subscriptionPeriod;
+  const start = order.status === "PAID" && order.paidAt ? new Date(order.paidAt) : new Date();
+  return subscriptionPeriodFrom(start, order.interval);
 }
 
 function planUnitPriceCents(plan, interval) {
@@ -933,7 +1039,10 @@ function exportData(user, url) {
       notifications: notifications.filter((item) => item.tenantId === user.tenantId),
       billingOrders: billingOrders.filter((item) => item.tenantId === user.tenantId),
       auditLogs: auditLogs.filter((item) => item.tenantId === user.tenantId),
-      dataDeletionRequests: dataDeletionRequests.filter((item) => item.tenantId === user.tenantId)
+      dataDeletionRequests: dataDeletionRequests.filter((item) => item.tenantId === user.tenantId),
+      workLogAttachments: workLogAttachments.filter((item) => item.tenantId === user.tenantId && !item.deletedAt).map(publicAttachment),
+      feedbackRequests: feedbackRequests.filter((item) => item.tenantId === user.tenantId && !item.deletedAt),
+      exportTasks: exportTasks.filter((item) => item.tenantId === user.tenantId && !item.deletedAt).map(publicExportTask)
     };
   }
   return {
@@ -943,7 +1052,10 @@ function exportData(user, url) {
     workLogs: workLogs.filter((item) => item.tenantId === user.tenantId && item.userId === user.id).map(enrichLog),
     reports: reports.filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id),
     notifications: notifications.filter((item) => item.tenantId === user.tenantId && item.userId === user.id),
-    dataDeletionRequests: dataDeletionRequests.filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id)
+    dataDeletionRequests: dataDeletionRequests.filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id),
+    workLogAttachments: workLogAttachments.filter((item) => item.tenantId === user.tenantId && item.uploaderId === user.id && !item.deletedAt).map(publicAttachment),
+    feedbackRequests: feedbackRequests.filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id && !item.deletedAt),
+    exportTasks: exportTasks.filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id && !item.deletedAt).map(publicExportTask)
   };
 }
 
@@ -1169,6 +1281,12 @@ function deleteWorkLog(user, id) {
   const item = getRawWorkLog(user, id);
   if (item.userId !== user.id && !hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) throw httpError(403, "Cannot delete this work log");
   item.deletedAt = new Date().toISOString();
+  for (const attachment of workLogAttachments) {
+    if (attachment.tenantId === user.tenantId && attachment.workLogId === id && !attachment.deletedAt) {
+      attachment.deletedAt = item.deletedAt;
+      attachment.updatedAt = item.deletedAt;
+    }
+  }
   return { ok: true };
 }
 
@@ -1190,6 +1308,92 @@ function submitWorkLog(user, id) {
     createdAt: new Date().toISOString()
   });
   return enrichLog(item);
+}
+
+function publicAttachment(attachment) {
+  return {
+    id: attachment.id,
+    workLogId: attachment.workLogId,
+    uploaderId: attachment.uploaderId,
+    kind: attachment.kind,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    fileSize: attachment.fileSize,
+    aiSummary: attachment.aiSummary,
+    createdAt: attachment.createdAt,
+    updatedAt: attachment.updatedAt
+  };
+}
+
+function createWorkLogAttachment(user, workLogId, body) {
+  const log = getRawWorkLog(user, workLogId);
+  if (log.userId !== user.id && !hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) throw httpError(403, "Cannot modify this work log");
+  const buffer = Buffer.from(String(body.contentBase64 ?? ""), "base64");
+  const expectedSize = Number(body.fileSize ?? buffer.length);
+  if (!buffer.length || !Number.isFinite(expectedSize) || expectedSize <= 0 || buffer.length > 8 * 1024 * 1024) {
+    throw httpError(400, "Invalid attachment content or file size");
+  }
+  const mimeType = body.mimeType || "application/octet-stream";
+  const fileName = sanitizeLocalFileName(body.fileName || "attachment");
+  const kind = String(mimeType).toLowerCase().startsWith("image/") ? "IMAGE" : "FILE";
+  const textContent = isTextAttachment(mimeType, fileName) ? buffer.toString("utf8").replace(/\u0000/g, "").slice(0, 12000) : null;
+  const attachment = {
+    id: `attachment-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    tenantId: user.tenantId,
+    workLogId,
+    uploaderId: user.id,
+    kind,
+    fileName,
+    mimeType,
+    fileSize: buffer.length,
+    contentBase64: buffer.toString("base64"),
+    textContent,
+    aiSummary: textContent
+      ? `${kind === "IMAGE" ? "图片" : "文件"}附件：${fileName}，文本摘录：${textContent.slice(0, 300)}`
+      : `${kind === "IMAGE" ? "图片" : "文件"}附件：${fileName}，大小 ${Math.max(1, Math.round(buffer.length / 1024))}KB。`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    deletedAt: null
+  };
+  workLogAttachments.push(attachment);
+  if (log.status === "SUBMITTED") {
+    analyses.set(log.id, createAnalysis(log));
+  }
+  return publicAttachment(attachment);
+}
+
+function downloadWorkLogAttachment(res, user, workLogId, attachmentId) {
+  getRawWorkLog(user, workLogId);
+  const attachment = workLogAttachments.find((item) => item.id === attachmentId && item.tenantId === user.tenantId && item.workLogId === workLogId && !item.deletedAt);
+  if (!attachment) throw httpError(404, "Attachment not found");
+  const buffer = Buffer.from(attachment.contentBase64, "base64");
+  return sendBuffer(res, buffer, {
+    contentType: attachment.mimeType,
+    fileName: attachment.fileName
+  });
+}
+
+function deleteWorkLogAttachment(user, workLogId, attachmentId) {
+  const log = getRawWorkLog(user, workLogId);
+  if (log.userId !== user.id && !hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) throw httpError(403, "Cannot modify this work log");
+  const attachment = workLogAttachments.find((item) => item.id === attachmentId && item.tenantId === user.tenantId && item.workLogId === workLogId && !item.deletedAt);
+  if (!attachment) throw httpError(404, "Attachment not found");
+  attachment.deletedAt = new Date().toISOString();
+  attachment.updatedAt = new Date().toISOString();
+  return { ok: true };
+}
+
+function sanitizeLocalFileName(value) {
+  return String(value)
+    .replace(/[\/\\:*?"<>|\u0000-\u001f]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180) || "attachment";
+}
+
+function isTextAttachment(mimeType, fileName) {
+  const normalized = String(mimeType ?? "").toLowerCase();
+  return normalized.startsWith("text/") || ["application/json", "application/xml", "application/csv"].includes(normalized) || /\.(txt|md|csv|json|log|xml)$/i.test(fileName);
 }
 
 function calendar(user, url) {
@@ -1302,23 +1506,120 @@ function workLogDraft(user, body) {
     .map((item) => item.content)
     .join("\n")
     .trim();
+  const items = inferDraftItems(text, currentDate);
+  const first = items[0];
+  return {
+    ...first,
+    assistantMessage:
+      items.length > 1
+        ? `已识别 ${items.length} 条可填报日程。`
+        : `${first.kind === "PLAN" ? "已整理为计划" : "已整理为日报"}：${first.date}，${first.hours} 小时。`,
+    items
+  };
+}
+
+function inferDraftItems(text, currentDate) {
+  const content = text.trim();
+  if (!content) return [buildDraftItem("请补充工作内容。", currentDate, undefined, true)];
+  const globalDate = inferDraftDate(content, currentDate);
+
+  const ranges = Array.from(content.matchAll(timeRangePattern()));
+  if (ranges.length) {
+    return ranges.map((match, index) => {
+      const start = match.index ?? 0;
+      const end = start + match[0].length;
+      const segment = rangeSegment(content, start, end, ranges[index + 1]?.index);
+      return applyGlobalDraftDate(buildDraftItem(segment, currentDate, parseDraftTimeRange(match)), segment, globalDate, currentDate);
+    });
+  }
+
+  const clauses = content
+    .split(/[。；;\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
+  if (hourClauses.length > 1) return hourClauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate), item, globalDate, currentDate));
+  return [buildDraftItem(content, currentDate)];
+}
+
+function buildDraftItem(text, currentDate, timing, missingContent = false) {
   const date = inferDraftDate(text, currentDate);
   const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/);
-  const hours = hoursMatch ? Math.min(Math.max(Number(hoursMatch[1]), 0), 24) : 1;
-  const kind = date > currentDate || /计划|明天|后天|下周|安排/.test(text) ? "PLAN" : "DAILY";
+  const hours = timing?.hours ?? (hoursMatch ? Math.min(Math.max(Number(hoursMatch[1]), 0), 24) : 1);
   const title = inferDraftTitle(text);
+  const kind = date > currentDate || /计划|明天|后天|下周|安排/.test(text) ? "PLAN" : "DAILY";
   return {
     date,
     kind,
     title,
-    content: text || "请补充工作内容。",
+    content: inferDraftContent(text) || text || "请补充工作内容。",
     hours,
-    startTime: null,
-    endTime: null,
-    confidence: hoursMatch ? 0.88 : 0.72,
-    missingFields: hoursMatch ? [] : ["hours"],
-    assistantMessage: `${kind === "PLAN" ? "已整理为计划草稿" : "已整理为日报草稿"}：${date}，${hours} 小时。请确认后提交。`
+    startTime: timing?.startTime ?? null,
+    endTime: timing?.endTime ?? null,
+    confidence: missingContent || (!timing && !hoursMatch) ? 0.72 : 0.9,
+    missingFields: [missingContent ? "content" : null, timing || hoursMatch ? null : "hours"].filter(Boolean)
   };
+}
+
+function timeRangePattern() {
+  return /(?:(上午|下午|晚上|中午|凌晨|早上)\s*)?(\d{1,2})(?:(?:[:：])(\d{1,2})|[点时](\d{0,2})?)\s*(?:到|至|-|—|~)\s*(?:(上午|下午|晚上|中午|凌晨|早上)\s*)?(\d{1,2})(?:(?:[:：])(\d{1,2})|[点时](\d{0,2})?)/g;
+}
+
+function rangeSegment(text, start, end, nextStart) {
+  const separators = "，,。；;\n";
+  let left = 0;
+  for (let index = start - 1; index >= 0; index -= 1) {
+    if (separators.includes(text[index])) {
+      left = index + 1;
+      break;
+    }
+  }
+  let right = nextStart ?? text.length;
+  for (let index = end; index < right; index += 1) {
+    if (separators.includes(text[index])) {
+      right = index;
+      break;
+    }
+  }
+  return text.slice(left, right).trim() || text;
+}
+
+function parseDraftTimeRange(match) {
+  const start = normalizeDraftClock(match[1], Number(match[2]), Number(match[3] || match[4] || 0));
+  const end = normalizeDraftClock(match[5] || match[1], Number(match[6]), Number(match[7] || match[8] || 0));
+  let minutes = end.hour * 60 + end.minute - (start.hour * 60 + start.minute);
+  if (minutes <= 0) minutes += 24 * 60;
+  return {
+    startTime: formatDraftClock(start.hour, start.minute),
+    endTime: formatDraftClock(end.hour, end.minute),
+    hours: Number((minutes / 60).toFixed(2))
+  };
+}
+
+function normalizeDraftClock(period, hourValue, minuteValue) {
+  let hour = hourValue;
+  const minute = minuteValue;
+  if ((period === "下午" || period === "晚上") && hour < 12) hour += 12;
+  if (period === "中午" && hour < 11) hour += 12;
+  if (period === "凌晨" && hour === 12) hour = 0;
+  return { hour: Math.min(Math.max(hour, 0), 23), minute: Math.min(Math.max(minute, 0), 59) };
+}
+
+function formatDraftClock(hour, minute) {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function applyGlobalDraftDate(item, text, globalDate, currentDate) {
+  if (globalDate === currentDate || hasDraftDateHint(text)) return item;
+  return {
+    ...item,
+    date: globalDate,
+    kind: globalDate > currentDate ? "PLAN" : "DAILY"
+  };
+}
+
+function hasDraftDateHint(text) {
+  return /今天|昨天|明天|后天|20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}|\d{1,2}月\d{1,2}[日号]?/.test(text);
 }
 
 function inferDraftDate(text, currentDate) {
@@ -1335,12 +1636,25 @@ function inferDraftDate(text, currentDate) {
 
 function inferDraftTitle(text) {
   const cleaned = text
-    .replace(/今天|昨天|明天|后天|计划|日报|工时|小时/g, "")
+    .replace(timeRangePattern(), " ")
+    .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
+    .replace(/今天|昨天|明天|后天|计划|日报|工时|小时|上午|下午|晚上|中午|凌晨|早上/g, "")
     .replace(/[，。！？、,.!?]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (!cleaned) return "工作填报";
   return cleaned.length > 24 ? `${cleaned.slice(0, 24)}...` : cleaned;
+}
+
+function inferDraftContent(text) {
+  const cleaned = text
+    .replace(timeRangePattern(), " ")
+    .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
+    .replace(/今天|昨天|明天|后天|计划|日报|工时/g, " ")
+    .replace(/[，。！？、,.!?]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned ? `${cleaned.replace(/[。.]$/, "")}。` : "";
 }
 
 function localCalendarAnswer(question, logs, periodLabel) {
@@ -1515,6 +1829,131 @@ function listDataDeletionRequests(user) {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+function listExportTasks(user) {
+  return exportTasks
+    .filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id && !item.deletedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 50)
+    .map(publicExportTask);
+}
+
+function createExportTask(user, url) {
+  const scope = url.searchParams.get("scope") === "tenant" ? "TENANT" : "SELF";
+  if (scope === "TENANT") requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const data = exportData(user, new URL(`http://localhost/exports/data?scope=${scope === "TENANT" ? "tenant" : "self"}`));
+  const buffer = Buffer.from(JSON.stringify(data, null, 2), "utf8");
+  const now = new Date();
+  const task = {
+    id: `export-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    tenantId: user.tenantId,
+    requesterId: user.id,
+    scope,
+    status: "COMPLETED",
+    fileName: `work-calendar-ai-${scope.toLowerCase()}-${dateKey(now)}.json`,
+    fileSize: buffer.length,
+    contentType: "application/json; charset=utf-8",
+    contentBase64: buffer.toString("base64"),
+    expiresAt: addDays(now, 7).toISOString(),
+    completedAt: now.toISOString(),
+    error: null,
+    metadata: { jsonBytes: buffer.length, localDemo: true },
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    deletedAt: null
+  };
+  exportTasks.unshift(task);
+  audit(user, "DATA_EXPORT_TASK_CREATED", "ExportTask", task.id, { scope });
+  return publicExportTask(task);
+}
+
+function downloadExportTask(res, user, taskId) {
+  const task = exportTasks.find((item) => item.id === taskId && item.tenantId === user.tenantId && item.requesterId === user.id && !item.deletedAt);
+  if (!task) throw httpError(404, "Export task not found");
+  if (task.status !== "COMPLETED") throw httpError(400, "Export file is not ready");
+  return sendBuffer(res, Buffer.from(task.contentBase64, "base64"), {
+    contentType: task.contentType,
+    fileName: task.fileName
+  });
+}
+
+function publicExportTask(task) {
+  return {
+    id: task.id,
+    scope: task.scope,
+    status: task.status,
+    fileName: task.fileName,
+    fileSize: task.fileSize,
+    contentType: task.contentType,
+    expiresAt: task.expiresAt,
+    completedAt: task.completedAt,
+    error: task.error,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
+  };
+}
+
+function listFeedbackRequests(user) {
+  return feedbackRequests
+    .filter((item) => item.tenantId === user.tenantId && !item.deletedAt)
+    .filter((item) => hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]) || item.requesterId === user.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(publicFeedbackRequest);
+}
+
+function createFeedbackRequest(user, body) {
+  const now = new Date().toISOString();
+  const request = {
+    id: `feedback-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    tenantId: user.tenantId,
+    requesterId: user.id,
+    category: body.category ?? "OTHER",
+    priority: body.priority ?? "NORMAL",
+    status: "SUBMITTED",
+    title: String(body.title ?? "").trim(),
+    content: String(body.content ?? "").trim(),
+    contact: normalizeOptional(body.contact) ?? null,
+    resolution: null,
+    resolvedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null
+  };
+  if (request.title.length < 2 || request.content.length < 5) {
+    throw httpError(400, "请完整填写反馈标题和问题说明");
+  }
+  feedbackRequests.unshift(request);
+  audit(user, "FEEDBACK_REQUEST_CREATED", "FeedbackRequest", request.id, { category: request.category, priority: request.priority });
+  return publicFeedbackRequest(request);
+}
+
+function updateFeedbackStatus(user, feedbackId, body) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const request = feedbackRequests.find((item) => item.id === feedbackId && item.tenantId === user.tenantId && !item.deletedAt);
+  if (!request) throw httpError(404, "Feedback request not found");
+  request.status = body.status ?? request.status;
+  request.resolution = body.resolution === undefined ? request.resolution : normalizeOptional(body.resolution);
+  request.resolvedAt = ["RESOLVED", "CLOSED"].includes(request.status) ? new Date().toISOString() : null;
+  request.updatedAt = new Date().toISOString();
+  audit(user, "FEEDBACK_REQUEST_UPDATED", "FeedbackRequest", request.id, { status: request.status });
+  return publicFeedbackRequest(request);
+}
+
+function publicFeedbackRequest(request) {
+  const requester = users.find((item) => item.id === request.requesterId && item.tenantId === request.tenantId);
+  return {
+    ...request,
+    requester: requester
+      ? {
+          id: requester.id,
+          name: requester.name,
+          email: requester.email,
+          phone: requester.phone ?? null,
+          department: departments.find((item) => item.id === requester.departmentId && item.tenantId === requester.tenantId) ?? null
+        }
+      : null
+  };
+}
+
 function filterLogsByAccess(user, url) {
   const visibleUserIds = new Set(filterUsersByAccess(user, url).map((item) => item.id));
   return workLogs.filter((item) => visibleUserIds.has(item.userId));
@@ -1627,7 +2066,11 @@ function enrichLog(log) {
         }
       : null,
     project: log.projectId ? projectWithOwner(projects.find((item) => item.id === log.projectId) ?? { id: log.projectId, name: "已删除项目", tenantId: log.tenantId }) : null,
-    aiAnalysis: analyses.get(log.id) ?? null
+    aiAnalysis: analyses.get(log.id) ?? null,
+    attachments: workLogAttachments
+      .filter((item) => item.tenantId === log.tenantId && item.workLogId === log.id && !item.deletedAt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(publicAttachment)
   };
 }
 
@@ -1721,6 +2164,14 @@ function json(res, body) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.writeHead(200);
   res.end(JSON.stringify(body));
+}
+
+function sendBuffer(res, buffer, { contentType = "application/octet-stream", fileName = "download.bin" } = {}) {
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Content-Length", buffer.length);
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+  res.writeHead(200);
+  res.end(buffer);
 }
 
 function apiHome(res) {

@@ -21,7 +21,7 @@ export type ReportResult = {
   summary: string;
 };
 
-export type WorkLogDraftResult = {
+export type WorkLogDraftItem = {
   date: string;
   kind: "DAILY" | "PLAN";
   title: string;
@@ -31,7 +31,11 @@ export type WorkLogDraftResult = {
   endTime: string | null;
   confidence: number;
   missingFields: string[];
+};
+
+export type WorkLogDraftResult = WorkLogDraftItem & {
   assistantMessage: string;
+  items: WorkLogDraftItem[];
 };
 
 export const workLogAnalysisJsonSchema = {
@@ -105,7 +109,8 @@ export const workLogDraftJsonSchema = {
     "endTime",
     "confidence",
     "missingFields",
-    "assistantMessage"
+    "assistantMessage",
+    "items"
   ],
   properties: {
     date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
@@ -117,6 +122,25 @@ export const workLogDraftJsonSchema = {
     endTime: { anyOf: [{ type: "string" }, { type: "null" }] },
     confidence: { type: "number", minimum: 0, maximum: 1 },
     missingFields: { type: "array", items: { type: "string" } },
-    assistantMessage: { type: "string" }
+    assistantMessage: { type: "string" },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["date", "kind", "title", "content", "hours", "startTime", "endTime", "confidence", "missingFields"],
+        properties: {
+          date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+          kind: { type: "string", enum: ["DAILY", "PLAN"] },
+          title: { type: "string" },
+          content: { type: "string" },
+          hours: { type: "number", minimum: 0, maximum: 24 },
+          startTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+          endTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          missingFields: { type: "array", items: { type: "string" } }
+        }
+      }
+    }
   }
 } as const;

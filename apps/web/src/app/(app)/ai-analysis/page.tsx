@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Button, DatePicker, Empty, Progress, Select, Space, Tag, Typography } from "antd";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { Alert, Button, DatePicker, Empty, Progress, Select, Space, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { AlertTriangle, Bot, CalendarDays, CheckCircle2, FileText, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -15,13 +15,81 @@ type OrgResponse = {
 };
 
 type AnalysisPeriod = "week" | "month" | "quarter" | "year";
+type AnalysisScope = "self" | "department" | "company";
 
 const analysisPeriods: Array<{ value: AnalysisPeriod; label: string }> = [
-  { value: "week", label: "本周" },
-  { value: "month", label: "本月" },
-  { value: "quarter", label: "季度" },
-  { value: "year", label: "年度" }
+  { value: "week", label: "所选周" },
+  { value: "month", label: "所选月" },
+  { value: "quarter", label: "所选季度" },
+  { value: "year", label: "所选年度" }
 ];
+
+function startOfBusinessWeek(value: dayjs.Dayjs) {
+  const weekday = value.day();
+  return value.startOf("day").add(weekday === 0 ? -6 : 1 - weekday, "day");
+}
+
+function quarterStart(value: dayjs.Dayjs) {
+  return value.month(Math.floor(value.month() / 3) * 3).startOf("month");
+}
+
+function periodRange(anchor: dayjs.Dayjs, period: AnalysisPeriod) {
+  const today = dayjs().startOf("day");
+  const start =
+    period === "week"
+      ? startOfBusinessWeek(anchor)
+      : period === "month"
+        ? anchor.startOf("month")
+        : period === "quarter"
+          ? quarterStart(anchor)
+          : anchor.startOf("year");
+  const end =
+    period === "week"
+      ? start.add(6, "day")
+      : period === "month"
+        ? start.endOf("month").startOf("day")
+        : period === "quarter"
+          ? start.add(2, "month").endOf("month").startOf("day")
+          : start.endOf("year").startOf("day");
+  const effectiveEnd = end.isAfter(today, "day") ? today : end;
+  const dayCount = effectiveEnd.isBefore(start, "day") ? 0 : effectiveEnd.diff(start, "day") + 1;
+  const previousEnd = start.subtract(1, "day");
+  const previousStart = dayCount > 0 ? previousEnd.subtract(dayCount - 1, "day") : previousEnd;
+
+  return {
+    start,
+    end,
+    effectiveEnd,
+    dayCount,
+    previousStart,
+    previousEnd
+  };
+}
+
+function monthsBetween(start: dayjs.Dayjs, end: dayjs.Dayjs) {
+  if (end.isBefore(start, "day")) return [];
+  const months: string[] = [];
+  let cursor = start.startOf("month");
+  const last = end.startOf("month");
+  while (cursor.isBefore(last, "month") || cursor.isSame(last, "month")) {
+    months.push(cursor.format("YYYY-MM"));
+    cursor = cursor.add(1, "month");
+  }
+  return months;
+}
+
+function dateRangeText(start: dayjs.Dayjs, end: dayjs.Dayjs) {
+  if (end.isBefore(start, "day")) return "暂无可分析日期";
+  if (start.isSame(end, "day")) return start.format("YYYY-MM-DD");
+  return `${start.format("YYYY-MM-DD")} 至 ${end.format("YYYY-MM-DD")}`;
+}
+
+function daysInRange(days: CalendarDay[], start: dayjs.Dayjs, end: dayjs.Dayjs) {
+  if (end.isBefore(start, "day")) return [];
+  const startKey = start.format("YYYY-MM-DD");
+  const endKey = end.format("YYYY-MM-DD");
+  return days.filter((day) => day.date >= startKey && day.date <= endKey).sort((a, b) => a.date.localeCompare(b.date));
+}
 
 function summarizeDays(days: CalendarDay[]) {
   const filled = days.reduce((sum, day) => sum + day.filledCount, 0);
@@ -38,13 +106,48 @@ function summarizeDays(days: CalendarDay[]) {
   };
 }
 
+function buildPeriodBuckets(days: CalendarDay[], period: AnalysisPeriod) {
+  const groups = new Map<string, { label: string; startDate: string; days: CalendarDay[] }>();
+  for (const day of days) {
+    const value = dayjs(day.date);
+    const bucket =
+      period === "year" || period === "quarter"
+        ? { key: value.format("YYYY-MM"), label: value.format("M月") }
+        : period === "month"
+          ? {
+              key: `${value.format("YYYY-MM")}-w${Math.floor((value.date() - 1) / 7) + 1}`,
+              label: `第${Math.floor((value.date() - 1) / 7) + 1}周`
+            }
+          : { key: day.date, label: value.format("M/D") };
+    const current = groups.get(bucket.key);
+    if (current) {
+      current.days.push(day);
+    } else {
+      groups.set(bucket.key, { label: bucket.label, startDate: day.date, days: [day] });
+    }
+  }
+  return [...groups.entries()]
+    .map(([key, value]) => ({
+      key,
+      label: value.label,
+      startDate: value.startDate,
+      summary: summarizeDays(value.days)
+    }))
+    .sort((left, right) => left.startDate.localeCompare(right.startDate));
+}
+
+function deltaText(value: number | null, suffix = "") {
+  if (value === null) return "暂无对比";
+  if (value === 0) return `持平${suffix}`;
+  return `${value > 0 ? "+" : ""}${value}${suffix}`;
+}
+
 export default function AIAnalysisPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const today = dayjs().format("YYYY-MM-DD");
-  const [month, setMonth] = useState(dayjs());
+  const [anchorDate, setAnchorDate] = useState(dayjs());
   const [analysisPeriod, setAnalysisPeriod] = useState<AnalysisPeriod>("week");
-  const [scope, setScope] = useState<"self" | "department" | "company">(
+  const [scope, setScope] = useState<AnalysisScope>(
     user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN")
       ? "company"
       : user?.roles.includes("DEPARTMENT_MANAGER")
@@ -60,71 +163,108 @@ export default function AIAnalysisPage() {
     queryFn: () => apiFetch<OrgResponse>("/org")
   });
 
-  const calendar = useQuery({
-    queryKey: ["analysis-calendar", month.format("YYYY-MM"), scope, departmentId],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        month: month.format("YYYY-MM"),
-        scope
-      });
-      if (departmentId) params.set("departmentId", departmentId);
-      return apiFetch<CalendarResponse>(`/analytics/calendar?${params.toString()}`);
-    }
+  const selectedDepartmentName = org.data?.departments.find((item) => item.id === departmentId)?.name;
+  const range = useMemo(() => periodRange(anchorDate, analysisPeriod), [anchorDate, analysisPeriod]);
+  const calendarMonthKeys = useMemo(() => {
+    const currentMonths = range.dayCount > 0 ? monthsBetween(range.start, range.effectiveEnd) : [];
+    const previousMonths = range.dayCount > 0 ? monthsBetween(range.previousStart, range.previousEnd) : [];
+    return [...new Set([...currentMonths, ...previousMonths])];
+  }, [range]);
+
+  const calendarQueries = useQueries({
+    queries: calendarMonthKeys.map((monthKey) => ({
+      queryKey: ["analysis-calendar", monthKey, scope, departmentId ?? "all"],
+      queryFn: () => {
+        const params = new URLSearchParams({ month: monthKey, scope });
+        if (departmentId) params.set("departmentId", departmentId);
+        return apiFetch<CalendarResponse>(`/analytics/calendar?${params.toString()}`);
+      }
+    }))
   });
 
+  const allDays = calendarQueries.flatMap((query) => query.data?.days ?? []);
+  const isCalendarFetching = calendarQueries.some((query) => query.isFetching);
+  const calendarError = calendarQueries.find((query) => query.error)?.error;
+  const currentDays = useMemo(() => daysInRange(allDays, range.start, range.effectiveEnd), [allDays, range]);
+  const previousDays = useMemo(() => daysInRange(allDays, range.previousStart, range.previousEnd), [allDays, range]);
+
   const analysis = useMemo(() => {
-    const days = calendar.data?.days ?? [];
-    const weekStart = dayjs(today).startOf("week").add(1, "day");
-    const weekEnd = weekStart.add(6, "day");
-    const rawPeriodDays =
-      analysisPeriod === "week"
-        ? days.filter((day) => {
-            const value = dayjs(day.date);
-            return (value.isAfter(weekStart) || value.isSame(weekStart, "day")) && (value.isBefore(weekEnd) || value.isSame(weekEnd, "day"));
-          })
-        : days;
-    const periodDays = rawPeriodDays.filter((day) => day.date <= today);
-    const summary = summarizeDays(periodDays);
-    const riskDays = periodDays.filter((day) => day.riskCount > 0).sort((a, b) => b.riskCount - a.riskCount);
-    const missingDays = [...periodDays].filter((day) => day.missingCount > 0).sort((a, b) => b.missingCount - a.missingCount);
-    const bestDay = [...periodDays].sort((a, b) => b.fillRate - a.fillRate)[0];
+    const summary = summarizeDays(currentDays);
+    const previousSummary = summarizeDays(previousDays);
+    const previousHasComparableData = previousDays.length > 0;
+    const rateDelta = previousHasComparableData ? Number((summary.rate - previousSummary.rate).toFixed(1)) : null;
+    const riskDelta = previousHasComparableData ? summary.risks - previousSummary.risks : null;
+    const hoursDelta = previousHasComparableData ? Number((summary.totalHours - previousSummary.totalHours).toFixed(1)) : null;
+    const riskDays = [...currentDays].filter((day) => day.riskCount > 0).sort((a, b) => b.riskCount - a.riskCount || a.date.localeCompare(b.date));
+    const missingDays = [...currentDays].filter((day) => day.missingCount > 0).sort((a, b) => b.missingCount - a.missingCount || a.date.localeCompare(b.date));
+    const bestDay = [...currentDays].filter((day) => day.filledCount + day.missingCount > 0).sort((a, b) => b.fillRate - a.fillRate)[0];
+    const weakestDay = [...currentDays].filter((day) => day.filledCount + day.missingCount > 0).sort((a, b) => a.fillRate - b.fillRate)[0];
+    const focusDays = [...currentDays]
+      .filter((day) => day.riskCount > 0 || day.missingCount > 0)
+      .sort((a, b) => b.riskCount * 3 + b.missingCount - (a.riskCount * 3 + a.missingCount) || a.date.localeCompare(b.date));
+    const buckets = buildPeriodBuckets(currentDays, analysisPeriod);
     const periodLabel = analysisPeriods.find((item) => item.value === analysisPeriod)?.label ?? "本周";
-    const scopeLabel = scope === "company" ? "团队" : scope === "department" ? "部门" : "个人";
-    const dataScopeNote =
-      analysisPeriod === "week"
-        ? "基于本周截至今天的可见日历数据"
-        : analysisPeriod === "month"
-          ? "基于本月至今的可见日历数据"
-          : "当前先基于所选月份截至今天的数据估算，后续可扩展完整周期接口";
+    const scopeLabel =
+      departmentId && selectedDepartmentName
+        ? selectedDepartmentName
+        : scope === "company"
+          ? "全公司"
+          : scope === "department"
+            ? "本部门"
+            : user?.name ?? "个人";
+    const currentRangeText = dateRangeText(range.start, range.effectiveEnd);
+    const previousRangeText = previousHasComparableData ? dateRangeText(range.previousStart, range.previousEnd) : "暂无可比周期";
+    const dataScopeNote = `${currentRangeText} · ${scopeLabel} · 已聚合 ${calendarMonthKeys.length} 个月份数据`;
+    const subjectLabel = `${scopeLabel}在${periodLabel}内`;
 
     const conclusion =
-      summary.rate >= 80
-        ? `${periodLabel}${scopeLabel}填报整体稳定，填报率 ${summary.rate}%。`
-        : `${periodLabel}${scopeLabel}填报率 ${summary.rate}%，需要优先补齐日报。`;
+      range.dayCount === 0
+        ? `${periodLabel}尚未进入可分析日期，暂不形成结论。`
+        : summary.filled + summary.missing === 0
+          ? `${subjectLabel}暂无可分析成员或填报要求。`
+          : summary.rate >= 90 && summary.risks === 0
+            ? `${subjectLabel}执行节奏稳定，填报率 ${summary.rate}%。`
+            : summary.risks > 0
+              ? `${subjectLabel}发现 ${summary.risks} 条风险信号，需要优先跟进。`
+              : `${subjectLabel}填报率 ${summary.rate}%，建议补齐关键日期日报。`;
 
     const evidence = [
-      `已提交 ${summary.filled} 条，缺填 ${summary.missing} 条。`,
+      `当前周期覆盖 ${range.dayCount} 天，已提交 ${summary.filled} 条，缺填 ${summary.missing} 条。`,
+      previousHasComparableData
+        ? `填报率较前一可比周期 ${previousRangeText} ${deltaText(rateDelta, " 个百分点")}。`
+        : "暂无前一可比周期数据，先以当前周期建立基线。",
       riskDays.length ? `${riskDays.length} 个日期存在风险信号，累计 ${summary.risks} 条风险。` : "当前周期暂无明显风险日期。",
-      summary.totalHours > 0 ? `累计记录 ${summary.totalHours}h，可继续按项目核对投入。` : "工时数据不足，建议先推动填报。"
+      summary.totalHours > 0 ? `累计记录 ${summary.totalHours}h，较前期 ${deltaText(hoursDelta, "h")}。` : "工时数据不足，建议先推动填报。"
     ];
 
     const recommendations = [
-      missingDays[0] ? `${missingDays[0].date} 缺填 ${missingDays[0].missingCount} 人，建议优先提醒。` : "缺填压力较低，保持当前节奏。",
-      riskDays[0] ? `${riskDays[0].date} 风险 ${riskDays[0].riskCount} 条，建议查看当天详情。` : "暂无需要立即升级的风险日期。",
-      bestDay ? `${bestDay.date} 填报率最高，可作为团队节奏参考。` : "暂无足够样本形成节奏判断。"
+      missingDays[0] ? `${missingDays[0].date} 缺填 ${missingDays[0].missingCount} 人，建议优先提醒并确认是否为休息日。` : "缺填压力较低，保持当前节奏。",
+      riskDays[0] ? `${riskDays[0].date} 风险 ${riskDays[0].riskCount} 条，建议打开当天详情定位项目和负责人。` : "暂无需要立即升级的风险日期。",
+      rateDelta !== null && rateDelta < -5 ? `填报率环比下降 ${Math.abs(rateDelta)} 个百分点，建议在团队例会同步填报要求。` : "填报趋势未出现明显下滑。",
+      weakestDay && bestDay && weakestDay.date !== bestDay.date ? `${weakestDay.date} 是周期低点，${bestDay.date} 是节奏最好日期，可对比复盘。` : "暂无足够样本形成节奏高低点判断。"
     ];
 
     return {
       periodLabel,
+      currentRangeText,
+      previousRangeText,
       dataScopeNote,
       summary,
+      previousSummary,
+      trend: {
+        rateDelta,
+        riskDelta,
+        hoursDelta
+      },
       conclusion,
       evidence,
       recommendations,
       riskDays,
-      missingDays
+      missingDays,
+      focusDays,
+      buckets
     };
-  }, [analysisPeriod, calendar.data?.days, scope, today]);
+  }, [analysisPeriod, calendarMonthKeys.length, currentDays, departmentId, previousDays, range, scope, selectedDepartmentName, user?.name]);
 
   return (
     <div className="page-stack ai-analysis-page">
@@ -136,7 +276,13 @@ export default function AIAnalysisPage() {
           <Typography.Text className="page-subtitle">周期复盘入口：按周、月、季度和年度分析团队节奏、风险趋势和投入变化。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel">
-          <DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} allowClear={false} />
+          <DatePicker
+            picker={analysisPeriod}
+            value={anchorDate}
+            onChange={(value) => value && setAnchorDate(value)}
+            disabledDate={(value) => Boolean(value?.startOf("day").isAfter(dayjs(), "day"))}
+            allowClear={false}
+          />
           <Select
             value={scope}
             style={{ width: 132 }}
@@ -160,11 +306,13 @@ export default function AIAnalysisPage() {
               options={org.data?.departments.map((item) => ({ value: item.id, label: item.name }))}
             />
           ) : null}
-          <Button onClick={() => calendar.refetch()} loading={calendar.isFetching}>
+          <Button onClick={() => calendarQueries.forEach((query) => query.refetch())} loading={isCalendarFetching}>
             刷新
           </Button>
         </Space>
       </div>
+
+      {calendarError ? <Alert type="error" showIcon message={(calendarError as Error).message} /> : null}
 
       <section className="ai-analysis-hero">
         <div className="ai-analysis-hero-main">
@@ -191,6 +339,10 @@ export default function AIAnalysisPage() {
           <span>周期填报率</span>
           <strong>{analysis.summary.rate}%</strong>
           <Progress percent={analysis.summary.rate} showInfo={false} strokeColor="var(--color-primary)" />
+          <div className="ai-analysis-score-foot">
+            <span>前期 {analysis.previousSummary.rate}%</span>
+            <span>{deltaText(analysis.trend.rateDelta, " 个百分点")}</span>
+          </div>
         </div>
       </section>
 
@@ -208,12 +360,12 @@ export default function AIAnalysisPage() {
         <div className="metric-card">
           <div className="metric-label">风险</div>
           <div className="metric-value text-danger">{analysis.summary.risks}</div>
-          <div className="metric-hint">风险/阻塞信号</div>
+          <div className="metric-hint">较前期 {deltaText(analysis.trend.riskDelta, " 条")}</div>
         </div>
         <div className="metric-card">
           <div className="metric-label">工时</div>
           <div className="metric-value">{analysis.summary.totalHours}h</div>
-          <div className="metric-hint">可见范围合计</div>
+          <div className="metric-hint">较前期 {deltaText(analysis.trend.hoursDelta, "h")}</div>
         </div>
       </section>
 
@@ -233,13 +385,38 @@ export default function AIAnalysisPage() {
         <div className="surface-panel ai-analysis-card is-warning">
           <div className="ai-analysis-card-title">
             <AlertTriangle size={18} />
-            风险提醒
+            行动建议
           </div>
           <ul className="ai-analysis-list">
             {analysis.recommendations.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
+        </div>
+
+        <div className="surface-panel ai-analysis-card ai-analysis-trend-card">
+          <div className="ai-analysis-card-title">
+            <WandSparkles size={18} />
+            趋势拆解
+          </div>
+          {analysis.buckets.length ? (
+            <div className="ai-analysis-bucket-list">
+              {analysis.buckets.map((bucket) => (
+                <div key={bucket.key} className="ai-analysis-bucket">
+                  <div>
+                    <span>{bucket.label}</span>
+                    <strong>{bucket.summary.rate}%</strong>
+                  </div>
+                  <Progress percent={bucket.summary.rate} showInfo={false} strokeColor="var(--color-primary)" />
+                  <p>
+                    提交 {bucket.summary.filled} · 缺填 {bucket.summary.missing} · 风险 {bucket.summary.risks}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前周期暂无可拆解数据" />
+          )}
         </div>
 
         <div className="surface-panel ai-analysis-card">
@@ -254,8 +431,12 @@ export default function AIAnalysisPage() {
             <Button className="ai-soft-button" onClick={() => router.push("/reports")} icon={<FileText size={16} />}>
               生成周期汇报
             </Button>
-            <Button className="ai-soft-button" onClick={() => router.push("/calendar")} icon={<CalendarDays size={16} />}>
-              查看风险日期
+            <Button
+              className="ai-soft-button"
+              onClick={() => router.push(analysis.focusDays[0] ? `/calendar?date=${analysis.focusDays[0].date}` : "/calendar")}
+              icon={<CalendarDays size={16} />}
+            >
+              查看重点日期
             </Button>
           </div>
         </div>
@@ -263,20 +444,20 @@ export default function AIAnalysisPage() {
         <div className="surface-panel ai-analysis-card ai-analysis-table-card">
           <div className="ai-analysis-card-title">
             <AlertTriangle size={18} />
-            风险日期
+            重点日期
           </div>
-          {analysis.riskDays.length ? (
+          {analysis.focusDays.length ? (
             <div className="ai-analysis-day-list">
-              {analysis.riskDays.slice(0, 6).map((day) => (
-                <button key={day.date} type="button" onClick={() => router.push("/calendar")}>
+              {analysis.focusDays.slice(0, 8).map((day) => (
+                <button key={day.date} type="button" onClick={() => router.push(`/calendar?date=${day.date}`)}>
                   <span>{dayjs(day.date).format("M月D日")}</span>
-                  <Tag color="red">风险 {day.riskCount}</Tag>
+                  <Tag color={day.riskCount ? "red" : "orange"}>{day.riskCount ? `风险 ${day.riskCount}` : `缺填 ${day.missingCount}`}</Tag>
                   <strong>填报率 {day.fillRate}%</strong>
                 </button>
               ))}
             </div>
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前周期暂无风险日期" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前周期暂无重点关注日期" />
           )}
         </div>
       </section>

@@ -122,6 +122,30 @@ enum ExportTaskStatus {
   EXPIRED
 }
 
+enum FeedbackCategory {
+  BUG
+  ACCOUNT_PERMISSION
+  DATA_RIGHTS
+  BILLING
+  PRIVACY_SECURITY
+  SUGGESTION
+  OTHER
+}
+
+enum FeedbackPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum FeedbackStatus {
+  SUBMITTED
+  PROCESSING
+  RESOLVED
+  CLOSED
+}
+
 enum WorkLogAttachmentKind {
   IMAGE
   FILE
@@ -152,6 +176,7 @@ model Tenant {
   aiUsageLogs             AiUsageLog[]
   dataDeletionRequests    DataDeletionRequest[]
   exportTasks             ExportTask[]
+  feedbackRequests        FeedbackRequest[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
 
@@ -234,6 +259,7 @@ model User {
   aiUsageLogs             AiUsageLog[]
   dataDeletionRequests    DataDeletionRequest[]
   exportTasks             ExportTask[]               @relation("ExportTaskRequester")
+  feedbackRequests        FeedbackRequest[]          @relation("FeedbackRequestRequester")
 
   @@unique([tenantId, email])
   @@unique([tenantId, phone])
@@ -611,4 +637,27 @@ model ExportTask {
   @@index([tenantId, requesterId, createdAt])
   @@index([tenantId, status, expiresAt])
   @@map("export_tasks")
+}
+
+model FeedbackRequest {
+  id          String           @id @default(cuid())
+  tenantId    String           @map("tenant_id")
+  requesterId String           @map("requester_id")
+  category    FeedbackCategory
+  priority    FeedbackPriority @default(NORMAL)
+  status      FeedbackStatus   @default(SUBMITTED)
+  title       String
+  content     String           @db.Text
+  contact     String?          @db.Text
+  resolution  String?          @db.Text
+  resolvedAt  DateTime?        @map("resolved_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  requester   User             @relation("FeedbackRequestRequester", fields: [requesterId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, requesterId, createdAt])
+  @@map("feedback_requests")
 }

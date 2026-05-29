@@ -19,6 +19,7 @@ import { BillingModule } from "./modules/billing/billing.module";
 import { ExportsModule } from "./modules/exports/exports.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { PrivacyModule } from "./modules/privacy/privacy.module";
+import { FeedbackModule } from "./modules/feedback/feedback.module";
 
 @Module({
   imports: [
@@ -47,7 +48,8 @@ import { PrivacyModule } from "./modules/privacy/privacy.module";
     BillingModule,
     ExportsModule,
     AuditModule,
-    PrivacyModule
+    PrivacyModule,
+    FeedbackModule
   ],
   controllers: [AppController],
   providers: [

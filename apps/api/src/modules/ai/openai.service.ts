@@ -10,6 +10,7 @@ import {
   workLogAnalysisJsonSchema,
   WorkLogAnalysisResult,
   workLogDraftJsonSchema,
+  WorkLogDraftItem,
   WorkLogDraftResult
 } from "./schemas/analysis.schema";
 
@@ -77,6 +78,12 @@ type DraftWorkLogInput = {
     role: "user" | "assistant";
     content: string;
   }>;
+};
+
+type DraftTiming = {
+  startTime: string;
+  endTime: string;
+  hours: number;
 };
 
 type WorkLogAttachmentInput = {
@@ -604,29 +611,130 @@ export class OpenAiService {
       .map((message) => message.content)
       .join("\n")
       .trim();
-    const content = userText || "请补充工作内容。";
-    const date = this.inferDraftDate(content, input.currentDate);
-    const hoursMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/);
-    const hours = hoursMatch ? Math.min(Math.max(Number(hoursMatch[1]), 0), 24) : 1;
-    const title = this.inferDraftTitle(content);
-    const missingFields = [
-      !userText ? "content" : null,
-      hoursMatch ? null : "hours"
-    ].filter(Boolean) as string[];
-    const kind = date > input.currentDate || /计划|明天|后天|下周|下个月|安排/.test(content) ? "PLAN" : "DAILY";
+    const items = this.inferDraftItems(userText, input.currentDate);
+    const first = items[0];
+    return {
+      ...first,
+      assistantMessage:
+        items.length > 1
+          ? `已识别 ${items.length} 条可填报日程。`
+          : `${first.kind === "PLAN" ? "已整理为计划" : "已整理为日报"}：${first.date}，${first.hours} 小时。`,
+      items
+    };
+  }
 
+  private inferDraftItems(text: string, currentDate: string): WorkLogDraftItem[] {
+    const content = text.trim();
+    if (!content) {
+      return [this.buildDraftItem("请补充工作内容。", currentDate, undefined, true)];
+    }
+    const globalDate = this.inferDraftDate(content, currentDate);
+
+    const ranges = Array.from(content.matchAll(this.timeRangePattern()));
+    if (ranges.length) {
+      return ranges.map((match, index) => {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        const nextStart = ranges[index + 1]?.index;
+        const segment = this.rangeSegment(content, start, end, nextStart);
+        return this.applyGlobalDraftDate(this.buildDraftItem(segment, currentDate, this.parseDraftTimeRange(match)), segment, globalDate, currentDate);
+      });
+    }
+
+    const clauses = content
+      .split(/[。；;\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
+    if (hourClauses.length > 1) {
+      return hourClauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate), item, globalDate, currentDate));
+    }
+
+    return [this.buildDraftItem(content, currentDate)];
+  }
+
+  private buildDraftItem(text: string, currentDate: string, timing?: DraftTiming, missingContent = false): WorkLogDraftItem {
+    const date = this.inferDraftDate(text, currentDate);
+    const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/);
+    const hours = timing?.hours ?? (hoursMatch ? Math.min(Math.max(Number(hoursMatch[1]), 0), 24) : 1);
+    const title = this.inferDraftTitle(text);
+    const missingFields = [
+      missingContent ? "content" : null,
+      timing || hoursMatch ? null : "hours"
+    ].filter(Boolean) as string[];
+    const kind = date > currentDate || /计划|明天|后天|下周|下个月|安排/.test(text) ? "PLAN" : "DAILY";
     return {
       date,
       kind,
       title,
-      content,
+      content: this.inferDraftContent(text) || text || "请补充工作内容。",
       hours,
-      startTime: null,
-      endTime: null,
-      confidence: missingFields.length ? 0.72 : 0.88,
-      missingFields,
-      assistantMessage: `${kind === "PLAN" ? "已整理为计划草稿" : "已整理为日报草稿"}：${date}，${hours} 小时。请确认标题和内容后提交。`
+      startTime: timing?.startTime ?? null,
+      endTime: timing?.endTime ?? null,
+      confidence: missingFields.length ? 0.72 : 0.9,
+      missingFields
     };
+  }
+
+  private timeRangePattern() {
+    return /(?:(上午|下午|晚上|中午|凌晨|早上)\s*)?(\d{1,2})(?:(?:[:：])(\d{1,2})|[点时](\d{0,2})?)\s*(?:到|至|-|—|~)\s*(?:(上午|下午|晚上|中午|凌晨|早上)\s*)?(\d{1,2})(?:(?:[:：])(\d{1,2})|[点时](\d{0,2})?)/g;
+  }
+
+  private rangeSegment(text: string, start: number, end: number, nextStart?: number) {
+    const separators = "，,。；;\n";
+    let left = 0;
+    for (let index = start - 1; index >= 0; index -= 1) {
+      if (separators.includes(text[index])) {
+        left = index + 1;
+        break;
+      }
+    }
+    let right = nextStart ?? text.length;
+    for (let index = end; index < right; index += 1) {
+      if (separators.includes(text[index])) {
+        right = index;
+        break;
+      }
+    }
+    return text.slice(left, right).trim() || text;
+  }
+
+  private parseDraftTimeRange(match: RegExpMatchArray): DraftTiming {
+    const start = this.normalizeDraftClock(match[1], Number(match[2]), Number(match[3] || match[4] || 0));
+    const end = this.normalizeDraftClock(match[5] || match[1], Number(match[6]), Number(match[7] || match[8] || 0));
+    let minutes = end.hour * 60 + end.minute - (start.hour * 60 + start.minute);
+    if (minutes <= 0) minutes += 24 * 60;
+    return {
+      startTime: this.formatDraftClock(start.hour, start.minute),
+      endTime: this.formatDraftClock(end.hour, end.minute),
+      hours: Number((minutes / 60).toFixed(2))
+    };
+  }
+
+  private normalizeDraftClock(period: string | undefined, hourValue: number, minuteValue: number) {
+    let hour = hourValue;
+    const minute = minuteValue;
+    if ((period === "下午" || period === "晚上") && hour < 12) hour += 12;
+    if (period === "中午" && hour < 11) hour += 12;
+    if (period === "凌晨" && hour === 12) hour = 0;
+    return { hour: Math.min(Math.max(hour, 0), 23), minute: Math.min(Math.max(minute, 0), 59) };
+  }
+
+  private formatDraftClock(hour: number, minute: number) {
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  private applyGlobalDraftDate(item: WorkLogDraftItem, text: string, globalDate: string, currentDate: string): WorkLogDraftItem {
+    if (globalDate === currentDate || this.hasDraftDateHint(text)) return item;
+    return {
+      ...item,
+      date: globalDate,
+      kind: globalDate > currentDate ? "PLAN" : "DAILY"
+    };
+  }
+
+  private hasDraftDateHint(text: string) {
+    return /今天|昨天|明天|后天|20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}|\d{1,2}月\d{1,2}[日号]?/.test(text);
   }
 
   private inferDraftDate(text: string, currentDate: string) {
@@ -654,7 +762,9 @@ export class OpenAiService {
 
   private inferDraftTitle(text: string) {
     const cleaned = text
-      .replace(/今天|昨天|明天|后天|计划|日报|工时|小时/g, "")
+      .replace(this.timeRangePattern(), " ")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
+      .replace(/今天|昨天|明天|后天|计划|日报|工时|小时|上午|下午|晚上|中午|凌晨|早上/g, "")
       .replace(/[，。！？、,.!?]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
@@ -662,9 +772,31 @@ export class OpenAiService {
     return cleaned.length > 24 ? `${cleaned.slice(0, 24)}...` : cleaned;
   }
 
+  private inferDraftContent(text: string) {
+    const cleaned = text
+      .replace(this.timeRangePattern(), " ")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
+      .replace(/今天|昨天|明天|后天|计划|日报|工时/g, " ")
+      .replace(/[，。！？、,.!?]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return cleaned ? `${cleaned.replace(/[。.]$/, "")}。` : "";
+  }
+
   private normalizeDraft(result: WorkLogDraftResult, input: DraftWorkLogInput): WorkLogDraftResult {
     const fallback = this.localWorkLogDraft(input);
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(result.date) ? result.date : fallback.date;
+    const sourceItems = Array.isArray(result.items) && result.items.length ? result.items : [result];
+    const items = sourceItems.map((item, index) => this.normalizeDraftItem(item, fallback.items[index] ?? fallback.items[0]));
+    const first = items[0] ?? fallback.items[0];
+    return {
+      ...first,
+      assistantMessage: result.assistantMessage?.trim() || fallback.assistantMessage,
+      items
+    };
+  }
+
+  private normalizeDraftItem(result: Partial<WorkLogDraftItem>, fallback: WorkLogDraftItem): WorkLogDraftItem {
+    const date = result.date && /^\d{4}-\d{2}-\d{2}$/.test(result.date) ? result.date : fallback.date;
     const hours = Number.isFinite(Number(result.hours)) ? Math.min(Math.max(Number(result.hours), 0), 24) : fallback.hours;
     return {
       date,
@@ -672,11 +804,10 @@ export class OpenAiService {
       title: result.title?.trim() || fallback.title,
       content: result.content?.trim() || fallback.content,
       hours,
-      startTime: result.startTime ?? null,
-      endTime: result.endTime ?? null,
+      startTime: result.startTime ?? fallback.startTime ?? null,
+      endTime: result.endTime ?? fallback.endTime ?? null,
       confidence: Number.isFinite(Number(result.confidence)) ? Math.min(Math.max(Number(result.confidence), 0), 1) : fallback.confidence,
-      missingFields: Array.isArray(result.missingFields) ? result.missingFields.map(String) : fallback.missingFields,
-      assistantMessage: result.assistantMessage?.trim() || fallback.assistantMessage
+      missingFields: Array.isArray(result.missingFields) ? result.missingFields.map(String) : fallback.missingFields
     };
   }
 

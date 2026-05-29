@@ -9,7 +9,7 @@ import { Bot, Download, Edit2, Paperclip, RotateCw, Send, Trash2, UploadCloud, W
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiDownload, apiFetch } from "@/lib/api";
-import { Project, WorkLog, WorkLogAttachment, WorkLogDraft } from "@/lib/types";
+import { Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type WorkLogForm = {
@@ -70,6 +70,24 @@ function toPayload(values: WorkLogForm) {
   };
 }
 
+function normalizedDraftItems(draft: WorkLogDraft): WorkLogDraftItem[] {
+  return draft.items?.length ? draft.items : [draft];
+}
+
+function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
+  const date = dayjs(item.date);
+  const safeDate = date.isValid() ? date : dayjs();
+  const hours = Number(item.hours);
+  return {
+    date: safeDate,
+    title: item.title || "工作填报",
+    content: item.content || item.title || "工作填报",
+    hours: Number.isFinite(hours) ? hours : 1,
+    startTime: parseWorkLogTime(item.startTime, safeDate),
+    endTime: parseWorkLogTime(item.endTime, safeDate)
+  };
+}
+
 export default function WorkLogsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<WorkLogForm>();
@@ -84,7 +102,7 @@ export default function WorkLogsPage() {
   const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
     {
       role: "assistant",
-      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
+      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
     }
   ]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
@@ -165,20 +183,27 @@ export default function WorkLogsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const createLog = useMutation({
-    mutationFn: async (values: WorkLogForm) => {
-      const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toPayload(values)) });
+  const createAndSubmitLog = async (values: WorkLogForm, withAttachments: boolean) => {
+    const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toPayload(values)) });
+    if (withAttachments) {
       await uploadPendingAttachments(workLog.id);
-      return workLog;
-    },
+    }
+    return apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" });
+  };
+
+  const createLog = useMutation({
+    mutationFn: (values: WorkLogForm) => createAndSubmitLog(values, true),
     onSuccess: () => {
-      message.success("已保存填报");
+      message.success("已填报，AI 将自动分析。");
       setModalOpen(false);
+      setPendingAttachments([]);
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
     },
     onError: (error) => {
-      message.error((error as Error).message || "保存失败，请检查内容后重试。");
+      message.error((error as Error).message || "填报失败，请检查内容后重试。");
     }
   });
 
@@ -234,25 +259,47 @@ export default function WorkLogsPage() {
   });
 
   const draftLog = useMutation({
-    mutationFn: (messages: AiChatMessage[]) =>
-      apiFetch<WorkLogDraft>("/ai/work-log-draft", {
+    mutationFn: async (messages: AiChatMessage[]) => {
+      const draft = await apiFetch<WorkLogDraft>("/ai/work-log-draft", {
         method: "POST",
         body: JSON.stringify({
           currentDate: dayjs().format("YYYY-MM-DD"),
           messages
         })
-      }),
-    onSuccess: (draft) => {
-      form.setFieldsValue({
-        date: dayjs(draft.date),
-        title: draft.title,
-        content: draft.content,
-        hours: Number(draft.hours),
-        startTime: parseWorkLogTime(draft.startTime),
-        endTime: parseWorkLogTime(draft.endTime)
       });
+      if (editing) {
+        return { draft, count: 0, attachedToFirst: false, filledForm: true };
+      }
+      const items = normalizedDraftItems(draft);
+      const attachedToFirst = pendingAttachments.length > 0 && items.length > 1;
+      for (const [index, item] of items.entries()) {
+        await createAndSubmitLog(draftItemToForm(item), index === 0);
+      }
+      return { draft, count: items.length, attachedToFirst, filledForm: false };
+    },
+    onSuccess: ({ draft, count, attachedToFirst, filledForm }) => {
+      if (filledForm) {
+        const first = normalizedDraftItems(draft)[0];
+        form.setFieldsValue(draftItemToForm(first));
+      }
       setAiMessages((messages) => [...messages, { role: "assistant", content: draft.assistantMessage }]);
-      message.success(draft.kind === "PLAN" ? "已生成计划草稿" : "已生成日报草稿");
+      if (filledForm) {
+        message.success("已整理到表单，请确认后保存修改。");
+      } else {
+        message.success(count > 1 ? `已填报 ${count} 条，AI 将自动分析。` : "已填报，AI 将自动分析。");
+        if (attachedToFirst) {
+          message.info("检测到多条日程，附件已关联到第一条填报。");
+        }
+        setModalOpen(false);
+        setPendingAttachments([]);
+        form.resetFields();
+        queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+        queryClient.invalidateQueries({ queryKey: ["calendar"] });
+        queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+      }
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "AI 填报失败，请调整描述后重试。");
     }
   });
 
@@ -281,7 +328,7 @@ export default function WorkLogsPage() {
     setAiMessages([
       {
         role: "assistant",
-        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
+        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
       }
     ]);
     setModalOpen(true);
@@ -305,8 +352,8 @@ export default function WorkLogsPage() {
       date: dayjs(record.date),
       title: record.title,
       content: record.content,
-      startTime: parseWorkLogTime(record.startTime),
-      endTime: parseWorkLogTime(record.endTime),
+      startTime: parseWorkLogTime(record.startTime, record.date),
+      endTime: parseWorkLogTime(record.endTime, record.date),
       hours: Number(record.hours),
       projectId: record.projectId ?? undefined
     });
@@ -433,7 +480,9 @@ export default function WorkLogsPage() {
           setPendingAttachments([]);
         }}
         onOk={() => form.submit()}
-        confirmLoading={createLog.isPending || updateLog.isPending}
+        okText={editing ? "保存修改" : "填报"}
+        cancelText="取消"
+        confirmLoading={createLog.isPending || updateLog.isPending || draftLog.isPending}
         width={880}
       >
         <Form
@@ -480,7 +529,7 @@ export default function WorkLogsPage() {
                 }}
               />
               <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftLog.isPending} onClick={sendAiMessage}>
-                生成草稿
+                {editing ? "整理到表单" : "直接填报"}
               </Button>
             </div>
           </div>

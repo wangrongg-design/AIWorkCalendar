@@ -68,6 +68,30 @@ export function applyWorkLogTimingAutoFill<T extends TimingValues>(
   }
 }
 
-export function parseWorkLogTime(value?: string | null) {
-  return value ? dayjs(value) : undefined;
+function baseDate(date?: string | Dayjs | null) {
+  const parsed = dayjs.isDayjs(date) ? date : date ? dayjs(date) : dayjs();
+  return parsed.isValid() ? parsed : dayjs();
+}
+
+function normalizePeriodHour(period: string | undefined, hour: number) {
+  if ((period === "下午" || period === "晚上") && hour < 12) return hour + 12;
+  if (period === "中午" && hour < 11) return hour + 12;
+  if (period === "凌晨" && hour === 12) return 0;
+  return hour;
+}
+
+export function parseWorkLogTime(value?: string | null, date?: string | Dayjs | null) {
+  if (!value) return undefined;
+  const text = String(value).trim();
+  const parsed = dayjs(text);
+  if (parsed.isValid()) return parsed;
+
+  const match = text.match(/(?:(上午|下午|晚上|中午|凌晨|早上)\s*)?(\d{1,2})(?:(?:[:：])(\d{1,2})|[点时](\d{0,2})?)?/);
+  if (!match) return undefined;
+  const minute = Number(match[3] || match[4] || 0);
+  const hour = normalizePeriodHour(match[1], Number(match[2]));
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return undefined;
+  }
+  return baseDate(date).hour(hour).minute(minute).second(0).millisecond(0);
 }

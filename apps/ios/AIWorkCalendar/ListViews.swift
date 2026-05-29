@@ -135,6 +135,7 @@ struct WorkLogsView: View {
             }
             .navigationTitle("填报记录")
             .compactNavigationTitle()
+            .appTabBarContentInset(AITheme.Spacing.lg)
             .searchable(text: $viewModel.searchText, prompt: "搜索标题、内容或项目")
             .overlay {
                 if viewModel.isLoading {
@@ -192,7 +193,7 @@ struct WorkLogRow: View {
 
             Text(log.content)
                 .font(.callout)
-                .lineLimit(1)
+                .lineLimit(2)
 
             if log.hasAIRisk {
                 Label("AI 发现风险或阻塞", systemImage: "exclamationmark.triangle.fill")
@@ -201,6 +202,14 @@ struct WorkLogRow: View {
             }
         }
         .padding(.vertical, 2)
+        .padding(.leading, log.hasAIRisk ? AITheme.Spacing.xs : 0)
+        .overlay(alignment: .leading) {
+            if log.hasAIRisk {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(AITheme.ColorToken.danger)
+                    .frame(width: 3)
+            }
+        }
     }
 }
 
@@ -254,6 +263,7 @@ struct WorkLogDetailView: View {
         }
         .navigationTitle(log.title)
         .compactNavigationTitle()
+        .appTabBarContentInset(AITheme.Spacing.md)
     }
 }
 
@@ -346,6 +356,7 @@ struct ProjectsView: View {
             }
             .navigationTitle("项目")
             .compactNavigationTitle()
+            .appTabBarContentInset(AITheme.Spacing.lg)
             .scrollContentBackground(.hidden)
             .background(AITheme.ColorToken.appBackground)
             .searchable(text: $viewModel.searchText, prompt: "搜索项目、负责人")
@@ -459,6 +470,7 @@ struct ProjectDetailView: View {
         }
         .navigationTitle("项目详情")
         .compactNavigationTitle()
+        .appTabBarContentInset(AITheme.Spacing.md)
     }
 }
 

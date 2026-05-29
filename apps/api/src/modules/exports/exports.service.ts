@@ -328,6 +328,7 @@ export class ExportsService {
       auditLogs,
       aiUsageLogs,
       dataDeletionRequests,
+      feedbackRequests,
       exportTasks
     ] = await Promise.all([
       this.prisma.tenant.findFirst({ where: { id: tenantId, deletedAt: null } }),
@@ -376,6 +377,7 @@ export class ExportsService {
       this.prisma.auditLog.findMany({ where: { tenantId }, orderBy: [{ createdAt: "asc" }] }),
       this.prisma.aiUsageLog.findMany({ where: { tenantId }, orderBy: [{ createdAt: "asc" }] }),
       this.prisma.dataDeletionRequest.findMany({ where: { tenantId, deletedAt: null }, orderBy: [{ createdAt: "asc" }] }),
+      this.prisma.feedbackRequest.findMany({ where: { tenantId, deletedAt: null }, orderBy: [{ createdAt: "asc" }] }),
       this.prisma.exportTask.findMany({
         where: { tenantId, deletedAt: null },
         select: {
@@ -415,12 +417,13 @@ export class ExportsService {
       auditLogs,
       aiUsageLogs,
       dataDeletionRequests,
+      feedbackRequests,
       exportTasks
     };
   }
 
   private async exportSelf(user: Pick<CurrentUser, "id" | "tenantId">) {
-    const [tenant, account, workLogs, reports, notifications, dataDeletionRequests, exportTasks] = await Promise.all([
+    const [tenant, account, workLogs, reports, notifications, dataDeletionRequests, feedbackRequests, exportTasks] = await Promise.all([
       this.prisma.tenant.findFirst({ where: { id: user.tenantId, deletedAt: null }, select: { id: true, name: true, code: true } }),
       this.prisma.user.findFirst({
         where: { id: user.id, tenantId: user.tenantId, deletedAt: null },
@@ -457,6 +460,10 @@ export class ExportsService {
         where: { tenantId: user.tenantId, requesterId: user.id, deletedAt: null },
         orderBy: [{ createdAt: "asc" }]
       }),
+      this.prisma.feedbackRequest.findMany({
+        where: { tenantId: user.tenantId, requesterId: user.id, deletedAt: null },
+        orderBy: [{ createdAt: "asc" }]
+      }),
       this.prisma.exportTask.findMany({
         where: { tenantId: user.tenantId, requesterId: user.id, deletedAt: null },
         select: {
@@ -487,6 +494,7 @@ export class ExportsService {
       reports,
       notifications,
       dataDeletionRequests,
+      feedbackRequests,
       exportTasks
     };
   }

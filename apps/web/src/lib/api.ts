@@ -47,6 +47,9 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   if (normalized.includes("payment is not configured") || normalized.includes("支付暂未配置") || normalized.includes("支付配置不完整")) {
     return "当前支付方式暂未开通，请先切换其他支付方式，或联系运维人员完成商户配置。";
   }
+  if (normalized.includes("当前密码不正确")) {
+    return "当前密码不正确，请重新输入旧密码后再更新。";
+  }
   if (normalized.includes("live payments must be confirmed") || normalized.includes("provider callback")) {
     return "生产支付需要等待支付平台回调确认，请完成扫码支付后稍等几秒并刷新支付状态。";
   }
@@ -55,6 +58,9 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   }
   if (normalized.includes("export task not found")) {
     return "没有找到这个导出任务，可能已过期。请重新创建导出任务。";
+  }
+  if (normalized.includes("feedback request not found")) {
+    return "没有找到这条反馈记录，可能已被处理或删除。请刷新问题反馈列表后重试。";
   }
   if (normalized.includes("notification not found")) {
     return "这条通知已经不存在，请刷新通知列表。";

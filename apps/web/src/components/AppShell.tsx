@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Tooltip, Typography } from "antd";
+import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Sparkles, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -141,28 +141,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <Layout className="min-h-screen">
+    <Layout className="app-frame h-screen min-h-0 overflow-hidden">
       <Sider
-        width={296}
-        collapsedWidth={88}
+        width={248}
+        collapsedWidth={72}
         collapsed={collapsed}
         trigger={null}
         className="app-sidebar border-r border-line bg-surface"
       >
-        <div className="flex min-h-screen flex-col">
-          <div className={`flex h-[76px] items-center gap-3 ${collapsed ? "justify-center px-3" : "px-5"}`}>
+        <div className="flex h-screen min-h-0 flex-col">
+          <div className={`flex h-[76px] shrink-0 items-center gap-3 ${collapsed ? "justify-center px-3" : "px-4"}`}>
             <div className={`flex h-8 shrink-0 items-center ${collapsed ? "w-12 justify-center" : "w-28"}`}>
               <img src={tenantLogoSrc} alt={tenantLogoAlt} className="h-7 w-full object-contain opacity-90" />
             </div>
-            {!collapsed ? (
-              <div className="min-w-0">
-                <Typography.Text className="block truncate text-base font-medium text-ink">Work Calendar AI</Typography.Text>
-                <Typography.Text className="app-sidebar-subtext block text-xs text-muted">{user.tenantName}</Typography.Text>
-              </div>
-            ) : null}
           </div>
 
-          <div className="px-3">
+          <div className="shrink-0 px-3">
             <Tooltip title={collapsed ? (user.departmentName ?? "全公司") : undefined} placement="right">
               <div className={`mb-3 rounded-[18px] bg-surface-container ${collapsed ? "px-2 py-2 text-center" : "flex items-center justify-between gap-2 px-4 py-3"}`}>
                 <div className="min-w-0">
@@ -174,33 +168,35 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Tooltip>
           </div>
 
-          <div className="sidebar-menu-section">
-            {!collapsed ? <div className="sidebar-menu-label">日常工作</div> : null}
-            <Menu
-              mode="inline"
-              inlineCollapsed={collapsed}
-              selectedKeys={selectedKeys}
-              items={dailyNavItems}
-              onClick={(item) => router.push(item.key)}
-              className="material-nav border-r-0 bg-transparent px-3"
-            />
-          </div>
-
-          {canUseAdminMenu ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
             <div className="sidebar-menu-section">
-              {!collapsed ? <div className="sidebar-menu-label">企业管理</div> : null}
+              {!collapsed ? <div className="sidebar-menu-label">日常工作</div> : null}
               <Menu
                 mode="inline"
                 inlineCollapsed={collapsed}
                 selectedKeys={selectedKeys}
-                items={adminNavItems}
+                items={dailyNavItems}
                 onClick={(item) => router.push(item.key)}
                 className="material-nav border-r-0 bg-transparent px-3"
               />
             </div>
-          ) : null}
 
-          <div className="mt-auto px-3 pb-4">
+            {canUseAdminMenu ? (
+              <div className="sidebar-menu-section">
+                {!collapsed ? <div className="sidebar-menu-label">企业管理</div> : null}
+                <Menu
+                  mode="inline"
+                  inlineCollapsed={collapsed}
+                  selectedKeys={selectedKeys}
+                  items={adminNavItems}
+                  onClick={(item) => router.push(item.key)}
+                  className="material-nav border-r-0 bg-transparent px-3"
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="shrink-0 px-3 pb-4">
             <div className={`mb-3 flex items-center gap-2 rounded-[18px] bg-surface-container p-2 ${collapsed ? "justify-center" : ""}`}>
               <Dropdown
                 menu={{
@@ -277,8 +273,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </Sider>
-      <Layout>
-        <div className="mobile-app-bar">
+      <Layout className="min-h-0 overflow-hidden">
+        <div className="mobile-app-bar shrink-0">
           <Button type="text" shape="circle" icon={<MenuIcon size={18} />} onClick={() => setMobileNavOpen(true)} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-ink">Work Calendar AI</div>
@@ -341,7 +337,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             退出登录
           </Button>
         </Drawer>
-        <Content className={`app-content px-6 py-5 ${isCalendarHome ? "calendar-home-content" : ""}`}>
+        <Content className={`app-content min-h-0 overflow-y-auto px-6 py-5 ${isCalendarHome ? "calendar-home-content" : ""}`}>
           <div className="mx-auto max-w-[1440px]">{children}</div>
         </Content>
       </Layout>

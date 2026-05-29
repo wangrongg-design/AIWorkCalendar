@@ -20,8 +20,10 @@ struct RootView: View {
 }
 
 struct MainTabView: View {
+    @EnvironmentObject private var auth: AuthStore
     @State private var selectedTab: AppTab = .calendar
     @State private var reportDateKey: String?
+    @State private var didApplyInitialTab = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -29,6 +31,9 @@ struct MainTabView: View {
                 onCreateReport: { dateKey in
                     reportDateKey = dateKey
                     selectedTab = .entry
+                },
+                onOpenLogs: {
+                    selectedTab = .logs
                 },
                 onOpenProjects: {
                     selectedTab = .projects
@@ -64,6 +69,20 @@ struct MainTabView: View {
                 .tag(AppTab.profile)
         }
         .tint(AITheme.ColorToken.primary)
+        .task {
+            applyInitialTabIfNeeded()
+        }
+        .onChange(of: auth.user) {
+            applyInitialTabIfNeeded()
+        }
+    }
+
+    private func applyInitialTabIfNeeded() {
+        guard !didApplyInitialTab, auth.user != nil else {
+            return
+        }
+        selectedTab = .calendar
+        didApplyInitialTab = true
     }
 }
 
@@ -87,10 +106,10 @@ struct ProfileView: View {
                         ProfileHeader(user: user)
 
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.sm) {
-                            MetricTile(title: "今日填报", value: "\(viewModel.todayLogs.count)", systemImage: "doc.text", tint: AITheme.ColorToken.primary)
-                            MetricTile(title: "今日工时", value: "\(viewModel.todayHoursText)h", systemImage: "clock", tint: AITheme.ColorToken.primaryHover)
-                            MetricTile(title: "风险信号", value: "\(viewModel.todayRiskCount)", systemImage: "exclamationmark.triangle", tint: viewModel.todayRiskCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.success)
-                            MetricTile(title: "近 7 日", value: "\(viewModel.weeklyHoursText)h", systemImage: "chart.line.uptrend.xyaxis", tint: AITheme.ColorToken.ai)
+                            MetricTile(title: "今日填报", value: "\(viewModel.todayLogs.count)", systemImage: "doc.text", tint: AITheme.ColorToken.success)
+                            MetricTile(title: "今日工时", value: "\(viewModel.todayHoursText)h", systemImage: "clock", tint: AITheme.ColorToken.ink500)
+                            MetricTile(title: "风险信号", value: "\(viewModel.todayRiskCount)", systemImage: "exclamationmark.triangle", tint: viewModel.todayRiskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success)
+                            MetricTile(title: "近 7 日", value: "\(viewModel.weeklyHoursText)h", systemImage: "chart.line.uptrend.xyaxis", tint: AITheme.ColorToken.ink500)
                         }
 
                         CompactAIActionPanel(
@@ -130,8 +149,10 @@ struct ProfileView: View {
                     .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
                 }
                 .padding(AITheme.Spacing.lg)
+                .padding(.bottom, AITheme.Spacing.lg)
             }
             .background(AITheme.ColorToken.appBackground)
+            .appTabBarContentInset(AITheme.Spacing.lg)
             .navigationTitle("我的")
             .compactNavigationTitle()
             .overlay {

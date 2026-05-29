@@ -21,6 +21,7 @@
 		A10000000000000000000112 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000062 /* Assets.xcassets */; };
 		A10000000000000000000113 /* AppDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000063 /* AppDesign.swift */; };
 		A10000000000000000000114 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000065 /* AppConfig.swift */; };
+		A10000000000000000000115 /* VoiceInputManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000066 /* VoiceInputManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		A10000000000000000000063 /* AppDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDesign.swift; sourceTree = "<group>"; };
 		A10000000000000000000064 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000065 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		A10000000000000000000066 /* VoiceInputManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +87,7 @@
 				A10000000000000000000061 /* ListViews.swift */,
 				A10000000000000000000063 /* AppDesign.swift */,
 				A10000000000000000000065 /* AppConfig.swift */,
+				A10000000000000000000066 /* VoiceInputManager.swift */,
 				A10000000000000000000064 /* Info.plist */,
 				A10000000000000000000062 /* Assets.xcassets */,
 			);
@@ -173,6 +176,7 @@
 				A10000000000000000000111 /* ListViews.swift in Sources */,
 				A10000000000000000000113 /* AppDesign.swift in Sources */,
 				A10000000000000000000114 /* AppConfig.swift in Sources */,
+				A10000000000000000000115 /* VoiceInputManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

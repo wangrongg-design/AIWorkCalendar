@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
-import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, MessageSquare, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
@@ -21,6 +21,10 @@ import {
   Department,
   ExportTask,
   ExportTaskStatus,
+  FeedbackCategory,
+  FeedbackPriority,
+  FeedbackRequest,
+  FeedbackStatus,
   OrgUser,
   PaymentProvider,
   RoleCode,
@@ -59,6 +63,19 @@ type DataDeletionForm = {
 type ChangePasswordForm = {
   currentPassword: string;
   newPassword: string;
+};
+
+type FeedbackForm = {
+  category: FeedbackCategory;
+  priority?: FeedbackPriority;
+  title: string;
+  content: string;
+  contact?: string;
+};
+
+type FeedbackStatusForm = {
+  status: FeedbackStatus;
+  resolution?: string;
 };
 
 const roleOptions: Array<{ value: RoleCode; label: string }> = [
@@ -160,6 +177,30 @@ const exportTaskStatusLabels: Record<ExportTaskStatus, string> = {
   EXPIRED: "已过期"
 };
 
+const feedbackCategoryOptions: Array<{ value: FeedbackCategory; label: string }> = [
+  { value: "BUG", label: "功能异常" },
+  { value: "ACCOUNT_PERMISSION", label: "账号权限" },
+  { value: "DATA_RIGHTS", label: "数据权益" },
+  { value: "BILLING", label: "计费订阅" },
+  { value: "PRIVACY_SECURITY", label: "隐私安全" },
+  { value: "SUGGESTION", label: "产品建议" },
+  { value: "OTHER", label: "其他问题" }
+];
+
+const feedbackPriorityOptions: Array<{ value: FeedbackPriority; label: string; color: string }> = [
+  { value: "LOW", label: "一般", color: "default" },
+  { value: "NORMAL", label: "普通", color: "blue" },
+  { value: "HIGH", label: "重要", color: "orange" },
+  { value: "URGENT", label: "紧急", color: "red" }
+];
+
+const feedbackStatusOptions: Array<{ value: FeedbackStatus; label: string; color: string }> = [
+  { value: "SUBMITTED", label: "已提交", color: "orange" },
+  { value: "PROCESSING", label: "处理中", color: "blue" },
+  { value: "RESOLVED", label: "已解决", color: "green" },
+  { value: "CLOSED", label: "已关闭", color: "default" }
+];
+
 function optionLabel<T extends string>(options: Array<{ value: T; label: string }>, value?: T) {
   return options.find((item) => item.value === value)?.label ?? value ?? "-";
 }
@@ -187,6 +228,11 @@ function moneyText(amountCents?: number, currency = "CNY") {
     currency,
     minimumFractionDigits: 2
   }).format(amountCents / 100);
+}
+
+function subscriptionPeriodText(period?: BillingOrderPayment["subscriptionPeriod"]) {
+  if (!period) return "待支付成功后确认";
+  return `${dateText(period.startDate)} 至 ${dateText(period.endDate)}`;
 }
 
 function planPrice(plan: BillingPlan) {
@@ -223,14 +269,18 @@ export default function OrgPage() {
   const [billingOrderForm] = Form.useForm<BillingOrderForm>();
   const [dataDeletionForm] = Form.useForm<DataDeletionForm>();
   const [changePasswordForm] = Form.useForm<ChangePasswordForm>();
+  const [feedbackForm] = Form.useForm<FeedbackForm>();
+  const [feedbackStatusForm] = Form.useForm<FeedbackStatusForm>();
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [editingUser, setEditingUser] = useState<OrgUser | null>(null);
+  const [handlingFeedback, setHandlingFeedback] = useState<FeedbackRequest | null>(null);
   const [tenantModalOpen, setTenantModalOpen] = useState(false);
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
   const [billingOrderModalOpen, setBillingOrderModalOpen] = useState(false);
   const [dataDeletionModalOpen, setDataDeletionModalOpen] = useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [checkoutProvider, setCheckoutProvider] = useState<"ALIPAY" | "WECHAT">("WECHAT");
   const [checkout, setCheckout] = useState<BillingOrderPayment | null>(null);
   const [checkoutRefreshing, setCheckoutRefreshing] = useState(false);
@@ -244,6 +294,15 @@ export default function OrgPage() {
     () => org.data?.departments.map((item) => ({ value: item.id, label: item.name })) ?? [],
     [org.data?.departments]
   );
+
+  const departmentById = useMemo(() => {
+    return new Map((org.data?.departments ?? []).map((item) => [item.id, item]));
+  }, [org.data?.departments]);
+
+  const departmentParentName = (departmentId?: string | null) => {
+    const department = departmentId ? departmentById.get(departmentId) : null;
+    return department?.parentId ? departmentById.get(department.parentId)?.name ?? "上级部门已移除" : "无上级部门";
+  };
 
   const billingOrders = useQuery({
     queryKey: ["billing-orders"],
@@ -287,6 +346,12 @@ export default function OrgPage() {
     queryFn: () => apiFetch<ExportTask[]>("/exports/data-tasks"),
     enabled: Boolean(user),
     refetchInterval: 5000
+  });
+
+  const feedbackRequests = useQuery({
+    queryKey: ["feedback-requests"],
+    queryFn: () => apiFetch<FeedbackRequest[]>("/feedback/requests"),
+    enabled: Boolean(user)
   });
 
   useEffect(() => {
@@ -460,6 +525,34 @@ export default function OrgPage() {
     }
   });
 
+  const createFeedback = useMutation({
+    mutationFn: (values: FeedbackForm) =>
+      apiFetch<FeedbackRequest>("/feedback/requests", {
+        method: "POST",
+        body: JSON.stringify(values)
+      }),
+    onSuccess: () => {
+      message.success("问题反馈已提交");
+      setFeedbackModalOpen(false);
+      feedbackForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["feedback-requests"] });
+    }
+  });
+
+  const updateFeedbackStatus = useMutation({
+    mutationFn: ({ id, values }: { id: string; values: FeedbackStatusForm }) =>
+      apiFetch<FeedbackRequest>(`/feedback/requests/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify(values)
+      }),
+    onSuccess: () => {
+      message.success("反馈处理状态已更新");
+      setHandlingFeedback(null);
+      feedbackStatusForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["feedback-requests"] });
+    }
+  });
+
   const changePassword = useMutation({
     mutationFn: (values: ChangePasswordForm) =>
       apiFetch<{ ok: boolean }>("/auth/change-password", {
@@ -541,7 +634,12 @@ export default function OrgPage() {
   const checkoutIsMock = checkout?.payment?.mode === "mock" || !checkout?.payment?.mode;
 
   const departmentColumns: ColumnsType<Department> = [
-    { title: "部门", dataIndex: "name" },
+    { title: "当前部门", dataIndex: "name", width: 220 },
+    {
+      title: "上级部门",
+      width: 220,
+      render: (_, record) => departmentParentName(record.id)
+    },
     {
       title: "操作",
       width: 110,
@@ -562,7 +660,19 @@ export default function OrgPage() {
   const userColumns: ColumnsType<OrgUser> = [
     { title: "姓名", dataIndex: "name", width: 140 },
     { title: "联系方式", width: 260, render: (_, record) => contactText(record) },
-    { title: "部门", dataIndex: "departmentName", width: 150, render: (value: string | null) => value ?? "未分配" },
+    {
+      title: "部门",
+      width: 220,
+      render: (_, record) =>
+        record.departmentId ? (
+          <div>
+            <div className="font-medium text-ink">{record.departmentName ?? "未命名部门"}</div>
+            <div className="mt-1 text-xs text-muted">上级：{departmentParentName(record.departmentId)}</div>
+          </div>
+        ) : (
+          "未分配"
+        )
+    },
     {
       title: "角色",
       dataIndex: "roles",
@@ -688,6 +798,79 @@ export default function OrgPage() {
           <Typography.Text type="danger" className="text-xs">
             {record.error ?? "生成失败"}
           </Typography.Text>
+        ) : (
+          "-"
+        )
+    }
+  ];
+
+  const feedbackColumns: ColumnsType<FeedbackRequest> = [
+    {
+      title: "类型",
+      dataIndex: "category",
+      width: 120,
+      render: (value: FeedbackCategory) => optionLabel(feedbackCategoryOptions, value)
+    },
+    {
+      title: "反馈内容",
+      dataIndex: "title",
+      render: (_, record) => (
+        <div className="min-w-0">
+          <div className="font-medium text-ink">{record.title}</div>
+          <div className="mt-1 text-xs leading-5 text-muted">{record.content.length > 120 ? `${record.content.slice(0, 120)}...` : record.content}</div>
+          {record.resolution ? <div className="mt-1 text-xs leading-5 text-success">处理说明：{record.resolution}</div> : null}
+        </div>
+      )
+    },
+    ...(canManage
+      ? [
+          {
+            title: "提交人",
+            width: 180,
+            render: (_: unknown, record: FeedbackRequest) => (
+              <div>
+                <div className="text-sm text-ink">{record.requester?.name ?? "-"}</div>
+                <div className="mt-1 text-xs text-muted">{record.requester?.department?.name ?? "未分配部门"}</div>
+                {record.contact ? <div className="mt-1 text-xs text-muted">{record.contact}</div> : null}
+              </div>
+            )
+          }
+        ]
+      : []),
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      width: 100,
+      render: (value: FeedbackPriority) => {
+        const option = feedbackPriorityOptions.find((item) => item.value === value);
+        return <Tag color={option?.color ?? "default"}>{option?.label ?? value}</Tag>;
+      }
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 110,
+      render: (value: FeedbackStatus) => {
+        const option = feedbackStatusOptions.find((item) => item.value === value);
+        return <Tag color={option?.color ?? "default"}>{option?.label ?? value}</Tag>;
+      }
+    },
+    { title: "提交时间", dataIndex: "createdAt", width: 170, render: dateTimeText },
+    {
+      title: "操作",
+      width: 110,
+      render: (_, record) =>
+        canManage ? (
+          <Button
+            size="small"
+            aria-label="处理"
+            onClick={() => {
+              setHandlingFeedback(record);
+              feedbackStatusForm.setFieldsValue({ status: record.status, resolution: record.resolution ?? undefined });
+            }}
+          >
+            处理
+          </Button>
         ) : (
           "-"
         )
@@ -857,6 +1040,49 @@ export default function OrgPage() {
                   columns={userColumns}
                   locale={{ emptyText: <Empty description="暂无员工" /> }}
                   pagination={{ pageSize: 8 }}
+                />
+              </div>
+            )
+          },
+          {
+            key: "feedback",
+            label: "问题反馈",
+            children: (
+              <div className="space-y-3">
+                <div className="surface-panel p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex min-w-0 gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-primary-container text-primary">
+                        <MessageSquare size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-ink">用户权益与问题反馈</div>
+                        <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
+                          可提交功能异常、账号权限、数据权益、计费订阅、隐私安全等问题。反馈会保留提交人与处理状态，企业管理员可跟进闭环。
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      type="primary"
+                      className="w-full shrink-0 lg:w-auto"
+                      icon={<MessageSquare size={16} />}
+                      onClick={() => {
+                        feedbackForm.resetFields();
+                        feedbackForm.setFieldsValue({ category: "DATA_RIGHTS", priority: "NORMAL" });
+                        setFeedbackModalOpen(true);
+                      }}
+                    >
+                      提交反馈
+                    </Button>
+                  </div>
+                </div>
+                <Table
+                  rowKey="id"
+                  loading={feedbackRequests.isFetching}
+                  dataSource={feedbackRequests.data ?? []}
+                  columns={feedbackColumns}
+                  locale={{ emptyText: <Empty description="暂无问题反馈" /> }}
+                  pagination={{ pageSize: 6 }}
                 />
               </div>
             )
@@ -1263,6 +1489,10 @@ export default function OrgPage() {
               <div className="mt-2 text-sm text-muted">
                 {planLabel(checkout.order.plan)} · {optionLabel(billingIntervalOptions, checkout.order.interval)} · {checkout.order.seatLimit} 位启用成员
               </div>
+              <div className="mt-2 text-sm text-muted">
+                本次订阅有效期：{checkout.order.status === "PAID" ? "" : "支付成功后 "}
+                {subscriptionPeriodText(checkout.subscriptionPeriod)}
+              </div>
             </div>
               <div className="flex flex-col items-center rounded-[8px] border border-line bg-white p-5 text-center">
                 <div className="flex min-h-44 w-44 items-center justify-center rounded-[8px] border border-line bg-white p-2">
@@ -1304,6 +1534,73 @@ export default function OrgPage() {
               ) : null}
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        title="提交问题反馈"
+        open={feedbackModalOpen}
+        onCancel={() => setFeedbackModalOpen(false)}
+        onOk={() => feedbackForm.submit()}
+        confirmLoading={createFeedback.isPending}
+        width={640}
+      >
+        {createFeedback.error ? <Alert className="mb-4" type="error" showIcon message={(createFeedback.error as Error).message} /> : null}
+        <Form form={feedbackForm} layout="vertical" onFinish={(values) => createFeedback.mutate(values)}>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Form.Item name="category" label="问题类型" rules={[{ required: true, message: "请选择问题类型" }]}>
+              <Select options={feedbackCategoryOptions} />
+            </Form.Item>
+            <Form.Item name="priority" label="优先级" rules={[{ required: true, message: "请选择优先级" }]}>
+              <Select options={feedbackPriorityOptions.map(({ value, label }) => ({ value, label }))} />
+            </Form.Item>
+          </div>
+          <Form.Item name="title" label="反馈标题" rules={[{ required: true, min: 2, max: 120 }]}>
+            <Input placeholder="例如：无法下载企业备份" />
+          </Form.Item>
+          <Form.Item name="content" label="问题说明" rules={[{ required: true, min: 5, max: 3000 }]}>
+            <Input.TextArea rows={5} maxLength={3000} showCount placeholder="请说明发生时间、页面位置、影响范围和期望处理结果。" />
+          </Form.Item>
+          <Form.Item name="contact" label="备用联系方式">
+            <Input maxLength={200} placeholder="可填写手机号、邮箱或企业内部联系方式" />
+          </Form.Item>
+          <Alert type="info" showIcon message="反馈只在当前企业内流转，普通员工只能查看自己提交的反馈。" />
+        </Form>
+      </Modal>
+
+      <Modal
+        title="处理问题反馈"
+        open={Boolean(handlingFeedback)}
+        onCancel={() => {
+          setHandlingFeedback(null);
+          feedbackStatusForm.resetFields();
+        }}
+        onOk={() => feedbackStatusForm.submit()}
+        confirmLoading={updateFeedbackStatus.isPending}
+        width={640}
+      >
+        {handlingFeedback ? (
+          <div className="mb-4 rounded-[8px] border border-line bg-surface-container p-4">
+            <div className="text-sm font-medium text-ink">{handlingFeedback.title}</div>
+            <div className="mt-2 text-sm leading-6 text-muted">{handlingFeedback.content}</div>
+          </div>
+        ) : null}
+        {updateFeedbackStatus.error ? <Alert className="mb-4" type="error" showIcon message={(updateFeedbackStatus.error as Error).message} /> : null}
+        <Form
+          form={feedbackStatusForm}
+          layout="vertical"
+          onFinish={(values) => {
+            if (handlingFeedback) {
+              updateFeedbackStatus.mutate({ id: handlingFeedback.id, values });
+            }
+          }}
+        >
+          <Form.Item name="status" label="处理状态" rules={[{ required: true, message: "请选择处理状态" }]}>
+            <Select options={feedbackStatusOptions.map(({ value, label }) => ({ value, label }))} />
+          </Form.Item>
+          <Form.Item name="resolution" label="处理说明">
+            <Input.TextArea rows={4} maxLength={1000} showCount placeholder="例如：已修复，请刷新后重试；或说明后续处理安排。" />
+          </Form.Item>
+        </Form>
       </Modal>
 
       <Modal

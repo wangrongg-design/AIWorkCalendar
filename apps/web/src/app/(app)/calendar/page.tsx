@@ -5,12 +5,12 @@ import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, S
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
 import { Bot, CalendarPlus, CheckCircle2, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft } from "@/lib/types";
+import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type OrgResponse = {
@@ -135,9 +135,28 @@ function toWorkLogPayload(values: WorkLogForm) {
   };
 }
 
+function normalizedDraftItems(draft: WorkLogDraft): WorkLogDraftItem[] {
+  return draft.items?.length ? draft.items : [draft];
+}
+
+function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
+  const date = dayjs(item.date);
+  const safeDate = date.isValid() ? date : dayjs();
+  const hours = Number(item.hours);
+  return {
+    date: safeDate,
+    title: item.title || "工作填报",
+    content: item.content || item.title || "工作填报",
+    hours: Number.isFinite(hours) ? hours : 1,
+    startTime: parseWorkLogTime(item.startTime, safeDate),
+    endTime: parseWorkLogTime(item.endTime, safeDate)
+  };
+}
+
 export default function CalendarPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const [quickFillForm] = Form.useForm<WorkLogForm>();
   const today = dayjs().format("YYYY-MM-DD");
@@ -158,7 +177,7 @@ export default function CalendarPage() {
   const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([
     {
       role: "assistant",
-      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
+      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
     }
   ]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
@@ -170,6 +189,15 @@ export default function CalendarPage() {
       content: "可以直接问我：本月团队重点、今天风险、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
     }
   ]);
+
+  useEffect(() => {
+    const dateParam = searchParams.get("date");
+    if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
+    const nextDate = dayjs(dateParam);
+    if (!nextDate.isValid()) return;
+    setMonth(nextDate);
+    setSelectedDate(dateParam);
+  }, [searchParams]);
 
   const org = useQuery({
     queryKey: ["org"],
@@ -219,15 +247,20 @@ export default function CalendarPage() {
     }
   };
 
-  const createWorkLog = useMutation({
-    mutationFn: async (values: WorkLogForm) => {
-      const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toWorkLogPayload(values)) });
+  const createAndSubmitWorkLog = async (values: WorkLogForm, withAttachments: boolean) => {
+    const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toWorkLogPayload(values)) });
+    if (withAttachments) {
       await uploadPendingAttachments(workLog.id);
-      return workLog;
-    },
+    }
+    return apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" });
+  };
+
+  const createWorkLog = useMutation({
+    mutationFn: (values: WorkLogForm) => createAndSubmitWorkLog(values, true),
     onSuccess: () => {
-      message.success("已保存填报");
+      message.success("已填报，AI 将自动分析。");
       setQuickFillOpen(false);
+      setPendingAttachments([]);
       quickFillForm.resetFields();
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
@@ -235,30 +268,42 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "保存失败，请检查内容后重试。");
+      message.error(error instanceof Error ? error.message : "填报失败，请检查内容后重试。");
     }
   });
 
   const draftWorkLog = useMutation({
-    mutationFn: (messages: AiDraftMessage[]) =>
-      apiFetch<WorkLogDraft>("/ai/work-log-draft", {
+    mutationFn: async (messages: AiDraftMessage[]) => {
+      const draft = await apiFetch<WorkLogDraft>("/ai/work-log-draft", {
         method: "POST",
         body: JSON.stringify({
           currentDate: dayjs().format("YYYY-MM-DD"),
           messages
         })
-      }),
-    onSuccess: (draft) => {
-      quickFillForm.setFieldsValue({
-        date: dayjs(draft.date),
-        title: draft.title,
-        content: draft.content,
-        hours: Number(draft.hours),
-        startTime: parseWorkLogTime(draft.startTime),
-        endTime: parseWorkLogTime(draft.endTime)
       });
+      const items = normalizedDraftItems(draft);
+      const attachedToFirst = pendingAttachments.length > 0 && items.length > 1;
+      for (const [index, item] of items.entries()) {
+        await createAndSubmitWorkLog(draftItemToForm(item), index === 0);
+      }
+      return { draft, count: items.length, attachedToFirst };
+    },
+    onSuccess: ({ draft, count, attachedToFirst }) => {
       setQuickFillAiMessages((messages) => [...messages, { role: "assistant", content: draft.assistantMessage }]);
-      message.success(draft.kind === "PLAN" ? "已生成计划草稿" : "已生成日报草稿");
+      message.success(count > 1 ? `已填报 ${count} 条，AI 将自动分析。` : "已填报，AI 将自动分析。");
+      if (attachedToFirst) {
+        message.info("检测到多条日程，附件已关联到第一条填报。");
+      }
+      setQuickFillOpen(false);
+      setPendingAttachments([]);
+      quickFillForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-day"] });
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "AI 填报失败，请调整描述后重试。");
     }
   });
 
@@ -435,7 +480,7 @@ export default function CalendarPage() {
     setQuickFillAiMessages([
       {
         role: "assistant",
-        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么。我会整理成可提交的日报或计划草稿。"
+        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
       }
     ]);
     setQuickFillOpen(true);
@@ -593,7 +638,9 @@ export default function CalendarPage() {
           setPendingAttachments([]);
         }}
         onOk={() => quickFillForm.submit()}
-        confirmLoading={createWorkLog.isPending}
+        okText="填报"
+        cancelText="取消"
+        confirmLoading={createWorkLog.isPending || draftWorkLog.isPending}
         width={880}
       >
         <Form
@@ -634,7 +681,7 @@ export default function CalendarPage() {
                 }}
               />
               <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
-                生成草稿
+                直接填报
               </Button>
             </div>
           </div>

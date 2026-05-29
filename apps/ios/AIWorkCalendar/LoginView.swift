@@ -75,7 +75,7 @@ struct LoginView: View {
 
 private struct LoginBackground: View {
     var body: some View {
-        Color(red: 0.12, green: 0.12, blue: 0.12)
+        AITheme.ColorToken.loginBackground
             .ignoresSafeArea()
     }
 }
@@ -96,11 +96,11 @@ private struct LoginBrandMark: View {
             VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
                 Text("AIWorkCalendar")
                     .font(.system(size: 17, weight: .semibold, design: .default))
-                    .foregroundStyle(AITheme.ColorToken.gray4)
+                    .foregroundStyle(AITheme.ColorToken.loginMuted)
 
                 Text("开启你的AI之旅")
                     .font(AITheme.Typography.title)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AITheme.ColorToken.loginText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                     .accessibilityAddTraits(.isHeader)
@@ -157,10 +157,10 @@ private struct LoginFooter: View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xxs) {
             Text(AppConfig.companyName)
                 .font(AITheme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Color.white.opacity(0.72))
+                .foregroundStyle(AITheme.ColorToken.loginMuted)
             Text(AppConfig.productLine)
                 .font(.caption2)
-                .foregroundStyle(Color.white.opacity(0.42))
+                .foregroundStyle(AITheme.ColorToken.loginSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -175,7 +175,7 @@ private struct LoginLabeledTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
             LoginFieldLabel(title)
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.white.opacity(0.32)))
+            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(AITheme.ColorToken.loginPlaceholder))
                 .textFieldStyle(LoginFlatTextFieldStyle())
         }
     }
@@ -193,9 +193,9 @@ private struct LoginPasswordField: View {
             HStack(spacing: AITheme.Spacing.xs) {
                 Group {
                     if showsPassword {
-                        TextField("", text: $password, prompt: Text("请输入密码").foregroundStyle(Color.white.opacity(0.32)))
+                        TextField("", text: $password, prompt: Text("请输入密码").foregroundStyle(AITheme.ColorToken.loginPlaceholder))
                     } else {
-                        SecureField("", text: $password, prompt: Text("请输入密码").foregroundStyle(Color.white.opacity(0.32)))
+                        SecureField("", text: $password, prompt: Text("请输入密码").foregroundStyle(AITheme.ColorToken.loginPlaceholder))
                     }
                 }
                 .textContentType(.password)
@@ -207,7 +207,7 @@ private struct LoginPasswordField: View {
                 } label: {
                     Image(systemName: showsPassword ? "eye.slash" : "eye")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .foregroundStyle(AITheme.ColorToken.loginMuted)
                         .frame(width: AITheme.Layout.minTouchTarget, height: AITheme.Layout.minTouchTarget)
                 }
                 .buttonStyle(.plain)
@@ -217,14 +217,14 @@ private struct LoginPasswordField: View {
             .padding(.leading, AITheme.Spacing.md)
             .padding(.trailing, 4)
             .frame(minHeight: AITheme.Layout.minTouchTarget + 10)
-            .background(Color.white.opacity(0.08))
+            .background(AITheme.ColorToken.loginFieldBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                    .stroke(AITheme.ColorToken.loginFieldBorder, lineWidth: 1)
             }
-            .foregroundStyle(.white)
-            .tint(.white)
+            .foregroundStyle(AITheme.ColorToken.loginText)
+            .tint(AITheme.ColorToken.primary)
         }
     }
 }
@@ -239,7 +239,7 @@ private struct LoginFieldLabel: View {
     var body: some View {
         Text(title)
             .font(AITheme.Typography.caption.weight(.semibold))
-            .foregroundStyle(Color.white.opacity(0.70))
+            .foregroundStyle(AITheme.ColorToken.loginMuted)
     }
 }
 
@@ -249,14 +249,14 @@ private struct LoginFlatTextFieldStyle: TextFieldStyle {
             .font(AITheme.Typography.body)
             .padding(.horizontal, AITheme.Spacing.md)
             .frame(minHeight: AITheme.Layout.minTouchTarget + 10)
-            .background(Color.white.opacity(0.08))
+            .background(AITheme.ColorToken.loginFieldBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                    .stroke(AITheme.ColorToken.loginFieldBorder, lineWidth: 1)
             }
-            .foregroundStyle(.white)
-            .tint(.white)
+            .foregroundStyle(AITheme.ColorToken.loginText)
+            .tint(AITheme.ColorToken.primary)
     }
 }
 
@@ -274,19 +274,19 @@ private struct LoginFlatActionButton: View {
             HStack(spacing: AITheme.Spacing.xs) {
                 if isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AITheme.ColorToken.loginText)
                 } else {
                     Text(title)
                 }
             }
             .font(.headline)
-            .foregroundStyle(isEnabled ? .white : Color.white.opacity(0.50))
+            .foregroundStyle(isEnabled ? AITheme.ColorToken.loginText : AITheme.ColorToken.loginDisabledText)
             .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget + 10)
-            .background(isEnabled ? AITheme.ColorToken.primary : Color.clear)
+            .background(isEnabled ? AITheme.ColorToken.primary : AITheme.ColorToken.loginDisabledBackground)
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                    .stroke(isEnabled ? Color.clear : Color.white.opacity(0.22), lineWidth: 1)
+                    .stroke(isEnabled ? Color.clear : AITheme.ColorToken.loginFieldBorder, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)

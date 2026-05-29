@@ -19,14 +19,26 @@ function dateOnly(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-function addPeriod(interval: BillingInterval) {
-  const date = new Date();
+function addPeriodFrom(date: Date, interval: BillingInterval) {
+  const result = new Date(date);
   if (interval === BillingInterval.YEARLY) {
-    date.setUTCFullYear(date.getUTCFullYear() + 1);
+    result.setUTCFullYear(result.getUTCFullYear() + 1);
   } else {
-    date.setUTCMonth(date.getUTCMonth() + 1);
+    result.setUTCMonth(result.getUTCMonth() + 1);
   }
-  return dateOnly(date);
+  return dateOnly(result);
+}
+
+function addPeriod(interval: BillingInterval) {
+  return addPeriodFrom(new Date(), interval);
+}
+
+function dateKey(date: Date) {
+  return dateOnly(date).toISOString().slice(0, 10);
+}
+
+function metadataObject(value: Prisma.JsonValue | null | undefined) {
+  return typeof value === "object" && value && !Array.isArray(value) ? (value as Prisma.JsonObject) : {};
 }
 
 @Injectable()
@@ -116,7 +128,8 @@ export class BillingService {
       billingModel: "ACTIVE_MEMBER_MONTHLY",
       unitPriceCents,
       activeMemberCount,
-      billedMemberCount
+      billedMemberCount,
+      subscriptionPeriodPreview: this.subscriptionPeriodFrom(new Date(), interval)
     };
     const order = await this.prisma.billingOrder.create({
       data: {
@@ -178,6 +191,7 @@ export class BillingService {
         : null;
     return {
       order,
+      subscriptionPeriod: this.resolveOrderSubscriptionPeriod(order),
       payment:
         rawPayment ??
         (order.paymentUrl
@@ -316,16 +330,32 @@ export class BillingService {
 
   private async applyPaidOrder(
     actorUserId: string | null,
-    order: { id: string; tenantId: string; plan: SubscriptionPlan; interval: BillingInterval; seatLimit: number; amountCents: number; currency: string },
+    order: {
+      id: string;
+      tenantId: string;
+      plan: SubscriptionPlan;
+      interval: BillingInterval;
+      seatLimit: number;
+      amountCents: number;
+      currency: string;
+      metadata?: Prisma.JsonValue | null;
+    },
     provider: PaymentProvider,
     transactionId: string,
     raw: Prisma.InputJsonValue
   ) {
-    const periodEnd = addPeriod(order.interval);
+    const periodStart = dateOnly();
+    const periodEnd = addPeriodFrom(periodStart, order.interval);
+    const subscriptionPeriod = this.subscriptionPeriodFrom(periodStart, order.interval);
+    const orderMetadata = metadataObject(order.metadata);
     await this.prisma.$transaction(async (tx) => {
       await tx.billingOrder.update({
         where: { id: order.id },
-        data: { status: BillingOrderStatus.PAID, paidAt: new Date() }
+        data: {
+          status: BillingOrderStatus.PAID,
+          paidAt: new Date(),
+          metadata: { ...orderMetadata, subscriptionPeriod } as Prisma.InputJsonObject
+        }
       });
       const pending = await tx.paymentRecord.updateMany({
         where: {
@@ -359,7 +389,7 @@ export class BillingService {
           plan: order.plan,
           status: SubscriptionStatus.ACTIVE,
           seatLimit: order.seatLimit,
-          currentPeriodStart: dateOnly(),
+          currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           provider
         },
@@ -368,7 +398,7 @@ export class BillingService {
           plan: order.plan,
           status: SubscriptionStatus.ACTIVE,
           seatLimit: order.seatLimit,
-          currentPeriodStart: dateOnly(),
+          currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           provider
         }
@@ -380,9 +410,41 @@ export class BillingService {
       action: provider === PaymentProvider.MANUAL ? "BILLING_MANUAL_PAYMENT_CONFIRMED" : "BILLING_ONLINE_PAYMENT_CONFIRMED",
       targetType: "BillingOrder",
       targetId: order.id,
-      metadata: { transactionId, provider }
+      metadata: { transactionId, provider, subscriptionPeriod }
     });
     return this.prisma.billingOrder.findFirst({ where: { id: order.id }, include: { payments: true } });
+  }
+
+  private subscriptionPeriodFrom(start: Date, interval: BillingInterval) {
+    const periodStart = dateOnly(start);
+    return {
+      startDate: dateKey(periodStart),
+      endDate: dateKey(addPeriodFrom(periodStart, interval))
+    };
+  }
+
+  private resolveOrderSubscriptionPeriod(order: {
+    status: BillingOrderStatus;
+    interval: BillingInterval;
+    paidAt?: Date | null;
+    metadata?: Prisma.JsonValue | null;
+  }) {
+    const metadata = metadataObject(order.metadata);
+    const savedPeriod = metadata.subscriptionPeriod;
+    if (
+      typeof savedPeriod === "object" &&
+      savedPeriod &&
+      !Array.isArray(savedPeriod) &&
+      typeof savedPeriod.startDate === "string" &&
+      typeof savedPeriod.endDate === "string"
+    ) {
+      return {
+        startDate: savedPeriod.startDate,
+        endDate: savedPeriod.endDate
+      };
+    }
+    const start = order.status === BillingOrderStatus.PAID && order.paidAt ? order.paidAt : new Date();
+    return this.subscriptionPeriodFrom(start, order.interval);
   }
 
   private async updateSubscription(tenantId: string, dto: UpdateSubscriptionDto) {

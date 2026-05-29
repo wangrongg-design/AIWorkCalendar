@@ -51,6 +51,22 @@ fileprivate enum CalendarAnalysisPeriod: String, CaseIterable, Identifiable {
     }
 }
 
+fileprivate enum CalendarHomeMode: String, CaseIterable, Identifiable {
+    case team
+    case mine
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .team:
+            return "团队"
+        case .mine:
+            return "我的"
+        }
+    }
+}
+
 fileprivate struct CalendarPeriodSummary {
     let rangeText: String
     let fillRate: Double
@@ -222,14 +238,34 @@ fileprivate struct CalendarMobileDayItem: Identifiable {
     var summaryText: String {
         if isFuture {
             if totalCount > 0 {
-                return "计划 \(filledCount)/\(totalCount) · 风险 \(riskCount) · 工时 \(hoursText)"
+                var parts = ["计划 \(filledCount)/\(totalCount)"]
+                if riskCount > 0 {
+                    parts.append("风险 \(riskCount)")
+                }
+                if totalHours != nil {
+                    parts.append("工时 \(hoursText)")
+                }
+                return parts.joined(separator: " · ")
             }
-            return "未计划 · 风险 \(riskCount) · 工时 \(hoursText)"
+            return "还没有计划"
         }
         if totalCount > 0 {
-            return "填报 \(filledCount)/\(totalCount) · 未填 \(missingCount) · 风险 \(riskCount) · 工时 \(hoursText)"
+            var parts = ["填报 \(filledCount)/\(totalCount)"]
+            if missingCount > 0 {
+                parts.append("未填 \(missingCount)")
+            }
+            if riskCount > 0 {
+                parts.append("风险 \(riskCount)")
+            }
+            if totalHours != nil {
+                parts.append("工时 \(hoursText)")
+            }
+            return parts.joined(separator: " · ")
         }
-        return "暂无填报记录 · 风险 \(riskCount) · 工时 \(hoursText)"
+        if riskCount > 0 {
+            return "暂无填报记录 · 风险 \(riskCount)"
+        }
+        return "暂无填报记录"
     }
 }
 
@@ -243,6 +279,7 @@ final class CalendarViewModel: ObservableObject {
     @Published var selectedDateKey = DateHelpers.dayKey()
     @Published var weekAnchorDate = Date()
     @Published var dayDetails: [String: CalendarDayDetail] = [:]
+    @Published var recentLogs: [WorkLog] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -271,8 +308,10 @@ final class CalendarViewModel: ObservableObject {
 
     func refresh(auth: AuthStore) async {
         await load(auth: auth)
-        await loadWeekDetails(auth: auth)
+        await loadDetailIfNeeded(DateHelpers.dayKey(), auth: auth)
+        await loadRecentLogsIfNeeded(auth: auth)
         await loadDetailIfNeeded(selectedDateKey, auth: auth)
+        await loadWeekDetails(auth: auth)
     }
 
     func moveMonth(by diff: Int, auth: AuthStore) async {
@@ -294,6 +333,7 @@ final class CalendarViewModel: ObservableObject {
         await ensureLoadedMonth(for: nextAnchor, auth: auth)
         await loadWeekDetails(auth: auth)
         await loadDetailIfNeeded(selectedDateKey, auth: auth)
+        await loadDetailIfNeeded(DateHelpers.dayKey(), auth: auth)
     }
 
     func moveToCurrentWeek(auth: AuthStore) async {
@@ -303,6 +343,7 @@ final class CalendarViewModel: ObservableObject {
         await ensureLoadedMonth(for: today, auth: auth)
         await loadWeekDetails(auth: auth)
         await loadDetailIfNeeded(selectedDateKey, auth: auth)
+        await loadDetailIfNeeded(DateHelpers.dayKey(), auth: auth)
     }
 
     func selectDate(_ date: Date, auth: AuthStore) async {
@@ -311,6 +352,7 @@ final class CalendarViewModel: ObservableObject {
         await ensureLoadedMonth(for: date, auth: auth)
         await loadWeekDetails(auth: auth)
         await loadDetailIfNeeded(selectedDateKey, auth: auth)
+        await loadDetailIfNeeded(DateHelpers.dayKey(), auth: auth)
     }
 
     func loadWeekDetails(auth: AuthStore) async {
@@ -337,8 +379,28 @@ final class CalendarViewModel: ObservableObject {
             return
         }
         month = dateMonth
-        dayDetails = [:]
         await load(auth: auth)
+    }
+
+    private func loadRecentLogsIfNeeded(auth: AuthStore) async {
+        guard scope == .selfScope else {
+            recentLogs = []
+            return
+        }
+        do {
+            let logs: [WorkLog] = try await auth.client().request("/work-logs")
+            recentLogs = Array(
+                logs.sorted { lhs, rhs in
+                    if lhs.date != rhs.date {
+                        return lhs.date > rhs.date
+                    }
+                    return (lhs.submittedAt ?? "") > (rhs.submittedAt ?? "")
+                }
+                .prefix(3)
+            )
+        } catch {
+            recentLogs = []
+        }
     }
 
     var monthTitle: String {
@@ -422,28 +484,35 @@ final class CalendarViewModel: ObservableObject {
     }
 
     var dashboardConclusion: String {
-        guard let todayDay else {
+        let today = todayMobileDay
+        guard today.data != nil || today.detail != nil else {
             return "今天还没有填报信号"
         }
-        return "今日发现 \(todayDay.riskCount) 条风险，\(todayDay.missingCount) 人未填报"
+        if today.riskCount > 0 || today.missingCount > 0 {
+            return "今日发现 \(today.riskCount) 条风险，\(today.missingCount) 人未填报"
+        }
+        if today.filledCount > 0 {
+            return "今日填报覆盖正常，已收到 \(today.referenceRecordCount) 条记录"
+        }
+        return "今天还没有填报信号"
     }
 
     var dashboardRisk: String {
-        if let firstRiskDay {
-            return "建议先查看 \(DateHelpers.shortDayTitle(firstRiskDay.date))，确认风险来源和缺填成员。"
+        let today = todayMobileDay
+        if today.riskCount > 0 {
+            return "建议先查看今天的风险记录，确认项目影响和处理动作。"
         }
-        if missingCount > 0 {
-            return "\(missingCount) 条缺填记录会影响团队状态判断，建议先补齐日报覆盖。"
+        if today.missingCount > 0 {
+            return "\(today.missingCount) 人今天未填报，会影响团队状态判断。"
         }
-        return "暂无明显风险，继续保持日报完整度。"
+        if today.filledCount > 0 {
+            return "暂无明显风险，今日工作信号已进入团队看板。"
+        }
+        return "先完成今天的日报，AI 会同步更新团队节奏。"
     }
 
     var analysisAnchorDate: Date {
-        let currentMonth = DateHelpers.monthKey()
-        if month == currentMonth {
-            return Date()
-        }
-        return DateHelpers.monthFormatter.date(from: month) ?? Date()
+        DateHelpers.dayFormatter.date(from: selectedDateKey) ?? weekAnchorDate
     }
 
     fileprivate func summary(for period: CalendarAnalysisPeriod) -> CalendarPeriodSummary {
@@ -451,12 +520,13 @@ final class CalendarViewModel: ObservableObject {
         let startKey = DateHelpers.dayKey(range.start)
         let endKey = DateHelpers.dayKey(range.end)
         let periodDays = days.filter { $0.date >= startKey && $0.date <= endKey }
-        let filled = periodDays.reduce(0) { $0 + $1.filledCount }
-        let missing = periodDays.reduce(0) { $0 + $1.missingCount }
-        let risks = periodDays.reduce(0) { $0 + $1.riskCount }
+        let weekItems = period == .week ? weekDatesFor(analysisAnchorDate).map { mobileDayItem(for: $0) } : []
+        let filled = period == .week ? weekItems.reduce(0) { $0 + $1.filledCount } : periodDays.reduce(0) { $0 + $1.filledCount }
+        let missing = period == .week ? weekItems.reduce(0) { $0 + $1.missingCount } : periodDays.reduce(0) { $0 + $1.missingCount }
+        let risks = period == .week ? weekItems.reduce(0) { $0 + $1.riskCount } : periodDays.reduce(0) { $0 + $1.riskCount }
         let denominator = filled + missing
         let fillRate = denominator > 0 ? (Double(filled) / Double(denominator)) * 100 : 0
-        let riskDayCount = periodDays.filter { $0.riskCount > 0 }.count
+        let riskDayCount = period == .week ? weekItems.filter { $0.riskCount > 0 }.count : periodDays.filter { $0.riskCount > 0 }.count
         let rangeText = "\(startKey) 至 \(endKey)"
 
         let coreConclusion: String
@@ -474,7 +544,7 @@ final class CalendarViewModel: ObservableObject {
         if risks > 0 {
             riskReminder = "有 \(riskDayCount) 天出现风险，建议先进入风险日期查看具体日报。"
         } else if missing > 0 {
-            riskReminder = "缺填会影响 AI 对团队状态的判断，建议优先提醒未填成员。"
+            riskReminder = "缺填会影响 AI 对团队状态的判断，建议优先查看未填成员。"
         } else {
             riskReminder = "暂无明显风险，继续关注临近截止日期和低覆盖日期。"
         }
@@ -487,7 +557,7 @@ final class CalendarViewModel: ObservableObject {
         if risks > 0 {
             suggestedAction = "先查看风险日期，再复盘关联项目和负责人。"
         } else if missing > 0 {
-            suggestedAction = "先提醒未填报，再生成周报沉淀本周期结论。"
+            suggestedAction = "先查看缺填成员，再生成周报沉淀本周期结论。"
         } else {
             suggestedAction = "可以生成周报，保留本周期工作节奏和关键结论。"
         }
@@ -509,88 +579,103 @@ final class CalendarViewModel: ObservableObject {
 struct CalendarDashboardView: View {
     @EnvironmentObject private var auth: AuthStore
     @StateObject private var viewModel = CalendarViewModel()
-    @State private var showsSearchHint = false
     @State private var showsOverallAnalysis = false
+    @State private var showsAllWeekDays = false
+    @State private var homeMode: CalendarHomeMode = .mine
+    @State private var didConfigureHomeMode = false
     @State private var actionMessage: String?
     @State private var selectedDetailRoute: CalendarDetailRoute?
     var onCreateReport: ((String) -> Void)?
+    var onOpenLogs: (() -> Void)?
     var onOpenProjects: (() -> Void)?
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                        CalendarTopBar(
-                            weekRangeTitle: viewModel.weekRangeTitle,
-                            scope: $viewModel.scope,
-                            scopes: auth.user?.availableScopes ?? [.selfScope],
-                            onToday: {
-                                Task { await viewModel.moveToCurrentWeek(auth: auth) }
-                            },
-                            onSearch: {
-                                showsSearchHint = true
-                            },
-                            onRefresh: {
-                                Task { await viewModel.refresh(auth: auth) }
-                            }
-                        )
-
-                        CalendarInsightBanner(
-                            viewModel: viewModel,
-                            onOpenAI: {
-                                showsOverallAnalysis = true
-                            },
-                            onCreateReport: {
-                                onCreateReport?(viewModel.selectedDateKey)
-                            }
-                        )
-
-                        CalendarMobileWeekHeader(
-                            rangeTitle: viewModel.weekRangeTitle,
-                            onPrevious: {
-                                Task { await viewModel.moveWeek(by: -1, auth: auth) }
-                            },
-                            onCurrent: {
-                                Task { await viewModel.moveToCurrentWeek(auth: auth) }
-                            },
-                            onNext: {
-                                Task { await viewModel.moveWeek(by: 1, auth: auth) }
-                            }
-                        )
-
-                        CalendarMobileWeekStrip(days: viewModel.weekMobileDays) { date in
-                            Task { await viewModel.selectDate(date, auth: auth) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                    CalendarHomeHeader(
+                        title: topTitle,
+                        subtitle: homeSubtitle,
+                        homeMode: $homeMode,
+                        showsModeSwitch: supportsTeamMode,
+                        onRefresh: {
+                            Task { await viewModel.refresh(auth: auth) }
                         }
+                    )
 
-                        CalendarMobileDateList(
-                            days: viewModel.weekMobileDays,
-                            onShowDetail: { dateKey in
-                                selectedDetailRoute = CalendarDetailRoute(date: dateKey)
-                            },
-                            onCreateReport: { dateKey in
-                                onCreateReport?(dateKey)
-                            }
-                        )
-
-                        CalendarOverallAnalysisEntry(viewModel: viewModel) {
+                    CalendarHomeHeroCard(
+                        viewModel: viewModel,
+                        isManager: isManagerHome,
+                        onPrimary: {
+                            handleTodayPrimaryAction()
+                        },
+                        onSecondary: {
+                            handleTodaySecondaryAction()
+                        },
+                        onAIInsight: {
                             showsOverallAnalysis = true
                         }
-                    }
-                    .padding(.horizontal, AITheme.Spacing.lg)
-                    .padding(.top, AITheme.Spacing.sm)
-                    .padding(.bottom, AITheme.Spacing.xxl + AITheme.Layout.minTouchTarget)
-                }
+                    )
 
-                if let onCreateReport {
-                    CalendarCreateButton {
-                        onCreateReport(viewModel.selectedDateKey)
+                    CalendarNextActionList(
+                        viewModel: viewModel,
+                        isManager: isManagerHome,
+                        onPrimary: {
+                            handleTodayPrimaryAction()
+                        },
+                        onSecondary: {
+                            handleTodaySecondaryAction()
+                        },
+                        onAIInsight: {
+                            showsOverallAnalysis = true
+                        },
+                        onOpenProjects: {
+                            onOpenProjects?()
+                        }
+                    )
+
+                    CalendarWeekOverviewCard(
+                        rangeTitle: viewModel.weekRangeTitle,
+                        onPrevious: {
+                            Task { await viewModel.moveWeek(by: -1, auth: auth) }
+                        },
+                        onCurrent: {
+                            Task { await viewModel.moveToCurrentWeek(auth: auth) }
+                        },
+                        onNext: {
+                            Task { await viewModel.moveWeek(by: 1, auth: auth) }
+                        },
+                        days: viewModel.weekMobileDays,
+                        onSelect: { date in
+                            Task { await viewModel.selectDate(date, auth: auth) }
+                        }
+                    )
+
+                    CalendarPriorityDateList(
+                        days: viewModel.weekMobileDays,
+                        isManager: isManagerHome,
+                        showsAllDays: $showsAllWeekDays,
+                        onShowDetail: { dateKey in
+                            selectedDetailRoute = CalendarDetailRoute(date: dateKey)
+                        },
+                        onCreateReport: { dateKey in
+                            onCreateReport?(dateKey)
+                        }
+                    )
+
+                    if !isManagerHome {
+                        CalendarRecentLogPreviewList(logs: viewModel.recentLogs) {
+                            onOpenLogs?()
+                        }
                     }
-                        .padding(.trailing, AITheme.Spacing.lg)
-                        .padding(.bottom, AITheme.Spacing.lg)
                 }
+                .padding(.horizontal, AITheme.Spacing.lg)
+                .padding(.top, AITheme.Spacing.md)
+                .padding(.bottom, AITheme.Spacing.xxl)
             }
             .background(AITheme.ColorToken.appBackground)
+            .appTopContentInset(AITheme.Spacing.md)
+            .appTabBarContentInset(AITheme.Spacing.lg)
             .navigationTitle("")
             .compactNavigationTitle()
             .navigationDestination(item: $selectedDetailRoute) { route in
@@ -603,19 +688,21 @@ struct CalendarDashboardView: View {
             }
             .task {
                 viewModel.configure(for: auth.user)
+                configureHomeModeIfNeeded()
+                syncScopeForHomeMode()
                 await viewModel.refresh(auth: auth)
             }
             .refreshable {
                 await viewModel.refresh(auth: auth)
             }
+            .onChange(of: homeMode) {
+                syncScopeForHomeMode()
+                showsAllWeekDays = false
+            }
             .onChange(of: viewModel.scope) {
                 viewModel.dayDetails = [:]
+                showsAllWeekDays = false
                 Task { await viewModel.refresh(auth: auth) }
-            }
-            .alert("搜索", isPresented: $showsSearchHint) {
-                Button("知道了", role: .cancel) {}
-            } message: {
-                Text("当前版本可在“记录”页搜索日报；AI 日历会优先展示风险日期和缺填状态。")
             }
             .alert("操作提示", isPresented: actionMessageBinding) {
                 Button("知道了", role: .cancel) {}
@@ -650,6 +737,39 @@ struct CalendarDashboardView: View {
         }
     }
 
+    private var isManagerHome: Bool {
+        supportsTeamMode && homeMode == .team
+    }
+
+    private var supportsTeamMode: Bool {
+        auth.user?.canViewDepartment ?? false
+    }
+
+    private var teamScope: Scope {
+        guard let user = auth.user else {
+            return .selfScope
+        }
+        if user.canViewCompany {
+            return .company
+        }
+        if user.canViewDepartment {
+            return .department
+        }
+        return .selfScope
+    }
+
+    private var topTitle: String {
+        "AI日历"
+    }
+
+    private var homeSubtitle: String {
+        let dateText = "\(formatShortDate(Date())) \(formatWeekday(Date()))"
+        if isManagerHome {
+            return "风险和缺填优先处理 · \(dateText)"
+        }
+        return "今日日报和本周节奏 · \(dateText)"
+    }
+
     private var errorBinding: Binding<Bool> {
         Binding {
             viewModel.errorMessage != nil
@@ -657,6 +777,21 @@ struct CalendarDashboardView: View {
             if !isPresented {
                 viewModel.errorMessage = nil
             }
+        }
+    }
+
+    private func configureHomeModeIfNeeded() {
+        guard !didConfigureHomeMode else {
+            return
+        }
+        homeMode = supportsTeamMode ? .team : .mine
+        didConfigureHomeMode = true
+    }
+
+    private func syncScopeForHomeMode() {
+        let targetScope: Scope = isManagerHome ? teamScope : .selfScope
+        if viewModel.scope != targetScope {
+            viewModel.scope = targetScope
         }
     }
 
@@ -672,9 +807,31 @@ struct CalendarDashboardView: View {
 
     private func remindMissing() {
         if let day = viewModel.firstMissingDay {
-            actionMessage = "请进入 \(DateHelpers.shortDayTitle(day.date)) 的日期详情，查看缺填成员并提醒补齐。"
+            selectedDetailRoute = CalendarDetailRoute(date: day.date)
+            showsOverallAnalysis = false
         } else {
             actionMessage = "当前范围暂无缺填记录。"
+        }
+    }
+
+    private func handleTodayPrimaryAction() {
+        let today = viewModel.todayMobileDay
+        if isManagerHome {
+            selectedDetailRoute = CalendarDetailRoute(date: today.dateKey)
+        } else {
+            onCreateReport?(DateHelpers.dayKey())
+        }
+    }
+
+    private func handleTodaySecondaryAction() {
+        if isManagerHome {
+            if viewModel.todayMobileDay.missingCount > 0 {
+                selectedDetailRoute = CalendarDetailRoute(date: viewModel.todayMobileDay.dateKey)
+            } else {
+                showsOverallAnalysis = true
+            }
+        } else {
+            onOpenLogs?()
         }
     }
 
@@ -725,164 +882,125 @@ private struct CalendarDetailRoute: Identifiable, Hashable {
     }
 }
 
-private struct CalendarTopBar: View {
-    let weekRangeTitle: String
-    @Binding var scope: Scope
-    let scopes: [Scope]
-    let onToday: () -> Void
-    let onSearch: () -> Void
+private struct CalendarHomeHeader: View {
+    let title: String
+    let subtitle: String
+    @Binding var homeMode: CalendarHomeMode
+    let showsModeSwitch: Bool
     let onRefresh: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-            HStack(alignment: .center, spacing: AITheme.Spacing.xs) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("AI日历")
+            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
                         .font(AITheme.Typography.pageTitle)
                         .foregroundStyle(AITheme.ColorToken.ink900)
-                    Text(weekRangeTitle)
+                    Text(subtitle)
                         .font(AITheme.Typography.footnote)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
                 }
 
                 Spacer(minLength: AITheme.Spacing.xs)
 
-                Button(action: onSearch) {
-                    CalendarToolbarGlyph(systemImage: "magnifyingglass")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("搜索")
-
-                Button(action: onToday) {
-                    CalendarToolbarGlyph(systemImage: "calendar.badge.clock")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("回到本周")
-
                 Button(action: onRefresh) {
-                    CalendarToolbarGlyph(systemImage: "arrow.clockwise")
+                    Image(systemName: "arrow.clockwise")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink800)
+                        .frame(width: 40, height: 40)
+                        .background(AITheme.ColorToken.cardBackground)
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+                        }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("刷新")
             }
 
-            Menu {
-                ForEach(scopes) { item in
-                    Button {
-                        scope = item
-                    } label: {
-                        Label(item.title, systemImage: scope == item ? "checkmark" : "person.2")
+            if showsModeSwitch {
+                Picker("首页模式", selection: $homeMode) {
+                    ForEach(CalendarHomeMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
                     }
                 }
-            } label: {
-                HStack(spacing: AITheme.Spacing.xs) {
-                    Image(systemName: scope == .selfScope ? "person" : "person.2")
-                    Text(scope.title)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AITheme.ColorToken.ink800)
-                .padding(.vertical, 9)
-                .padding(.horizontal, AITheme.Spacing.sm)
-                .background(AITheme.ColorToken.cardBackground)
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
-                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("切换团队或我的首页")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("切换范围")
         }
     }
 }
 
-private struct CalendarToolbarGlyph: View {
-    let systemImage: String
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(AITheme.ColorToken.ink800)
-            .frame(width: AITheme.Layout.minTouchTarget, height: AITheme.Layout.minTouchTarget)
-            .background(AITheme.ColorToken.cardBackground)
-            .clipShape(Circle())
-            .overlay {
-                Circle()
-                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
-            }
-    }
-}
-
-private struct CalendarInsightBanner: View {
+private struct CalendarHomeHeroCard: View {
     let viewModel: CalendarViewModel
-    let onOpenAI: () -> Void
-    let onCreateReport: () -> Void
+    let isManager: Bool
+    let onPrimary: () -> Void
+    let onSecondary: () -> Void
+    let onAIInsight: () -> Void
 
     var body: some View {
-        content
-    }
+        let today = viewModel.todayMobileDay
 
-    private var content: some View {
-        let selectedDay = viewModel.selectedMobileDay
-
-        return VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+        return VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
             HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
-                Image(systemName: selectedDay.riskCount > 0 ? "exclamationmark.triangle.fill" : "sparkles")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(selectedDay.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ai)
-                    .frame(width: 30, height: 30)
-                    .background(selectedDay.riskCount > 0 ? AITheme.ColorToken.dangerSurface : AITheme.ColorToken.aiSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                Image(systemName: heroIcon(today))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(heroAccent(today))
+                    .frame(width: 42, height: 42)
+                    .background(heroAccent(today).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("AI 今日摘要")
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(isManager ? "今日团队态势" : "今日日报")
                         .font(AITheme.Typography.eyebrow)
-                        .foregroundStyle(AITheme.ColorToken.ai)
-                    Text(viewModel.dashboardConclusion)
-                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(heroAccent(today))
+                    Text(heroTitle(today))
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(AITheme.ColorToken.ink900)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(viewModel.dashboardRisk)
-                        .font(.caption)
+                    Text(heroSubtitle(today))
+                        .font(AITheme.Typography.support)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: AITheme.Spacing.xs)
+
+                Button(action: onAIInsight) {
+                    CalendarStatusPill(title: today.status.title, tint: today.status.tint, surface: today.status.surface)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("查看今日分析")
             }
 
-            HStack(spacing: AITheme.Spacing.xs) {
-                CalendarMiniFact(title: "日期", value: "\(formatShortDate(selectedDay.date)) \(formatWeekday(selectedDay.date))")
-                CalendarMiniFact(title: "范围", value: viewModel.scope.title)
-            }
+            CalendarHeroMetricStrip(today: today, isManager: isManager)
 
             HStack(spacing: AITheme.Spacing.xs) {
-                CalendarMiniFact(title: "参考记录", value: "\(selectedDay.referenceRecordCount)")
-                CalendarMiniFact(title: "已填/未填", value: "\(selectedDay.filledCount)/\(selectedDay.missingCount)")
-                CalendarMiniFact(title: "风险", value: "\(selectedDay.riskCount)")
-                CalendarMiniFact(title: "工时", value: selectedDay.hoursText)
-            }
-
-            HStack(spacing: AITheme.Spacing.xs) {
-                Button(action: onOpenAI) {
-                    Label("打开 AI 洞察", systemImage: "sparkles")
+                Button(action: onPrimary) {
+                    Label(primaryActionTitle(today), systemImage: primaryActionIcon(today))
                         .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
                 }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AITheme.ColorToken.ai)
-                .background(AITheme.ColorToken.aiSurface)
-                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-
-                Button(action: onCreateReport) {
-                    Label(selectedDay.isFuture ? "填写计划" : "填写日报", systemImage: "square.and.pencil")
-                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
-                }
-                .font(.footnote.weight(.semibold))
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(.white)
-                .background(AITheme.ColorToken.primary)
+                .background(primaryActionTint(today))
                 .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                .buttonStyle(.plain)
+
+                Button(action: onSecondary) {
+                    Label(secondaryActionTitle(today), systemImage: secondaryActionIcon(today))
+                        .labelStyle(.titleAndIcon)
+                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(secondaryActionTint(today))
+                .background(secondaryActionBackground(today))
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                        .stroke(secondaryActionStroke(today), lineWidth: 0.8)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(AITheme.Spacing.md)
@@ -892,31 +1010,449 @@ private struct CalendarInsightBanner: View {
             RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
                 .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
         }
+        .overlay(alignment: .top) {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .fill(heroAccent(today))
+                .frame(height: 3)
+        }
+    }
+
+    private func heroTitle(_ today: CalendarMobileDayItem) -> String {
+        if isManager {
+            if today.riskCount > 0 || today.missingCount > 0 {
+                return "今日 \(today.missingCount) 人未填报，\(today.riskCount) 条风险"
+            }
+            if today.filledCount > 0 {
+                return "今日团队填报正常"
+            }
+            return "今天还没有团队填报信号"
+        }
+        if today.filledCount > 0 {
+            return today.riskCount > 0 ? "今天已提交，但有风险待补充" : "今天已完成填报"
+        }
+        return "今天还未填报"
+    }
+
+    private func heroSubtitle(_ today: CalendarMobileDayItem) -> String {
+        if isManager {
+            if today.riskCount > 0 {
+                return "先确认影响项目和负责人，再决定跟进动作。"
+            }
+            if today.missingCount > 0 {
+                return "先补齐团队状态，避免周报和复盘失真。"
+            }
+            return "团队今日状态稳定，可继续查看本周趋势。"
+        }
+        if today.filledCount > 0 {
+            return "可继续补充风险、工时，或查看最近记录。"
+        }
+        return "先完成今天的日报，AI 会同步更新本周状态。"
+    }
+
+    private func heroIcon(_ today: CalendarMobileDayItem) -> String {
+        if today.riskCount > 0 {
+            return "exclamationmark.triangle.fill"
+        }
+        if today.missingCount > 0 || today.filledCount == 0 {
+            return isManager ? "person.crop.circle.badge.exclamationmark" : "square.and.pencil"
+        }
+        return "checkmark.seal.fill"
+    }
+
+    private func heroAccent(_ today: CalendarMobileDayItem) -> Color {
+        if today.riskCount > 0 {
+            return AITheme.ColorToken.danger
+        }
+        if today.missingCount > 0 || today.filledCount == 0 {
+            return isManager ? AITheme.ColorToken.warning : AITheme.ColorToken.primary
+        }
+        return AITheme.ColorToken.success
+    }
+
+    private func primaryActionTitle(_ today: CalendarMobileDayItem) -> String {
+        if isManager {
+            if today.riskCount > 0 {
+                return "处理今日风险"
+            }
+            if today.missingCount > 0 {
+                return "查看缺填成员"
+            }
+            return "查看今日状态"
+        }
+        return today.filledCount > 0 ? "补充今日日报" : "填写今日日报"
+    }
+
+    private func primaryActionIcon(_ today: CalendarMobileDayItem) -> String {
+        if isManager {
+            return today.riskCount > 0 ? "exclamationmark.triangle.fill" : "person.2.fill"
+        }
+        return "square.and.pencil"
+    }
+
+    private func primaryActionTint(_ today: CalendarMobileDayItem) -> Color {
+        return AITheme.ColorToken.primary
+    }
+
+    private func secondaryActionTitle(_ today: CalendarMobileDayItem) -> String {
+        if isManager {
+            return today.missingCount > 0 ? "查看未填报" : "AI复盘"
+        }
+        return "查看我的记录"
+    }
+
+    private func secondaryActionIcon(_ today: CalendarMobileDayItem) -> String {
+        if isManager {
+            return today.missingCount > 0 ? "person.crop.circle.badge.exclamationmark" : "sparkles"
+        }
+        return "list.bullet.rectangle"
+    }
+
+    private func secondaryActionTint(_ today: CalendarMobileDayItem) -> Color {
+        if isManager && today.missingCount > 0 {
+            return AITheme.ColorToken.warning
+        }
+        return isManager ? AITheme.ColorToken.ai : AITheme.ColorToken.ink900
+    }
+
+    private func secondaryActionBackground(_ today: CalendarMobileDayItem) -> Color {
+        if isManager && today.missingCount > 0 {
+            return AITheme.ColorToken.warningSurface
+        }
+        if isManager {
+            return AITheme.ColorToken.aiSurface
+        }
+        return AITheme.ColorToken.cardBackground
+    }
+
+    private func secondaryActionStroke(_ today: CalendarMobileDayItem) -> Color {
+        if isManager && today.missingCount > 0 {
+            return AITheme.ColorToken.warningSoft
+        }
+        if isManager {
+            return AITheme.ColorToken.aiSoft
+        }
+        return AITheme.ColorToken.separator
     }
 }
 
-private struct CalendarMiniFact: View {
+private struct CalendarStatusPill: View {
     let title: String
-    let value: String
+    let tint: Color
+    let surface: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 9)
+            .background(surface)
+            .clipShape(Capsule())
+    }
+}
+
+private struct CalendarHeroMetricStrip: View {
+    let today: CalendarMobileDayItem
+    let isManager: Bool
+
+    var body: some View {
+        HStack(spacing: AITheme.Spacing.xs) {
+            if isManager {
+                CalendarHeroMetric(
+                    title: "填报率",
+                    value: String(format: "%.0f%%", today.fillRate),
+                    tint: today.fillRate >= 80 ? AITheme.ColorToken.success : AITheme.ColorToken.primary
+                )
+                CalendarHeroMetric(
+                    title: "未填",
+                    value: "\(today.missingCount)",
+                    tint: today.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.success
+                )
+                CalendarHeroMetric(
+                    title: "风险",
+                    value: "\(today.riskCount)",
+                    tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
+                )
+            } else {
+                CalendarHeroMetric(
+                    title: "状态",
+                    value: today.filledCount > 0 ? "已填" : "待填",
+                    tint: today.filledCount > 0 ? AITheme.ColorToken.success : AITheme.ColorToken.primary
+                )
+                CalendarHeroMetric(
+                    title: "风险",
+                    value: "\(today.riskCount)",
+                    tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
+                )
+                CalendarHeroMetric(
+                    title: "工时",
+                    value: today.hoursText,
+                    tint: AITheme.ColorToken.ink800
+                )
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct CalendarHeroMetric: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .monospacedDigit()
             Text(title)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(AITheme.ColorToken.textSecondary)
                 .lineLimit(1)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AITheme.ColorToken.ink900)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-                .monospacedDigit()
+                .minimumScaleFactor(0.8)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 9)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AITheme.ColorToken.activeBackground)
-        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+        .background(AITheme.ColorToken.surface)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+    }
+}
+
+private struct CalendarNextActionList: View {
+    let viewModel: CalendarViewModel
+    let isManager: Bool
+    let onPrimary: () -> Void
+    let onSecondary: () -> Void
+    let onAIInsight: () -> Void
+    let onOpenProjects: () -> Void
+
+    var body: some View {
+        let today = viewModel.todayMobileDay
+
+        return VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(isManager ? "今日待处理" : "今日行动")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                Text(queueLabel(today))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(queueTint(today))
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .background(queueTint(today).opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            VStack(spacing: AITheme.Spacing.xs) {
+                if isManager {
+                    if today.riskCount > 0 {
+                        CalendarActionRow(
+                            title: "处理风险记录",
+                            subtitle: "今天有 \(today.riskCount) 条风险，先确认影响和责任人。",
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: AITheme.ColorToken.danger,
+                            action: onPrimary
+                        )
+                    }
+
+                    if today.missingCount > 0 {
+                        CalendarActionRow(
+                            title: "查看未填报成员",
+                            subtitle: "\(today.missingCount) 人未填报，先补齐团队状态。",
+                            systemImage: "person.crop.circle.badge.exclamationmark",
+                            tint: AITheme.ColorToken.warning,
+                            action: onSecondary
+                        )
+                    }
+
+                    CalendarActionRow(
+                        title: "AI 复盘建议",
+                        subtitle: "汇总本周风险、缺填和下一步动作。",
+                        systemImage: "sparkles",
+                        tint: AITheme.ColorToken.ai,
+                        action: onAIInsight
+                    )
+
+                    if today.riskCount == 0 && today.missingCount == 0 {
+                        CalendarActionRow(
+                            title: "查看项目节奏",
+                            subtitle: "确认项目进展、风险和负责人状态。",
+                            systemImage: "folder",
+                            tint: AITheme.ColorToken.primary,
+                            action: onOpenProjects
+                        )
+                    }
+                } else {
+                    CalendarActionRow(
+                        title: today.filledCount > 0 ? "补充今日日报" : "填写今日日报",
+                        subtitle: today.filledCount > 0 ? "继续补充风险、工时或关键产出。" : "用一句话开始，减少日报录入成本。",
+                        systemImage: "square.and.pencil",
+                        tint: AITheme.ColorToken.primary,
+                        action: onPrimary
+                    )
+
+                    CalendarActionRow(
+                        title: today.riskCount > 0 ? "补充风险说明" : "AI 写作建议",
+                        subtitle: today.riskCount > 0 ? "把风险原因、影响和下一步补完整。" : "查看 AI 对今天和本周的建议。",
+                        systemImage: today.riskCount > 0 ? "exclamationmark.triangle.fill" : "sparkles",
+                        tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ai,
+                        action: today.riskCount > 0 ? onPrimary : onAIInsight
+                    )
+
+                    CalendarActionRow(
+                        title: "查看最近记录",
+                        subtitle: "快速回看最近提交的日报。",
+                        systemImage: "list.bullet.rectangle",
+                        tint: AITheme.ColorToken.ink800,
+                        action: onSecondary
+                    )
+                }
+            }
+        }
+    }
+
+    private func queueLabel(_ today: CalendarMobileDayItem) -> String {
+        if today.riskCount > 0 {
+            return "有风险"
+        }
+        if today.missingCount > 0 || today.filledCount == 0 {
+            return isManager ? "待补齐" : "待填报"
+        }
+        return "正常"
+    }
+
+    private func queueTint(_ today: CalendarMobileDayItem) -> Color {
+        if today.riskCount > 0 {
+            return AITheme.ColorToken.danger
+        }
+        if today.missingCount > 0 || today.filledCount == 0 {
+            return isManager ? AITheme.ColorToken.warning : AITheme.ColorToken.primary
+        }
+        return AITheme.ColorToken.success
+    }
+}
+
+private struct CalendarActionRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(tint.opacity(0.11))
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(subtitle)
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.textTertiary)
+            }
+            .padding(AITheme.Spacing.sm)
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct CalendarWeekOverviewCard: View {
+    let rangeTitle: String
+    let onPrevious: () -> Void
+    let onCurrent: () -> Void
+    let onNext: () -> Void
+    let days: [CalendarMobileDayItem]
+    let onSelect: (Date) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(spacing: AITheme.Spacing.xs) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("本周节奏")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text(rangeTitle)
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                }
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                CalendarWeekNavButton(systemImage: "chevron.left", accessibilityLabel: "上一周", action: onPrevious)
+
+                Button("本周", action: onCurrent)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.primary)
+                    .frame(minHeight: 34)
+                    .padding(.horizontal, AITheme.Spacing.sm)
+                    .background(AITheme.ColorToken.primarySurface)
+                    .clipShape(Capsule())
+                    .buttonStyle(.plain)
+
+                CalendarWeekNavButton(systemImage: "chevron.right", accessibilityLabel: "下一周", action: onNext)
+            }
+
+            CalendarMobileWeekStrip(days: days, onSelect: onSelect)
+        }
+        .padding(AITheme.Spacing.sm)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
+    }
+}
+
+private struct CalendarWeekNavButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink800)
+                .frame(width: 34, height: 34)
+                .background(AITheme.ColorToken.surface)
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -1034,7 +1570,7 @@ private struct CalendarMobileWeekStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AITheme.Spacing.xs) {
+            HStack(spacing: 6) {
                 ForEach(days) { day in
                     Button {
                         onSelect(day.date)
@@ -1044,9 +1580,10 @@ private struct CalendarMobileWeekStrip: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 2)
+            .padding(.trailing, AITheme.Spacing.xs)
             .padding(.vertical, 2)
         }
-        .scrollClipDisabled()
         .accessibilityElement(children: .contain)
     }
 }
@@ -1073,7 +1610,7 @@ private struct CalendarMobileDayChip: View {
                         .frame(minWidth: 15, minHeight: 15)
                         .background(AITheme.ColorToken.danger)
                         .clipShape(Capsule())
-                        .offset(x: 8, y: -4)
+                        .offset(x: 6, y: -4)
                 }
             }
 
@@ -1081,7 +1618,7 @@ private struct CalendarMobileDayChip: View {
                 .fill(day.status.tint)
                 .frame(width: 6, height: 6)
         }
-        .frame(width: 52, height: 72)
+        .frame(width: 46, height: 72)
         .background(day.isSelected ? AITheme.ColorToken.primarySurface : AITheme.ColorToken.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
         .overlay {
@@ -1092,20 +1629,51 @@ private struct CalendarMobileDayChip: View {
     }
 }
 
-private struct CalendarMobileDateList: View {
+private struct CalendarPriorityDateList: View {
     let days: [CalendarMobileDayItem]
+    let isManager: Bool
+    @Binding var showsAllDays: Bool
     let onShowDetail: (String) -> Void
     let onCreateReport: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-            Text("本周日期")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(AITheme.ColorToken.ink900)
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(sectionTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text(sectionSubtitle)
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                }
 
-            ForEach(days) { day in
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                if !regularDays.isEmpty {
+                    Button(showsAllDays ? "收起" : "查看全部") {
+                        withAnimation(.snappy(duration: 0.22)) {
+                            showsAllDays.toggle()
+                        }
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.primary)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, AITheme.Spacing.sm)
+                    .background(AITheme.ColorToken.primarySurface)
+                    .clipShape(Capsule())
+                }
+            }
+
+            if displayDays.isEmpty {
+                CalendarWeekEmptyState(isManager: isManager)
+            }
+
+            ForEach(displayDays) { day in
                 CalendarMobileDateCard(
                     day: day,
+                    isEmphasized: priorityDayIds.contains(day.id),
+                    showsCreateAction: !isManager && day.isFuture,
                     onShowDetail: {
                         onShowDetail(day.dateKey)
                     },
@@ -1116,61 +1684,306 @@ private struct CalendarMobileDateList: View {
             }
         }
     }
+
+    private var priorityDays: [CalendarMobileDayItem] {
+        if isManager {
+            return Array(
+                days
+                    .filter { $0.riskCount > 0 || $0.missingCount > 0 }
+                    .sorted { lhs, rhs in
+                        if lhs.riskCount != rhs.riskCount {
+                            return lhs.riskCount > rhs.riskCount
+                        }
+                        if lhs.missingCount != rhs.missingCount {
+                            return lhs.missingCount > rhs.missingCount
+                        }
+                        if lhs.isToday != rhs.isToday {
+                            return lhs.isToday
+                        }
+                        return lhs.date < rhs.date
+                    }
+                    .prefix(3)
+            )
+        }
+
+        var result: [CalendarMobileDayItem] = []
+
+        if let today = days.first(where: \.isToday) {
+            result.append(today)
+        }
+
+        let abnormalDays = days.filter { day in
+            day.riskCount > 0 || day.isSelected
+        }
+        result.append(contentsOf: abnormalDays)
+
+        if result.isEmpty, let selected = days.first(where: \.isSelected) ?? days.first {
+            result.append(selected)
+        }
+
+        var seen = Set<String>()
+        return result.filter { day in
+            guard !seen.contains(day.id) else {
+                return false
+            }
+            seen.insert(day.id)
+            return true
+        }
+    }
+
+    private var regularDays: [CalendarMobileDayItem] {
+        let ids = Set(priorityDays.map(\.id))
+        return days.filter { !ids.contains($0.id) }
+    }
+
+    private var displayDays: [CalendarMobileDayItem] {
+        showsAllDays ? priorityDays + regularDays : priorityDays
+    }
+
+    private var priorityDayIds: Set<String> {
+        Set(priorityDays.map(\.id))
+    }
+
+    private var sectionTitle: String {
+        isManager ? "重点日期" : "本周重点"
+    }
+
+    private var sectionSubtitle: String {
+        if isManager {
+            return priorityDays.isEmpty ? "暂无风险或缺填" : "只展示风险最高或缺填最多的 3 天"
+        }
+        return "默认只显示今天、选中日期和有风险的日期"
+    }
 }
 
 private struct CalendarMobileDateCard: View {
     let day: CalendarMobileDayItem
+    let isEmphasized: Bool
+    let showsCreateAction: Bool
     let onShowDetail: () -> Void
     let onCreateReport: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("\(formatShortDate(day.date)) \(formatWeekday(day.date))")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AITheme.ColorToken.ink900)
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            Button(action: onShowDetail) {
+                HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: AITheme.Spacing.xs) {
+                            Text("\(formatShortDate(day.date)) \(formatWeekday(day.date))")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AITheme.ColorToken.ink900)
 
-                    Text(day.summaryText)
+                            if day.isToday {
+                                Text("今天")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AITheme.ColorToken.primary)
+                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 6)
+                                    .background(AITheme.ColorToken.primarySurface)
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        Text(day.summaryText)
+                            .font(AITheme.Typography.footnote)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        CalendarProgressBar(progress: day.progress, tint: day.status.tint)
+                    }
+
+                    Spacer(minLength: AITheme.Spacing.xs)
+
+                    VStack(alignment: .trailing, spacing: 7) {
+                        Text(day.status.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(day.status.tint)
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 8)
+                            .background(day.status.surface)
+                            .clipShape(Capsule())
+
+                        Label(day.riskCount > 0 ? "风险" : "查看", systemImage: "chevron.right")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(day.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.primary)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if showsCreateAction {
+                Button(action: onCreateReport) {
+                    Label("填写计划", systemImage: "square.and.pencil")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.primary)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .background(AITheme.ColorToken.primarySurface)
+                        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(AITheme.Spacing.sm)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(cardStroke, lineWidth: day.isSelected || isEmphasized ? 1 : 0.5)
+        }
+        .overlay(alignment: .leading) {
+            if let accentColor {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(accentColor)
+                    .frame(width: 4)
+                    .padding(.vertical, 12)
+                    .padding(.leading, 1)
+            }
+        }
+    }
+
+    private var cardBackground: Color {
+        if day.isSelected {
+            return AITheme.ColorToken.primarySurface
+        }
+        return AITheme.ColorToken.cardBackground
+    }
+
+    private var cardStroke: Color {
+        if day.isSelected {
+            return AITheme.ColorToken.primary
+        }
+        return AITheme.ColorToken.separator
+    }
+
+    private var accentColor: Color? {
+        guard isEmphasized, !day.isSelected else {
+            return nil
+        }
+        if day.riskCount > 0 {
+            return AITheme.ColorToken.danger
+        }
+        if day.missingCount > 0 {
+            return AITheme.ColorToken.warning
+        }
+        return nil
+    }
+}
+
+private struct CalendarRecentLogPreviewList: View {
+    let logs: [WorkLog]
+    let onOpenLogs: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("最近记录")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text("只保留最近 3 条，完整记录去填报记录查看。")
                         .font(AITheme.Typography.footnote)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: AITheme.Spacing.xs)
 
-                Text(day.status.title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(day.status.tint)
-                    .padding(.vertical, 5)
-                    .padding(.horizontal, 8)
-                    .background(day.status.surface)
-                    .clipShape(Capsule())
-            }
-
-            CalendarProgressBar(progress: day.progress, tint: day.status.tint)
-
-            HStack(spacing: AITheme.Spacing.xs) {
-                Button(action: onShowDetail) {
-                    Text("查看详情")
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AITheme.ColorToken.primary)
-                .background(AITheme.ColorToken.primarySurface)
-                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
-
-                if day.isToday || day.isFuture {
-                    Button(action: onCreateReport) {
-                        Text(day.isFuture ? "填写计划" : "填写日报")
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                    }
+                Button("查看全部", action: onOpenLogs)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .background(AITheme.ColorToken.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                    .foregroundStyle(AITheme.ColorToken.primary)
+            }
+
+            VStack(spacing: 0) {
+                if logs.isEmpty {
+                    HStack(spacing: AITheme.Spacing.sm) {
+                        Image(systemName: "doc.text")
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                            .frame(width: 28, height: 28)
+                        Text("提交日报后，这里会显示最近记录。")
+                            .font(AITheme.Typography.support)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(AITheme.Spacing.sm)
+                } else {
+                    ForEach(Array(logs.prefix(3).enumerated()), id: \.element.id) { index, log in
+                        CalendarRecentLogRow(log: log)
+                            .padding(.vertical, AITheme.Spacing.sm)
+                            .padding(.horizontal, AITheme.Spacing.sm)
+
+                        if index < min(logs.count, 3) - 1 {
+                            Divider()
+                                .overlay(AITheme.ColorToken.separator)
+                                .padding(.leading, AITheme.Spacing.sm)
+                        }
+                    }
                 }
             }
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+            }
+        }
+    }
+}
+
+private struct CalendarRecentLogRow: View {
+    let log: WorkLog
+
+    var body: some View {
+        HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(log.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+                    .lineLimit(1)
+
+                HStack(spacing: AITheme.Spacing.xs) {
+                    Text(String(log.date.prefix(10)))
+                    Text("\(log.hoursText)h")
+                    if let project = log.project?.displayName, !project.isEmpty {
+                        Text(project)
+                            .lineLimit(1)
+                    }
+                }
+                .font(AITheme.Typography.footnote)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
+            }
+
+            Spacer(minLength: AITheme.Spacing.xs)
+
+            Text(workLogHasRisk(log) ? "风险" : log.status.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(workLogHasRisk(log) ? AITheme.ColorToken.danger : log.status.badgeTint)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .background(workLogHasRisk(log) ? AITheme.ColorToken.dangerSurface : log.status.badgeTint.opacity(0.1))
+                .clipShape(Capsule())
+        }
+    }
+}
+
+private func workLogHasRisk(_ log: WorkLog) -> Bool {
+    !(log.aiAnalysis?.risks.isEmpty ?? true) || !(log.aiAnalysis?.blockers.isEmpty ?? true)
+}
+
+private struct CalendarWeekEmptyState: View {
+    let isManager: Bool
+
+    var body: some View {
+        HStack(spacing: AITheme.Spacing.sm) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(AITheme.ColorToken.success)
+                .frame(width: 28, height: 28)
+                .background(AITheme.ColorToken.successSurface)
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+            Text(isManager ? "本周暂无风险或缺填，继续关注每日填报节奏。" : "本周暂无风险，今天完成填报即可。")
+                .font(AITheme.Typography.support)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
         }
         .padding(AITheme.Spacing.md)
         .background(AITheme.ColorToken.cardBackground)
@@ -1406,64 +2219,6 @@ private struct CalendarLegend: View {
     }
 }
 
-private struct CalendarOverallAnalysisEntry: View {
-    @ObservedObject var viewModel: CalendarViewModel
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
-                Image(systemName: "sparkles")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AITheme.ColorToken.ai)
-                    .frame(width: 36, height: 36)
-                    .background(AITheme.ColorToken.aiSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("AI 整体分析")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AITheme.ColorToken.ink900)
-                    Text(entrySummary)
-                        .font(.caption)
-                        .foregroundStyle(AITheme.ColorToken.textSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: AITheme.Spacing.xs)
-
-                Text("查看分析")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AITheme.ColorToken.ai)
-                    .padding(.vertical, 7)
-                    .padding(.horizontal, AITheme.Spacing.sm)
-                    .background(AITheme.ColorToken.aiSurface)
-                    .clipShape(Capsule())
-            }
-            .padding(AITheme.Spacing.sm)
-            .background(AITheme.ColorToken.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
-                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("AI 整体分析，\(entrySummary)")
-    }
-
-    private var entrySummary: String {
-        if viewModel.riskDayCount > 0 {
-            return "本周 / 本月 / 季度 / 年度，先看 \(viewModel.riskDayCount) 个风险日期。"
-        }
-        if viewModel.missingCount > 0 {
-            return "本周 / 本月 / 季度 / 年度，关注 \(viewModel.missingCount) 条缺填信号。"
-        }
-        return "本周 / 本月 / 季度 / 年度，查看团队节奏和建议动作。"
-    }
-}
-
 private struct CalendarOverallAnalysisSheet: View {
     @EnvironmentObject private var auth: AuthStore
     @Environment(\.dismiss) private var dismiss
@@ -1534,7 +2289,7 @@ private struct CalendarOverallAnalysisSheet: View {
                             }
 
                             CalendarAnalysisActionButton(
-                                title: "提醒未填报",
+                                title: "查看缺填成员",
                                 systemImage: "person.crop.circle.badge.exclamationmark",
                                 tint: AITheme.ColorToken.warning
                             ) {
@@ -1730,25 +2485,6 @@ private struct FlowActionButtons<Content: View>: View {
     }
 }
 
-private struct CalendarCreateButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label("新增填报", systemImage: "plus")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.white)
-                .labelStyle(.iconOnly)
-                .frame(width: 58, height: 58)
-                .background(AITheme.ColorToken.primary)
-                .clipShape(Circle())
-                .shadow(color: AITheme.ColorToken.primary.opacity(0.26), radius: 16, x: 0, y: 8)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("新增填报")
-    }
-}
-
 struct DayDetailView: View {
     @EnvironmentObject private var auth: AuthStore
     @State private var currentDate: String
@@ -1768,9 +2504,15 @@ struct DayDetailView: View {
             if let detail {
                 Section("AI 今日洞察") {
                     ForEach(detailInsights(detail), id: \.self) { insight in
-                        Label(insight, systemImage: "sparkles")
-                            .font(.callout)
-                            .foregroundStyle(insightTint(insight))
+                        HStack(alignment: .top, spacing: AITheme.Spacing.xs) {
+                            Image(systemName: "sparkles")
+                                .font(.callout)
+                                .foregroundStyle(insightTint(insight))
+                                .padding(.top, 2)
+                            Text(insight)
+                                .font(.callout)
+                                .foregroundStyle(AITheme.ColorToken.ink700)
+                        }
                     }
                 }
 
@@ -1848,6 +2590,7 @@ struct DayDetailView: View {
                 }
             }
         }
+        .appTabBarContentInset(AITheme.Spacing.md)
         .navigationTitle(currentDate)
         .compactNavigationTitle()
         .toolbar {

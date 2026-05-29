@@ -14,6 +14,9 @@ export type DataDeletionScope = "SELF" | "TENANT";
 export type DataDeletionStatus = "REQUESTED" | "PROCESSING" | "COMPLETED" | "CANCELED";
 export type ExportScope = "SELF" | "TENANT";
 export type ExportTaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "EXPIRED";
+export type FeedbackCategory = "BUG" | "ACCOUNT_PERMISSION" | "DATA_RIGHTS" | "BILLING" | "PRIVACY_SECURITY" | "SUGGESTION" | "OTHER";
+export type FeedbackPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+export type FeedbackStatus = "SUBMITTED" | "PROCESSING" | "RESOLVED" | "CLOSED";
 
 export type AuthUser = {
   id: string;
@@ -149,6 +152,10 @@ export type BillingPlansResponse = {
 
 export type BillingOrderPayment = {
   order: BillingOrder;
+  subscriptionPeriod?: {
+    startDate: string;
+    endDate: string;
+  };
   payment: {
     provider: PaymentProvider;
     mode?: "mock" | "live";
@@ -196,6 +203,29 @@ export type ExportTask = {
   updatedAt: string;
 };
 
+export type FeedbackRequest = {
+  id: string;
+  tenantId: string;
+  requesterId: string;
+  category: FeedbackCategory;
+  priority: FeedbackPriority;
+  status: FeedbackStatus;
+  title: string;
+  content: string;
+  contact?: string | null;
+  resolution?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  requester?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone?: string | null;
+    department?: Department | null;
+  };
+};
+
 export type WorkLog = {
   id: string;
   userId: string;
@@ -233,7 +263,7 @@ export type WorkLogAttachment = {
   updatedAt: string;
 };
 
-export type WorkLogDraft = {
+export type WorkLogDraftItem = {
   date: string;
   kind: "DAILY" | "PLAN";
   title: string;
@@ -243,7 +273,11 @@ export type WorkLogDraft = {
   endTime?: string | null;
   confidence: number;
   missingFields: string[];
+};
+
+export type WorkLogDraft = WorkLogDraftItem & {
   assistantMessage: string;
+  items?: WorkLogDraftItem[];
 };
 
 export type AiAnalysis = {

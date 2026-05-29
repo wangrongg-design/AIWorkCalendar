@@ -104,6 +104,16 @@ enum AITheme {
         static let disabledText = gray4
         static let cardShadow = Color.black.opacity(0.035)
 
+        static let loginBackground = Color.hex(0x1A1A1A)
+        static let loginFieldBackground = Color.hex(0x2E2E2E)
+        static let loginFieldBorder = Color.hex(0x424242)
+        static let loginText = Color.hex(0xFFFFFF)
+        static let loginMuted = Color.hex(0xA3A3A3)
+        static let loginSecondary = Color.hex(0x737373)
+        static let loginDisabledBackground = Color.hex(0x2E2E2E)
+        static let loginDisabledText = Color.hex(0xA3A3A3)
+        static let loginPlaceholder = Color.hex(0x737373)
+
         static var appBackground: Color {
             surface
         }
@@ -239,20 +249,7 @@ struct CompactAIActionPanel: View {
             }
 
             if let actionTitle, let action {
-                Button(action: action) {
-                    Label(actionTitle, systemImage: "arrow.right")
-                        .font(.footnote.weight(.semibold))
-                        .padding(.vertical, AITheme.Spacing.xs)
-                        .padding(.horizontal, AITheme.Spacing.sm)
-                        .background(AITheme.ColorToken.aiSurface)
-                        .clipShape(Capsule())
-                        .overlay {
-                            Capsule()
-                                .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.5)
-                        }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(AITheme.ColorToken.ai)
+                AIActionButton(title: actionTitle, systemImage: "arrow.right", action: action)
             }
         }
         .padding(AITheme.Spacing.md)
@@ -287,7 +284,7 @@ struct CompactAIActionPanel: View {
     }
 
     private var evidenceTextTint: Color {
-        evidenceTone == .ai ? AITheme.ColorToken.textSecondary : evidenceTint
+        evidenceTone == .ai ? AITheme.ColorToken.textSecondary : AITheme.ColorToken.ink700
     }
 
     private var evidenceTone: EvidenceTone {
@@ -330,7 +327,7 @@ struct AIInsightPanel: View {
                     ForEach(insights.prefix(3), id: \.self) { insight in
                         HStack(alignment: .top, spacing: AITheme.Spacing.xs) {
                             Circle()
-                                .fill(AITheme.ColorToken.ai)
+                                .fill(insightTint(insight))
                                 .frame(width: 5, height: 5)
                                 .padding(.top, 7)
                             Text(insight)
@@ -342,6 +339,16 @@ struct AIInsightPanel: View {
                 }
             }
         }
+    }
+
+    private func insightTint(_ insight: String) -> Color {
+        if insight.contains("风险") || insight.contains("阻塞") || insight.contains("失败") {
+            return AITheme.ColorToken.danger
+        }
+        if insight.contains("未") || insight.contains("待") || insight.contains("临近") || insight.contains("提醒") {
+            return AITheme.ColorToken.warning
+        }
+        return AITheme.ColorToken.ink700
     }
 }
 
@@ -372,7 +379,10 @@ struct FlatTag: View {
         if title.contains("已") || title.contains("完成") || title.contains("正常") {
             return AITheme.ColorToken.successSurface
         }
-        return AITheme.ColorToken.aiSurface
+        if title.contains("AI") || title.contains("智能") || title.contains("洞察") || title.contains("分析") {
+            return AITheme.ColorToken.aiSurface
+        }
+        return AITheme.ColorToken.gray1
     }
 }
 
@@ -454,8 +464,11 @@ struct MetricTile: View {
         if title.contains("风险") {
             return AITheme.ColorToken.dangerSurface
         }
+        if title.contains("填报") || title.contains("完成") || title.contains("正常") {
+            return AITheme.ColorToken.successSurface
+        }
         if title.contains("工时") || title.contains("近") {
-            return AITheme.ColorToken.aiSurface
+            return AITheme.ColorToken.gray1
         }
         return AITheme.ColorToken.primarySurface
     }
@@ -513,11 +526,93 @@ struct PrimaryActionButton: View {
     }
 }
 
+struct SecondaryActionButton: View {
+    @Environment(\.isEnabled) private var isEnabled
+
+    let title: String
+    let systemImage: String
+    let isLoading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: AITheme.Spacing.xs) {
+                if isLoading {
+                    ProgressView()
+                } else {
+                    Image(systemName: systemImage)
+                    Text(title)
+                }
+            }
+            .font(.headline)
+            .foregroundStyle(isEnabled ? AITheme.ColorToken.ink900 : AITheme.ColorToken.disabledText)
+            .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+}
+
+struct AIActionButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ai)
+                .padding(.vertical, AITheme.Spacing.xs)
+                .padding(.horizontal, AITheme.Spacing.sm)
+                .background(AITheme.ColorToken.aiSurface)
+                .clipShape(Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.5)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 extension View {
     @ViewBuilder
     func compactNavigationTitle() -> some View {
         #if os(iOS)
         self.navigationBarTitleDisplayMode(.inline)
+        #else
+        self
+        #endif
+    }
+
+    @ViewBuilder
+    func appTopContentInset(_ height: CGFloat = AITheme.Spacing.sm) -> some View {
+        #if os(iOS)
+        self.safeAreaInset(edge: .top) {
+            Color.clear
+                .frame(height: height)
+                .accessibilityHidden(true)
+        }
+        #else
+        self
+        #endif
+    }
+
+    @ViewBuilder
+    func appTabBarContentInset(_ height: CGFloat = AITheme.Spacing.lg) -> some View {
+        #if os(iOS)
+        self.safeAreaInset(edge: .bottom) {
+            Color.clear
+                .frame(height: height)
+                .accessibilityHidden(true)
+        }
         #else
         self
         #endif

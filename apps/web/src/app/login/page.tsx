@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Form, Input, Modal, Typography, message } from "antd";
 import { ArrowRight, CalendarCheck2, Home, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { businessLeaderQuotes } from "@/lib/business-quotes";
@@ -27,10 +27,15 @@ export default function LoginPage() {
   const [confirmResetForm] = Form.useForm();
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
-  const leaderQuote = useMemo(() => {
-    const now = new Date();
-    const seed = now.getFullYear() * 372 + now.getMonth() * 31 + now.getDate();
-    return businessLeaderQuotes[seed % businessLeaderQuotes.length];
+  const [leaderQuote, setLeaderQuote] = useState(businessLeaderQuotes[0]);
+
+  useEffect(() => {
+    const previousQuote = window.localStorage.getItem("work-calendar-ai-login-quote");
+    const candidates = businessLeaderQuotes.filter((item) => item.quote !== previousQuote);
+    const pool = candidates.length > 0 ? candidates : businessLeaderQuotes;
+    const nextQuote = pool[Math.floor(Math.random() * pool.length)];
+    window.localStorage.setItem("work-calendar-ai-login-quote", nextQuote.quote);
+    setLeaderQuote(nextQuote);
   }, []);
 
   const login = useMutation({
