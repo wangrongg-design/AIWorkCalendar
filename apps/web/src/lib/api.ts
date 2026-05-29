@@ -13,12 +13,25 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   const normalized = message.toLowerCase();
   const upperMethod = method.toUpperCase();
   const isAttachmentEndpoint = path.includes("/attachments");
+  const isLoginEndpoint = path === "/auth/login";
 
   if (isAttachmentEndpoint && upperMethod === "POST" && (status === 404 || normalized.includes("not found"))) {
     return "演示环境暂不支持附件上传。可以先保存日报正文，稍后在正式环境补充附件。";
   }
   if (isAttachmentEndpoint && (status === 404 || normalized.includes("attachment") || normalized.includes("not a file"))) {
     return "附件暂时不可用，可能已被删除或移动。请刷新页面后重试，必要时重新上传。";
+  }
+  if (isLoginEndpoint && (status === 401 || normalized.includes("unauthorized"))) {
+    if (normalized.includes("temporarily locked")) {
+      return "账号因连续登录失败被临时锁定，请稍后再试或联系企业管理员。";
+    }
+    if (normalized.includes("email is not verified")) {
+      return "邮箱尚未验证，请先完成邮箱验证后再登录。";
+    }
+    if (normalized.includes("inactive")) {
+      return "账号已停用，请联系企业管理员恢复后再登录。";
+    }
+    return "账号或密码不正确，请检查手机号/邮箱和密码。";
   }
   if (status === 401 || normalized.includes("unauthorized")) {
     return "登录状态已失效，请重新登录后继续操作。";

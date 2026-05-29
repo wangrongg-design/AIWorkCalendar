@@ -9,6 +9,11 @@ import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { businessLeaderQuotes } from "@/lib/business-quotes";
 import { AuthUser } from "@/lib/types";
+import {
+  normalizeUnifiedSocialCreditCode,
+  unifiedSocialCreditCodeMessage,
+  unifiedSocialCreditCodePattern
+} from "@/lib/unified-social-credit-code";
 
 type LoginResponse = {
   accessToken: string;
@@ -39,10 +44,14 @@ export default function LoginPage() {
   }, []);
 
   const login = useMutation({
-    mutationFn: (values: { account: string; password: string }) =>
+    mutationFn: (values: { account: string; password: string; tenantCode?: string }) =>
       apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
-        body: JSON.stringify(values)
+        body: JSON.stringify({
+          account: values.account,
+          password: values.password,
+          tenantCode: values.tenantCode ? normalizeUnifiedSocialCreditCode(values.tenantCode) : undefined
+        })
       }),
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
@@ -111,6 +120,15 @@ export default function LoginPage() {
                 <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
                   <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
                     <Input placeholder="请输入邮箱或手机号" />
+                  </Form.Item>
+                  <Form.Item
+                    name="tenantCode"
+                    label="企业统一社会信用代码（可选）"
+                    normalize={normalizeUnifiedSocialCreditCode}
+                    rules={[{ pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
+                    extra="同一手机号或邮箱加入多个企业时填写。"
+                  >
+                    <Input placeholder="例如：91110105MA01A1B2X3" />
                   </Form.Item>
                   <Form.Item name="password" label="密码" rules={[{ required: true }]}>
                     <Input.Password placeholder="请输入密码" />

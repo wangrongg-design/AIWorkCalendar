@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, Cascader, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, MessageSquare, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
@@ -40,6 +40,17 @@ type OrgResponse = {
   users: OrgUser[];
 };
 
+type DepartmentTreeNode = Department & {
+  children?: DepartmentTreeNode[];
+};
+
+type DepartmentCascaderOption = {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  children?: DepartmentCascaderOption[];
+};
+
 type SubscriptionForm = {
   plan: SubscriptionPlan;
   status: SubscriptionStatus;
@@ -76,6 +87,22 @@ type FeedbackForm = {
 type FeedbackStatusForm = {
   status: FeedbackStatus;
   resolution?: string;
+};
+
+type DepartmentForm = {
+  name: string;
+  parentId?: string | string[] | null;
+};
+
+type OrgUserForm = {
+  email?: string;
+  phone?: string;
+  name: string;
+  departmentId?: string | string[] | null;
+  password?: string;
+  roles: RoleCode[];
+  isActive?: boolean;
+  requiresWorkReport?: boolean;
 };
 
 const roleOptions: Array<{ value: RoleCode; label: string }> = [
@@ -128,6 +155,11 @@ const paymentProviderLabels: Record<PaymentProvider, string> = {
 };
 
 const activeMemberMonthlyPriceCents = 1900;
+
+function lastPathValue(value?: string | string[] | null) {
+  if (Array.isArray(value)) return value.at(-1) ?? null;
+  return value || null;
+}
 
 function contactText(record: { email?: string | null; phone?: string | null }) {
   return [record.phone, record.email].filter(Boolean).join(" / ") || "-";
@@ -290,19 +322,90 @@ export default function OrgPage() {
     queryFn: () => apiFetch<OrgResponse>("/org")
   });
 
-  const departmentOptions = useMemo(
-    () => org.data?.departments.map((item) => ({ value: item.id, label: item.name })) ?? [],
-    [org.data?.departments]
-  );
-
   const departmentById = useMemo(() => {
     return new Map((org.data?.departments ?? []).map((item) => [item.id, item]));
   }, [org.data?.departments]);
 
-  const departmentParentName = (departmentId?: string | null) => {
-    const department = departmentId ? departmentById.get(departmentId) : null;
-    return department?.parentId ? departmentById.get(department.parentId)?.name ?? "上级部门已移除" : "无上级部门";
+  const departmentTree = useMemo<DepartmentTreeNode[]>(() => {
+    const nodes = new Map<string, DepartmentTreeNode>();
+    for (const department of org.data?.departments ?? []) {
+      nodes.set(department.id, { ...department, children: [] });
+    }
+    const roots: DepartmentTreeNode[] = [];
+    for (const department of org.data?.departments ?? []) {
+      const node = nodes.get(department.id);
+      if (!node) continue;
+      const parent = department.parentId ? nodes.get(department.parentId) : null;
+      if (parent && parent.id !== node.id) {
+        parent.children = parent.children ?? [];
+        parent.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    const trimEmptyChildren = (node: DepartmentTreeNode): DepartmentTreeNode => {
+      if (node.children?.length) {
+        node.children = node.children.map(trimEmptyChildren);
+      } else {
+        delete node.children;
+      }
+      return node;
+    };
+    return roots.map(trimEmptyChildren);
+  }, [org.data?.departments]);
+
+  const departmentPathIds = (departmentId?: string | null) => {
+    const ids: string[] = [];
+    const visited = new Set<string>();
+    let current = departmentId ? departmentById.get(departmentId) : null;
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      ids.unshift(current.id);
+      current = current.parentId ? departmentById.get(current.parentId) : null;
+    }
+    return ids;
   };
+
+  const departmentFullPath = (departmentId?: string | null) => {
+    const names = departmentPathIds(departmentId).map((id) => departmentById.get(id)?.name).filter(Boolean);
+    return names.length ? names.join(" / ") : "未分配";
+  };
+
+  const isDepartmentDescendant = (departmentId: string, ancestorId: string) => {
+    let current = departmentById.get(departmentId);
+    const visited = new Set<string>();
+    while (current?.parentId && !visited.has(current.id)) {
+      visited.add(current.id);
+      if (current.parentId === ancestorId) return true;
+      current = departmentById.get(current.parentId);
+    }
+    return false;
+  };
+
+  const buildDepartmentCascaderOptions = (disabledIds = new Set<string>()) => {
+    const toOption = (node: DepartmentTreeNode): DepartmentCascaderOption => ({
+      value: node.id,
+      label: node.name,
+      disabled: disabledIds.has(node.id),
+      children: node.children?.map(toOption)
+    });
+    return departmentTree.map(toOption);
+  };
+
+  const departmentCascaderOptions = useMemo(() => buildDepartmentCascaderOptions(), [departmentTree]);
+
+  const parentDepartmentCascaderOptions = useMemo(() => {
+    const disabledIds = new Set<string>();
+    if (editingDepartment) {
+      disabledIds.add(editingDepartment.id);
+      for (const department of org.data?.departments ?? []) {
+        if (isDepartmentDescendant(department.id, editingDepartment.id)) {
+          disabledIds.add(department.id);
+        }
+      }
+    }
+    return buildDepartmentCascaderOptions(disabledIds);
+  }, [departmentTree, departmentById, editingDepartment, org.data?.departments]);
 
   const billingOrders = useQuery({
     queryKey: ["billing-orders"],
@@ -393,14 +496,18 @@ export default function OrgPage() {
   }, [checkout, queryClient]);
 
   const saveDepartment = useMutation({
-    mutationFn: (values: { name: string; parentId?: string }) => {
+    mutationFn: (values: DepartmentForm) => {
+      const payload = {
+        name: values.name,
+        parentId: lastPathValue(values.parentId)
+      };
       if (editingDepartment) {
         return apiFetch<Department>(`/org/departments/${editingDepartment.id}`, {
           method: "PATCH",
-          body: JSON.stringify(values)
+          body: JSON.stringify(payload)
         });
       }
-      return apiFetch<Department>("/org/departments", { method: "POST", body: JSON.stringify(values) });
+      return apiFetch<Department>("/org/departments", { method: "POST", body: JSON.stringify(payload) });
     },
     onSuccess: () => {
       message.success("部门已保存");
@@ -422,25 +529,20 @@ export default function OrgPage() {
   });
 
   const saveUser = useMutation({
-    mutationFn: (values: {
-      email?: string;
-      phone?: string;
-      name: string;
-      departmentId?: string;
-      password?: string;
-      roles: RoleCode[];
-      isActive?: boolean;
-      requiresWorkReport?: boolean;
-    }) => {
+    mutationFn: (values: OrgUserForm) => {
+      const payload = {
+        ...values,
+        departmentId: lastPathValue(values.departmentId)
+      };
       if (editingUser) {
         return apiFetch<OrgUser>(`/org/users/${editingUser.id}`, {
           method: "PATCH",
-          body: JSON.stringify(values)
+          body: JSON.stringify(payload)
         });
       }
       return apiFetch<OrgUser>("/org/users", {
         method: "POST",
-        body: JSON.stringify({ ...values, password: values.password || "Passw0rd!" })
+        body: JSON.stringify({ ...payload, password: values.password || "Passw0rd!" })
       });
     },
     onSuccess: () => {
@@ -633,12 +735,17 @@ export default function OrgPage() {
   const checkoutIsLive = checkout?.payment?.mode === "live";
   const checkoutIsMock = checkout?.payment?.mode === "mock" || !checkout?.payment?.mode;
 
-  const departmentColumns: ColumnsType<Department> = [
-    { title: "当前部门", dataIndex: "name", width: 220 },
+  const departmentColumns: ColumnsType<DepartmentTreeNode> = [
     {
-      title: "上级部门",
-      width: 220,
-      render: (_, record) => departmentParentName(record.id)
+      title: "部门",
+      dataIndex: "name",
+      width: 420,
+      render: (value: string, record) => (
+        <div>
+          <div className="font-medium text-ink">{value}</div>
+          <div className="mt-1 text-xs text-muted">完整路径：{departmentFullPath(record.id)}</div>
+        </div>
+      )
     },
     {
       title: "操作",
@@ -649,7 +756,7 @@ export default function OrgPage() {
             icon={<Edit2 size={15} />}
             onClick={() => {
               setEditingDepartment(record);
-              departmentForm.setFieldsValue(record);
+              departmentForm.setFieldsValue({ ...record, parentId: departmentPathIds(record.parentId) });
               setDepartmentModalOpen(true);
             }}
           />
@@ -662,13 +769,10 @@ export default function OrgPage() {
     { title: "联系方式", width: 260, render: (_, record) => contactText(record) },
     {
       title: "部门",
-      width: 220,
+      width: 260,
       render: (_, record) =>
         record.departmentId ? (
-          <div>
-            <div className="font-medium text-ink">{record.departmentName ?? "未命名部门"}</div>
-            <div className="mt-1 text-xs text-muted">上级：{departmentParentName(record.departmentId)}</div>
-          </div>
+          <span className="font-medium text-ink">{departmentFullPath(record.departmentId)}</span>
         ) : (
           "未分配"
         )
@@ -698,7 +802,7 @@ export default function OrgPage() {
             icon={<Edit2 size={15} />}
             onClick={() => {
               setEditingUser(record);
-              userForm.setFieldsValue({ ...record, password: undefined });
+              userForm.setFieldsValue({ ...record, departmentId: departmentPathIds(record.departmentId), password: undefined });
               setUserModalOpen(true);
             }}
           />
@@ -1006,10 +1110,11 @@ export default function OrgPage() {
                 <Table
                   rowKey="id"
                   loading={org.isFetching}
-                  dataSource={org.data?.departments ?? []}
+                  dataSource={departmentTree}
                   columns={departmentColumns}
                   locale={{ emptyText: <Empty description="暂无部门" /> }}
                   pagination={false}
+                  expandable={{ defaultExpandAllRows: true }}
                 />
               </div>
             )
@@ -1363,7 +1468,12 @@ export default function OrgPage() {
             <Input />
           </Form.Item>
           <Form.Item name="parentId" label="上级部门">
-            <Select allowClear options={departmentOptions.filter((item) => item.value !== editingDepartment?.id)} />
+            <Cascader
+              allowClear
+              changeOnSelect
+              options={parentDepartmentCascaderOptions}
+              placeholder="选择上级部门"
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -1388,7 +1498,12 @@ export default function OrgPage() {
               <Input placeholder="13900000000" />
             </Form.Item>
             <Form.Item name="departmentId" label="部门">
-              <Select allowClear options={departmentOptions} />
+              <Cascader
+                allowClear
+                changeOnSelect
+                options={departmentCascaderOptions}
+                placeholder="选择部门"
+              />
             </Form.Item>
             <Form.Item name="password" label={editingUser ? "重置密码" : "初始密码"}>
               <Input.Password placeholder={editingUser ? "留空不修改" : "默认 Passw0rd!"} />
