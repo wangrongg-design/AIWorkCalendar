@@ -209,7 +209,7 @@ export default function ProjectsPage() {
           <Typography.Title level={3} className="page-title">
             项目管理
           </Typography.Title>
-          <Typography.Text className="page-subtitle">维护轻量项目主数据，日报和未来计划可关联到项目，便于日历与 AI 汇报按项目理解上下文。</Typography.Text>
+          <Typography.Text className="page-subtitle">维护轻量项目主数据，日报和未来计划可关联到项目，便于日历与汇报按项目理解上下文。</Typography.Text>
         </div>
         <Button type="primary" icon={<Plus size={16} />} onClick={openCreate}>
           新增项目

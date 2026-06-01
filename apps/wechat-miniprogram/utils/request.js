@@ -2,7 +2,7 @@ const { getToken, clearSession } = require("./storage");
 
 function apiBaseUrl() {
   const app = getApp();
-  return String(app.globalData.apiBaseUrl || "http://localhost:3001").replace(/\/$/, "");
+  return String(app.globalData.apiBaseUrl || "https://calendarapi.sevendata.cn").replace(/\/$/, "");
 }
 
 function request(path, options = {}) {

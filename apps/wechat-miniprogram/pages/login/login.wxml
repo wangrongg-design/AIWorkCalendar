@@ -26,7 +26,14 @@
       </view>
     </view>
 
-    <button class="primary-button login-button" loading="{{loading}}" bindtap="login">登录</button>
+    <button
+      class="login-button {{canLogin ? 'enabled' : ''}}"
+      loading="{{loading}}"
+      disabled="{{!canLogin || loading}}"
+      bindtap="login"
+    >
+      登录
+    </button>
   </view>
 
   <view class="login-footer">

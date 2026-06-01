@@ -632,25 +632,51 @@ export class OpenAiService {
 
     const ranges = Array.from(content.matchAll(this.timeRangePattern()));
     if (ranges.length) {
-      return ranges.map((match, index) => {
-        const start = match.index ?? 0;
-        const end = start + match[0].length;
-        const nextStart = ranges[index + 1]?.index;
-        const segment = this.rangeSegment(content, start, end, nextStart);
-        return this.applyGlobalDraftDate(this.buildDraftItem(segment, currentDate, this.parseDraftTimeRange(match)), segment, globalDate, currentDate);
+      const items = this.splitDraftClauses(content, true).flatMap((clause) => {
+        const clauseRanges = Array.from(clause.matchAll(this.timeRangePattern()));
+        if (!clauseRanges.length) {
+          return [this.applyGlobalDraftDate(this.buildDraftItem(clause, currentDate), clause, globalDate, currentDate)];
+        }
+        return clauseRanges.map((match, index) => {
+          const start = match.index ?? 0;
+          const end = start + match[0].length;
+          const nextStart = clauseRanges[index + 1]?.index;
+          const segment = this.rangeSegment(clause, start, end, nextStart);
+          return this.applyGlobalDraftDate(this.buildDraftItem(segment, currentDate, this.parseDraftTimeRange(match)), segment, globalDate, currentDate);
+        });
       });
+      return items.length ? items : [this.buildDraftItem(content, currentDate)];
     }
 
-    const clauses = content
-      .split(/[。；;\n]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const clauses = this.splitDraftClauses(content);
     const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
     if (hourClauses.length > 1) {
       return hourClauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate), item, globalDate, currentDate));
     }
+    if (clauses.length > 1) {
+      return clauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate), item, globalDate, currentDate));
+    }
 
     return [this.buildDraftItem(content, currentDate)];
+  }
+
+  private splitDraftClauses(text: string, includeSoftSeparators = false) {
+    const separator = includeSoftSeparators ? /[，,。；;\n]+/ : /[。；;\n]+/;
+    return text
+      .split(separator)
+      .map((item) => item.trim())
+      .filter((item) => item && this.hasDraftClauseContent(item));
+  }
+
+  private hasDraftClauseContent(text: string) {
+    const cleaned = text
+      .replace(this.timeRangePattern(), " ")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
+      .replace(/今天|昨天|明天|后天|计划|日报|工时|小时|上午|下午|晚上|中午|凌晨|早上/g, "")
+      .replace(/[，。！？、,.!?]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return cleaned.length > 0;
   }
 
   private buildDraftItem(text: string, currentDate: string, timing?: DraftTiming, missingContent = false): WorkLogDraftItem {

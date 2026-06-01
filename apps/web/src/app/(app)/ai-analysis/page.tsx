@@ -271,7 +271,7 @@ export default function AIAnalysisPage() {
       <div className="page-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            AI整体分析
+            周期判断
           </Typography.Title>
           <Typography.Text className="page-subtitle">周期复盘入口：按周、月、季度和年度分析团队节奏、风险趋势和投入变化。</Typography.Text>
         </div>
@@ -318,7 +318,7 @@ export default function AIAnalysisPage() {
         <div className="ai-analysis-hero-main">
           <div className="workbench-ai-kicker">
             <Bot size={16} />
-            AI 工作洞察
+            工作洞察
           </div>
           <Typography.Title level={2}>{analysis.conclusion}</Typography.Title>
           <Typography.Text>{analysis.dataScopeNote}</Typography.Text>

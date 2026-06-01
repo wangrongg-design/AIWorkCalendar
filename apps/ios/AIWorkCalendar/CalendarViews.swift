@@ -99,7 +99,7 @@ fileprivate enum CalendarAssistantActionKind: Hashable, Identifiable {
         case .remindMissing:
             return "查看缺填成员"
         case .openAIInsight:
-            return "打开 AI 洞察"
+            return "查看判断依据"
         case .createReport:
             return "填写今日日报"
         case .openProjects:
@@ -590,7 +590,7 @@ final class CalendarViewModel: ObservableObject {
         if today.filledCount > 0 {
             return "暂无明显风险，今日工作信号已进入团队看板。"
         }
-        return "先完成今天的日报，AI 会同步更新团队节奏。"
+        return "先完成今天的日报，系统会同步更新团队节奏。"
     }
 
     var analysisAnchorDate: Date {
@@ -626,7 +626,7 @@ final class CalendarViewModel: ObservableObject {
         if risks > 0 {
             riskReminder = "有 \(riskDayCount) 天出现风险，建议先进入风险日期查看具体日报。"
         } else if missing > 0 {
-            riskReminder = "缺填会影响 AI 对团队状态的判断，建议优先查看未填成员。"
+            riskReminder = "缺填会影响团队状态判断，建议优先查看未填成员。"
         } else {
             riskReminder = "暂无明显风险，继续关注临近截止日期和低覆盖日期。"
         }
@@ -851,7 +851,7 @@ struct CalendarDashboardView: View {
     }
 
     private var topTitle: String {
-        "AI日历"
+        isManagerHome ? "团队日历" : "今日待处理"
     }
 
     private var homeSubtitle: String {
@@ -859,7 +859,7 @@ struct CalendarDashboardView: View {
         if isManagerHome {
             return "风险和缺填优先处理 · \(dateText)"
         }
-        return "今日日报和本周节奏 · \(dateText)"
+        return "先完成今日日报，再看本周节奏 · \(dateText)"
     }
 
     private var errorBinding: Binding<Bool> {
@@ -876,7 +876,7 @@ struct CalendarDashboardView: View {
         guard !didConfigureHomeMode else {
             return
         }
-        homeMode = supportsTeamMode ? .team : .mine
+        homeMode = .mine
         didConfigureHomeMode = true
     }
 
@@ -956,7 +956,7 @@ struct CalendarDashboardView: View {
         if asksRisk {
             let message = today.riskCount > 0
                 ? "今天有 \(today.riskCount) 条风险信号，建议先进入日期详情确认影响项目和负责人。"
-                : "今天暂无明显风险，可以继续查看本周 AI 洞察，确认是否存在低覆盖或临期项目。"
+                : "今天暂无明显风险，可以继续查看本周判断依据，确认是否存在低覆盖或临期项目。"
             return CalendarAssistantReply(
                 title: "已整理风险处理入口",
                 message: message,
@@ -967,7 +967,7 @@ struct CalendarDashboardView: View {
         if asksMissing {
             let message = today.missingCount > 0
                 ? "今天还有 \(today.missingCount) 人未填报，先查看名单，再决定是否线下提醒。"
-                : "当前今日缺填不明显，可以打开 AI 洞察查看本周覆盖情况。"
+                : "当前今日缺填不明显，可以打开判断依据查看本周覆盖情况。"
             return CalendarAssistantReply(
                 title: "已准备缺填处理入口",
                 message: message,
@@ -977,8 +977,8 @@ struct CalendarDashboardView: View {
 
         if asksReport {
             return CalendarAssistantReply(
-                title: "已准备汇报生成入口",
-                message: "先进入 AI 洞察查看本周风险、缺填和人员状态，再生成适合汇报的结构化结论。",
+                title: "已准备汇报入口",
+                message: "先查看本周风险、缺填和人员状态，再生成适合汇报的结构化结论。",
                 actions: [.openAIInsight, .openTodayRisk]
             )
         }
@@ -986,7 +986,7 @@ struct CalendarDashboardView: View {
         if asksEntry {
             return CalendarAssistantReply(
                 title: "我可以帮你进入日报整理",
-                message: "到填报页后，可以直接说或写今天完成的工作，再用 AI 整理成日报草稿。",
+                message: "到填报页后，可以直接说或写今天完成的工作，先生成日报草稿，再确认提交。",
                 actions: [.createReport, .openLogs]
             )
         }
@@ -994,7 +994,7 @@ struct CalendarDashboardView: View {
         return CalendarAssistantReply(
             title: "我建议先处理今天的关键状态",
             message: isManagerHome
-                ? "可以先看风险和缺填，再进入 AI 洞察生成汇报材料。"
+                ? "可以先看风险和缺填，再查看判断依据生成汇报材料。"
                 : "可以先完成今日日报，再回看本周风险和最近记录。",
             actions: isManagerHome ? [.openTodayRisk, .remindMissing, .openAIInsight] : [.createReport, .openAIInsight, .openLogs]
         )
@@ -1143,7 +1143,7 @@ private struct CalendarHomeHeroCard: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看 AI 洞察")
+                .accessibilityLabel("查看判断依据")
             }
 
             Text(heroTitle(today))
@@ -1497,12 +1497,12 @@ private struct CalendarAICommandCenter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
-            Label("AI 快捷处理", systemImage: "sparkles")
+            Label("快捷处理", systemImage: "sparkles")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(AITheme.ColorToken.ai)
 
             HStack(alignment: .center, spacing: AITheme.Spacing.xs) {
-                TextField("问 AI 今天有什么需要处理？", text: $input)
+                TextField("问今天有什么需要处理？", text: $input)
                     .font(AITheme.Typography.support)
                     .submitLabel(.send)
                     .padding(.horizontal, AITheme.Spacing.sm)
@@ -1529,7 +1529,7 @@ private struct CalendarAICommandCenter: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSubmit)
-                .accessibilityLabel("发送给 AI")
+                .accessibilityLabel("发送问题")
             }
 
             HStack(spacing: AITheme.Spacing.xs) {
@@ -1570,7 +1570,7 @@ private struct CalendarAICommandCenter: View {
         if isManager {
             return "可以问风险、缺填、项目进度，也可以一键生成汇报入口。"
         }
-        return "可以问本周风险，也可以直接进入 AI 日报整理。"
+        return "可以问本周风险，也可以直接进入日报整理。"
     }
 
     private var quickCommands: [String] {
@@ -1892,18 +1892,54 @@ private struct CalendarMobileDayChip: View {
                 }
             }
 
-            Circle()
+            Text(statusLine)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(statusLineTint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+                .frame(maxWidth: .infinity)
+
+            Capsule()
                 .fill(day.status.tint)
-                .frame(width: 6, height: 6)
+                .frame(width: 18, height: 4)
         }
-        .frame(width: 46, height: 72)
+        .frame(width: 56, height: 86)
         .background(day.isSelected ? AITheme.ColorToken.primarySurface : AITheme.ColorToken.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
                 .stroke(day.isToday ? AITheme.ColorToken.primary : AITheme.ColorToken.separator, lineWidth: day.isToday ? 1.3 : 0.5)
         }
-        .accessibilityLabel("\(formatShortDate(day.date))，\(formatWeekday(day.date))，\(day.status.title)")
+        .accessibilityLabel("\(formatShortDate(day.date))，\(formatWeekday(day.date))，\(day.status.title)，\(statusLine)")
+    }
+
+    private var statusLine: String {
+        if day.isFuture {
+            return day.filledCount > 0 ? "计划 \(day.filledCount)" : "未计划"
+        }
+        if day.missingCount > 0 {
+            return "缺 \(day.missingCount)"
+        }
+        if day.totalCount > 0 {
+            return "填 \(day.filledCount)/\(day.totalCount)"
+        }
+        if day.filledCount > 0 {
+            return "已填"
+        }
+        return "无数据"
+    }
+
+    private var statusLineTint: Color {
+        if day.riskCount > 0 {
+            return AITheme.ColorToken.danger
+        }
+        if day.missingCount > 0 {
+            return AITheme.ColorToken.warning
+        }
+        if day.filledCount > 0 {
+            return AITheme.ColorToken.success
+        }
+        return AITheme.ColorToken.textSecondary
     }
 }
 
@@ -2604,7 +2640,7 @@ private struct CalendarOverallAnalysisSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                    Picker("分析周期", selection: $period) {
+                    Picker("周期", selection: $period) {
                         ForEach(CalendarAnalysisPeriod.allCases) { item in
                             Text(item.title).tag(item)
                         }
@@ -2626,19 +2662,19 @@ private struct CalendarOverallAnalysisSheet: View {
                             title: "风险提醒",
                             value: summary.riskReminder,
                             systemImage: "exclamationmark.triangle.fill",
-                            tint: summary.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
+                            tint: summary.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink500
                         )
                         CalendarAnalysisInfoRow(
                             title: "人员状态",
                             value: summary.peopleStatus,
                             systemImage: "person.2.fill",
-                            tint: summary.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ai
+                            tint: summary.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ink500
                         )
                         CalendarAnalysisInfoRow(
                             title: "项目进展",
                             value: projectText,
                             systemImage: "folder.fill",
-                            tint: viewModel.riskDayCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.primary
+                            tint: viewModel.riskDayCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ink500
                         )
                     }
 
@@ -2698,7 +2734,7 @@ private struct CalendarOverallAnalysisSheet: View {
                 .padding(AITheme.Spacing.lg)
             }
             .background(AITheme.ColorToken.appBackground)
-            .navigationTitle("AI 整体分析")
+            .navigationTitle("周期判断")
             .compactNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -2871,7 +2907,7 @@ struct DayDetailView: View {
     var body: some View {
         List {
             if let detail {
-                Section("AI 今日洞察") {
+                Section("今日判断") {
                     ForEach(detailInsights(detail), id: \.self) { insight in
                         HStack(alignment: .top, spacing: AITheme.Spacing.xs) {
                             Image(systemName: "sparkles")
@@ -3035,7 +3071,7 @@ struct DayDetailView: View {
             insights.append(String(format: "今日填报率 %.1f%%，日报覆盖度较好。", stats.fillRate))
         }
         if stats.riskCount > 0 {
-            insights.append("AI 发现 \(stats.riskCount) 个风险信号，建议优先查看红色风险日志。")
+            insights.append("发现 \(stats.riskCount) 个风险信号，建议优先查看风险日志。")
         } else {
             insights.append("暂未发现显性风险，适合关注未填报成员是否存在隐性阻塞。")
         }

@@ -56,9 +56,13 @@ Page({
     if (typeof this.getTabBar === "function" && this.getTabBar()) {
       this.getTabBar().setData({ selected: 1 });
     }
+    const prefillDate = wx.getStorageSync("reportPrefillDate");
+    if (prefillDate) {
+      wx.removeStorageSync("reportPrefillDate");
+    }
     this.setData({
       user: getUser() || {},
-      date: this.data.date || dateKey()
+      date: prefillDate || this.data.date || dateKey()
     });
     this.loadProjects();
     this.loadWorkLogs();
@@ -147,7 +151,7 @@ Page({
       const draft = await request("/ai/work-log-draft", {
         method: "POST",
         data: {
-          currentDate: dateKey(),
+          currentDate: this.data.date || dateKey(),
           messages: draftMessages(messages)
         }
       });

@@ -1601,21 +1601,45 @@ function inferDraftItems(text, currentDate) {
 
   const ranges = Array.from(content.matchAll(timeRangePattern()));
   if (ranges.length) {
-    return ranges.map((match, index) => {
-      const start = match.index ?? 0;
-      const end = start + match[0].length;
-      const segment = rangeSegment(content, start, end, ranges[index + 1]?.index);
-      return applyGlobalDraftDate(buildDraftItem(segment, currentDate, parseDraftTimeRange(match)), segment, globalDate, currentDate);
+    const items = splitDraftClauses(content, true).flatMap((clause) => {
+      const clauseRanges = Array.from(clause.matchAll(timeRangePattern()));
+      if (!clauseRanges.length) {
+        return [applyGlobalDraftDate(buildDraftItem(clause, currentDate), clause, globalDate, currentDate)];
+      }
+      return clauseRanges.map((match, index) => {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        const segment = rangeSegment(clause, start, end, clauseRanges[index + 1]?.index);
+        return applyGlobalDraftDate(buildDraftItem(segment, currentDate, parseDraftTimeRange(match)), segment, globalDate, currentDate);
+      });
     });
+    return items.length ? items : [buildDraftItem(content, currentDate)];
   }
 
-  const clauses = content
-    .split(/[。；;\n]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const clauses = splitDraftClauses(content);
   const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
   if (hourClauses.length > 1) return hourClauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate), item, globalDate, currentDate));
+  if (clauses.length > 1) return clauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate), item, globalDate, currentDate));
   return [buildDraftItem(content, currentDate)];
+}
+
+function splitDraftClauses(text, includeSoftSeparators = false) {
+  const separator = includeSoftSeparators ? /[，,。；;\n]+/ : /[。；;\n]+/;
+  return text
+    .split(separator)
+    .map((item) => item.trim())
+    .filter((item) => item && hasDraftClauseContent(item));
+}
+
+function hasDraftClauseContent(text) {
+  const cleaned = text
+    .replace(timeRangePattern(), " ")
+    .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
+    .replace(/今天|昨天|明天|后天|计划|日报|工时|小时|上午|下午|晚上|中午|凌晨|早上/g, "")
+    .replace(/[，。！？、,.!?]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.length > 0;
 }
 
 function buildDraftItem(text, currentDate, timing, missingContent = false) {

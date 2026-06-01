@@ -196,7 +196,7 @@ struct WorkLogRow: View {
                 .lineLimit(2)
 
             if log.hasAIRisk {
-                Label("AI 发现风险或阻塞", systemImage: "exclamationmark.triangle.fill")
+                Label("发现风险或阻塞", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(AITheme.ColorToken.danger)
             }
@@ -232,7 +232,7 @@ struct WorkLogDetailView: View {
             }
 
             if let analysis = log.aiAnalysis {
-                Section("AI 分析") {
+                Section("结构化分析") {
                     if let summary = analysis.summary, !summary.isEmpty {
                         LabeledContent("建议", value: summary)
                     }
@@ -545,25 +545,25 @@ private extension Project {
 
     var aiRiskHint: String {
         if status == .paused {
-            return "AI 检测到推进暂停，建议确认阻塞原因。"
+            return "推进暂停，建议确认阻塞原因。"
         }
         if owner == nil {
-            return "AI 检测到负责人缺失，风险归属不清晰。"
+            return "负责人缺失，风险归属不清晰。"
         }
         if let endDate,
            let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
             let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
             if days < 0 {
-                return "AI 检测到项目已过结束日期，建议复核交付状态。"
+                return "项目已过结束日期，建议复核交付状态。"
             }
             if days <= 7, status == .active {
-                return "AI 检测到交付窗口临近，建议关注延期风险。"
+                return "交付窗口临近，建议关注延期风险。"
             }
         }
         if description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-            return "AI 建议补充项目目标，便于日报自动归因。"
+            return "建议补充项目目标，便于日报自动归因。"
         }
-        return "AI 暂未发现明显项目风险。"
+        return "暂未发现明显项目风险。"
     }
 
     var aiRiskTint: Color {

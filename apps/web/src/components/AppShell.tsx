@@ -13,10 +13,10 @@ import { Notification } from "@/lib/types";
 const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
-  { key: "/calendar", icon: <CalendarDays size={19} />, label: "AI日历" },
-  { key: "/ai-analysis", icon: <Sparkles size={19} />, label: "AI整体分析" },
+  { key: "/calendar", icon: <CalendarDays size={19} />, label: "工作日历" },
+  { key: "/ai-analysis", icon: <Sparkles size={19} />, label: "周期判断" },
   { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报记录" },
-  { key: "/reports", icon: <FileText size={19} />, label: "AI汇报" }
+  { key: "/reports", icon: <FileText size={19} />, label: "汇报" }
 ];
 
 const adminNavItems: MenuProps["items"] = [

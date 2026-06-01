@@ -63,12 +63,12 @@ final class ReportEntryViewModel: ObservableObject {
 
     var todayRiskText: String {
         if todayRiskCount > 0 {
-            return "AI 发现 \(todayRiskCount) 个风险或阻塞，提交前建议补充处理动作。"
+            return "发现 \(todayRiskCount) 个风险或阻塞，提交前建议补充处理动作。"
         }
         if todaySubmittedCount > 0 {
             return "暂无明显风险，今日工作信号已进入团队看板。"
         }
-        return "先用一句话描述今天完成的事，AI 会整理标题、内容和工时。"
+        return "先用一句话描述今天完成的事，系统会整理标题、内容和工时。"
     }
 
     func load(auth: AuthStore) async {
@@ -94,7 +94,7 @@ final class ReportEntryViewModel: ObservableObject {
     func generateDraft(auth: AuthStore) async {
         let input = chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
-            errorMessage = "请先告诉 AI 今天完成了什么"
+            errorMessage = "请先描述今天完成了什么"
             return
         }
 
@@ -382,7 +382,7 @@ private struct AIDraftComposer: View {
     var body: some View {
         BrandedCard {
             VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                SectionTitle("今天你完成了什么？", subtitle: "可以输入，也可以说给 AI 听。")
+                SectionTitle("今天你完成了什么？", subtitle: "可以输入，也可以语音描述。")
 
                 if viewModel.messages.count > 1 {
                     VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
@@ -419,7 +419,7 @@ private struct AIDraftComposer: View {
                         .transition(.opacity)
                 }
 
-                PrimaryActionButton(title: "AI 帮我整理日报", systemImage: "sparkles", isLoading: viewModel.isDrafting, action: onGenerate)
+                PrimaryActionButton(title: "生成日报草稿", systemImage: "sparkles", isLoading: viewModel.isDrafting, action: onGenerate)
                     .disabled(viewModel.isDrafting || voiceInput.isRecording || viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -472,7 +472,7 @@ private struct DailyDraftEditor: View {
     var body: some View {
         BrandedCard {
             VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                SectionTitle("日报草稿", subtitle: "AI 生成后仍可手动校正，提交前请确认工时和项目。")
+                SectionTitle("日报草稿", subtitle: "生成后不会自动提交，请确认日期、工时、项目和内容。")
 
                 DatePicker("日期", selection: $viewModel.selectedDate, displayedComponents: .date)
 
@@ -510,7 +510,7 @@ private struct ReportActionPanel: View {
 
     var body: some View {
         VStack(spacing: AITheme.Spacing.sm) {
-            PrimaryActionButton(title: "提交今日工作", systemImage: "paperplane.fill", isLoading: viewModel.isSubmitting, action: onSubmit)
+            PrimaryActionButton(title: "确认提交今日工作", systemImage: "paperplane.fill", isLoading: viewModel.isSubmitting, action: onSubmit)
                 .disabled(viewModel.isSubmitting || viewModel.isSavingDraft)
 
             SecondaryActionButton(

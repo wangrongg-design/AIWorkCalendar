@@ -215,7 +215,7 @@ final class ProfileViewModel: ObservableObject {
 
     var profileRiskText: String {
         if todayRiskCount > 0 {
-            return "AI 发现 \(todayRiskCount) 个风险或阻塞，建议回到项目页确认影响范围。"
+            return "发现 \(todayRiskCount) 个风险或阻塞，建议回到项目页确认影响范围。"
         }
         if weeklyHours > 0 {
             return "近 7 日累计 \(weeklyHoursText) 小时，工作画像会随持续填报更准确。"

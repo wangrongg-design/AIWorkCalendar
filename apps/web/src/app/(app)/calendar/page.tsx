@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { Bot, CalendarPlus, CheckCircle2, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
+import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
@@ -51,6 +51,12 @@ type AiDraftMessage = {
 type PendingAttachment = {
   uid: string;
   file: File;
+};
+
+type DraftPreview = {
+  assistantMessage: string;
+  items: WorkLogDraftItem[];
+  attachedToFirst: boolean;
 };
 
 const attachmentMaxBytes = 8 * 1024 * 1024;
@@ -177,9 +183,10 @@ export default function CalendarPage() {
   const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([
     {
       role: "assistant",
-      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
+      content: "告诉我今天完成了什么、花了多久，或明天计划做什么；我会先生成草稿，确认后再提交。"
     }
   ]);
+  const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -258,8 +265,9 @@ export default function CalendarPage() {
   const createWorkLog = useMutation({
     mutationFn: (values: WorkLogForm) => createAndSubmitWorkLog(values, true),
     onSuccess: () => {
-      message.success("已填报，AI 将自动分析。");
+      message.success("已提交，将自动分析。");
       setQuickFillOpen(false);
+      setDraftPreview(null);
       setPendingAttachments([]);
       quickFillForm.resetFields();
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
@@ -283,17 +291,33 @@ export default function CalendarPage() {
       });
       const items = normalizedDraftItems(draft);
       const attachedToFirst = pendingAttachments.length > 0 && items.length > 1;
-      for (const [index, item] of items.entries()) {
+      return { assistantMessage: draft.assistantMessage, items, attachedToFirst };
+    },
+    onSuccess: (preview) => {
+      setDraftPreview(preview);
+      setQuickFillAiMessages((messages) => [...messages, { role: "assistant", content: `${preview.assistantMessage} 请确认草稿内容后提交。` }]);
+      if (preview.items.length === 1) {
+        quickFillForm.setFieldsValue(draftItemToForm(preview.items[0]));
+      }
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "草稿生成失败，请调整描述后重试。");
+    }
+  });
+
+  const confirmDraftWorkLog = useMutation({
+    mutationFn: async (preview: DraftPreview) => {
+      for (const [index, item] of preview.items.entries()) {
         await createAndSubmitWorkLog(draftItemToForm(item), index === 0);
       }
-      return { draft, count: items.length, attachedToFirst };
+      return preview;
     },
-    onSuccess: ({ draft, count, attachedToFirst }) => {
-      setQuickFillAiMessages((messages) => [...messages, { role: "assistant", content: draft.assistantMessage }]);
-      message.success(count > 1 ? `已填报 ${count} 条，AI 将自动分析。` : "已填报，AI 将自动分析。");
-      if (attachedToFirst) {
+    onSuccess: (preview) => {
+      message.success(preview.items.length > 1 ? `已提交 ${preview.items.length} 条填报。` : "已提交填报。");
+      if (preview.attachedToFirst) {
         message.info("检测到多条日程，附件已关联到第一条填报。");
       }
+      setDraftPreview(null);
       setQuickFillOpen(false);
       setPendingAttachments([]);
       quickFillForm.resetFields();
@@ -303,7 +327,7 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "AI 填报失败，请调整描述后重试。");
+      message.error(error instanceof Error ? error.message : "提交草稿失败，请检查后重试。");
     }
   });
 
@@ -355,14 +379,75 @@ export default function CalendarPage() {
     () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
     [todayDetail.data?.filledEmployees]
   );
-  const todayAiSummary = useMemo(() => {
-    if (todayDetail.isFetching || calendar.isFetching) return "AI 正在汇总今日填报、风险和本月趋势。";
-    if (!todayStats || todayStats.totalEmployees === 0) return "当前范围暂无可分析成员，先完成团队和部门配置。";
-    if (todayStats.filledCount === 0) return "今天还没有提交记录，建议先提醒团队完成日报或计划。";
-    if (todayStats.riskCount > 0) return `今日发现 ${todayStats.riskCount} 条风险/阻塞，建议优先查看风险记录并同步负责人。`;
-    if (todayStats.missingCount > 0) return `今日 ${todayStats.missingCount} 位成员未填报，整体填报率 ${todayStats.fillRate}%。`;
-    return `今日填报已完成，团队合计 ${todayStats.totalHours}h，可以继续查看具体记录。`;
+  const todayPriority = useMemo(() => {
+    if (todayDetail.isFetching || calendar.isFetching) {
+      return {
+        tone: "neutral",
+        title: "正在同步今日团队状态",
+        copy: "稍后会给出风险、缺填和填报覆盖情况。",
+        primaryLabel: "刷新状态",
+        primaryAction: "refresh",
+        secondaryPrompt: "基于今天的团队日报，整理管理者需要优先关注的事项。"
+      };
+    }
+    if (!todayStats || todayStats.totalEmployees === 0) {
+      return {
+        tone: "neutral",
+        title: "等待团队数据",
+        copy: "当前范围暂无可分析成员，先确认团队、部门和日报要求配置。",
+        primaryLabel: "刷新状态",
+        primaryAction: "refresh",
+        secondaryPrompt: "当前范围没有团队数据，帮我列出需要检查的配置项。"
+      };
+    }
+    if (todayStats.riskCount > 0) {
+      return {
+        tone: "danger",
+        title: `${todayStats.riskCount} 条风险待确认`,
+        copy: "先确认影响项目和负责人，再决定是否提醒或升级。",
+        primaryLabel: "查看今日风险",
+        primaryAction: "openToday",
+        secondaryPrompt: "基于今天的风险日报，整理影响项目、负责人和下一步处理建议。"
+      };
+    }
+    if (todayStats.missingCount > 0) {
+      return {
+        tone: "warning",
+        title: `${todayStats.missingCount} 位成员未填报`,
+        copy: `当前填报率 ${todayStats.fillRate}%，先补齐团队状态，避免日报和复盘失真。`,
+        primaryLabel: "查看未填报成员",
+        primaryAction: "openToday",
+        secondaryPrompt: "帮我整理今天未填报成员，并给出适合管理者发送的提醒话术。"
+      };
+    }
+    if (todayStats.filledCount === 0) {
+      return {
+        tone: "warning",
+        title: "今天还没有提交记录",
+        copy: "建议先提醒团队提交日报或计划，避免今日状态缺失。",
+        primaryLabel: "查看今日详情",
+        primaryAction: "openToday",
+        secondaryPrompt: "今天还没有提交记录，帮我整理提醒团队填报的简短话术。"
+      };
+    }
+    return {
+      tone: "success",
+      title: "今日团队状态正常",
+      copy: `团队合计 ${todayStats.totalHours}h，暂无风险和缺填，可继续查看本周节奏。`,
+      primaryLabel: "查看今日详情",
+      primaryAction: "openToday",
+      secondaryPrompt: "基于今天的日报，生成一段管理者可以使用的今日简报。"
+    };
   }, [calendar.isFetching, todayDetail.isFetching, todayStats]);
+
+  const handleTodayPrimaryAction = () => {
+    if (todayPriority.primaryAction === "refresh") {
+      calendar.refetch();
+      todayDetail.refetch();
+      return;
+    }
+    setSelectedDate(today);
+  };
   const detailStats = dayDetail.data?.stats;
   const detailFilledEmployees = dayDetail.data?.filledEmployees ?? [];
   const detailMissingEmployees = dayDetail.data?.missingEmployees ?? [];
@@ -371,7 +456,7 @@ export default function CalendarPage() {
   const detailTitle = selectedDateKind === "future" ? "团队计划情况" : "今日团队填报情况";
   const aiObservations = useMemo(() => {
     if (!selectedDate) return [];
-    if (dayDetail.isFetching) return ["AI 正在分析团队日报…"];
+    if (dayDetail.isFetching) return ["正在分析团队日报…"];
     const stats = dayDetail.data?.stats;
     if (!stats) return ["等待团队数据同步后生成洞察。"];
     if (stats.filledCount === 0) {
@@ -395,7 +480,7 @@ export default function CalendarPage() {
       return aiObservations;
     }
     if (calendar.isFetching) {
-      return ["AI 正在分析当前月历数据…"];
+      return ["正在分析当前月历数据…"];
     }
     if (!summary.filled && !summary.missing) {
       return ["当前月历暂无可分析日报或计划。"];
@@ -440,7 +525,7 @@ export default function CalendarPage() {
       ]);
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "AI 暂时无法回答，请稍后重试。");
+      message.error(error instanceof Error ? error.message : "助手暂时无法回答，请稍后重试。");
     }
   });
 
@@ -480,9 +565,10 @@ export default function CalendarPage() {
     setQuickFillAiMessages([
       {
         role: "assistant",
-        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
+        content: "告诉我今天完成了什么、花了多久，或明天计划做什么；我会先生成草稿，确认后再提交。"
       }
     ]);
+    setDraftPreview(null);
     setQuickFillOpen(true);
   };
 
@@ -501,6 +587,7 @@ export default function CalendarPage() {
     const nextMessages = [...quickFillAiMessages, { role: "user" as const, content: text }];
     setQuickFillAiMessages(nextMessages);
     setQuickFillAiInput("");
+    setDraftPreview(null);
     draftWorkLog.mutate(nextMessages);
   };
 
@@ -515,7 +602,7 @@ export default function CalendarPage() {
       <div className="page-header dashboard-calendar-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            AI日历
+            工作日历
           </Typography.Title>
           <Typography.Text className="page-subtitle">当日和具体日期的团队状态入口：看今天谁填了、谁缺填、哪里有风险。</Typography.Text>
         </div>
@@ -559,22 +646,31 @@ export default function CalendarPage() {
 
       <section className="calendar-main-panel calendar-main-panel-full">
           <div className="workbench-hero">
-            <div className="workbench-ai">
+            <div className={`workbench-ai workbench-decision is-${todayPriority.tone}`}>
               <div className="workbench-ai-kicker">
-                <Bot size={16} />
-                AI 今日摘要
+                {todayPriority.tone === "danger" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                今日待处理
               </div>
-              <div className="workbench-ai-title">{todayAiSummary}</div>
+              <div className="workbench-ai-title">{todayPriority.title}</div>
+              <div className="workbench-decision-copy">{todayPriority.copy}</div>
               <div className="workbench-ai-evidence">
                 <span>范围：{scope === "company" ? "全公司" : scope === "department" ? "本部门" : "只看自己"}</span>
                 <span>今天：{today}</span>
                 <span>参考：{todayReferenceCount} 条记录</span>
               </div>
             </div>
-            <div className="workbench-actions is-ai-only">
+            <div className="workbench-actions">
+              <button type="button" onClick={handleTodayPrimaryAction} className="workbench-action primary-action-button">
+                {todayPriority.tone === "danger" ? <AlertTriangle size={18} /> : <UsersRound size={18} />}
+                <span>{todayPriority.primaryLabel}</span>
+              </button>
+              <button type="button" onClick={() => runCopilotPrompt(todayPriority.secondaryPrompt)} className="workbench-action">
+                <WandSparkles size={18} />
+                <span>生成今日简报</span>
+              </button>
               <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button">
                 <Bot size={18} />
-                <span>打开今日 AI 助手</span>
+                <span>打开助手</span>
               </button>
             </div>
           </div>
@@ -635,12 +731,13 @@ export default function CalendarPage() {
         open={quickFillOpen}
         onCancel={() => {
           setQuickFillOpen(false);
+          setDraftPreview(null);
           setPendingAttachments([]);
         }}
         onOk={() => quickFillForm.submit()}
-        okText="填报"
+        okText="提交表单"
         cancelText="取消"
-        confirmLoading={createWorkLog.isPending || draftWorkLog.isPending}
+        confirmLoading={createWorkLog.isPending || draftWorkLog.isPending || confirmDraftWorkLog.isPending}
         width={880}
       >
         <Form
@@ -652,7 +749,7 @@ export default function CalendarPage() {
           <div className="mb-5 rounded-[18px] border border-line bg-surface-container-low p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
               <Bot size={17} className="text-secondary" />
-              AI 对话填报
+              智能草稿
             </div>
             <div className="mb-3 max-h-48 space-y-2 overflow-auto">
               {quickFillAiMessages.map((item, index) => (
@@ -667,11 +764,21 @@ export default function CalendarPage() {
               ))}
             </div>
             {draftWorkLog.error ? <Alert className="mb-3" type="error" showIcon message={(draftWorkLog.error as Error).message} /> : null}
+            {draftWorkLog.isPending ? (
+              <div className="quickfill-draft-waiting" role="status" aria-live="polite">
+                <span className="quickfill-draft-spinner" />
+                <div>
+                  <strong>正在生成草稿</strong>
+                  <p>正在调用模型识别日期、工时和工作内容，正式环境可能需要 5-20 秒，请稍候。</p>
+                </div>
+              </div>
+            ) : null}
             <div className="flex gap-2">
               <Input.TextArea
                 value={quickFillAiInput}
                 autoSize={{ minRows: 2, maxRows: 4 }}
                 placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
+                disabled={draftWorkLog.isPending}
                 onChange={(event) => setQuickFillAiInput(event.target.value)}
                 onPressEnter={(event) => {
                   if (!event.shiftKey) {
@@ -680,10 +787,45 @@ export default function CalendarPage() {
                   }
                 }}
               />
-              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
-                直接填报
+              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} disabled={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
+                生成草稿
               </Button>
             </div>
+            {draftPreview ? (
+              <div className="quickfill-draft-preview">
+                <Alert
+                  type={draftPreview.items.some((item) => item.missingFields.length > 0 || item.confidence < 0.8) ? "warning" : "info"}
+                  showIcon
+                  message="请确认草稿后再提交"
+                  description="日期、工时和内容会写入正式填报；如识别有误，可以修改下方表单，或重新描述生成草稿。"
+                />
+                <div className="quickfill-draft-list">
+                  {draftPreview.items.map((item, index) => (
+                    <div key={`${item.date}-${item.title}-${index}`} className="quickfill-draft-item">
+                      <div className="quickfill-draft-head">
+                        <strong>{item.title}</strong>
+                        <span>{item.kind === "PLAN" ? "计划" : "日报"}</span>
+                      </div>
+                      <div className="quickfill-draft-meta">
+                        <span>日期：{dayjs(item.date).format("YYYY年M月D日")}</span>
+                        <span>工时：{Number(item.hours).toFixed(1)}h</span>
+                        <span>项目：未关联</span>
+                        <span>置信度：{Math.round(item.confidence * 100)}%</span>
+                        {draftPreview.attachedToFirst && index === 0 ? <span>附件：关联到本条</span> : null}
+                      </div>
+                      <p>{item.content}</p>
+                      {item.missingFields.length ? <div className="quickfill-draft-warning">需确认：{item.missingFields.join("、")}</div> : null}
+                    </div>
+                  ))}
+                </div>
+                <div className="quickfill-draft-actions">
+                  <Button onClick={() => setDraftPreview(null)}>继续编辑</Button>
+                  <Button type="primary" loading={confirmDraftWorkLog.isPending} onClick={() => confirmDraftWorkLog.mutate(draftPreview)}>
+                    确认并提交{draftPreview.items.length > 1 ? ` ${draftPreview.items.length} 条` : ""}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Form.Item name="date" label="日期" rules={[{ required: true }]}>
@@ -724,7 +866,7 @@ export default function CalendarPage() {
                 <UploadCloud size={28} />
               </p>
               <p className="ant-upload-text">添加照片或文件</p>
-              <p className="ant-upload-hint">单个附件最大 8MB，提交后 AI 会结合附件摘要和图片内容分析。</p>
+              <p className="ant-upload-hint">单个附件最大 8MB；多条草稿同时提交时，附件默认关联到第一条。</p>
             </Upload.Dragger>
           </Form.Item>
         </Form>
@@ -734,7 +876,7 @@ export default function CalendarPage() {
         title={
           <div className="copilot-title">
             <Bot size={18} />
-            <span>AI 工作助手</span>
+            <span>工作助手</span>
           </div>
         }
         open={chatOpen}
@@ -747,7 +889,7 @@ export default function CalendarPage() {
       >
         <div className="ai-copilot">
           <div className="ai-copilot-context">
-            <div className="ai-copilot-kicker">AI 正在分析</div>
+            <div className="ai-copilot-kicker">正在分析</div>
             <div className="ai-copilot-context-title">当前分析范围</div>
             <div className="ai-copilot-context-list">
               {copilotContext.map((item) => (
@@ -757,7 +899,7 @@ export default function CalendarPage() {
           </div>
 
           <div className="ai-copilot-section">
-            <div className="ai-copilot-section-title">{selectedDate ? "AI 今日洞察" : "AI 当月日历洞察"}</div>
+            <div className="ai-copilot-section-title">{selectedDate ? "今日判断" : "当月判断"}</div>
             <ul className="ai-copilot-insights">
               {copilotObservations.map((item) => (
                 <li key={item}>{item}</li>
@@ -766,7 +908,7 @@ export default function CalendarPage() {
           </div>
 
           <div className="ai-copilot-action-bar">
-            <div className="ai-copilot-section-title">AI 建议操作</div>
+            <div className="ai-copilot-section-title">下一步</div>
             <div className="ai-copilot-actions">
               {copilotActions.map((action) => (
                 <button key={action.label} type="button" onClick={() => runCopilotPrompt(action.prompt)} disabled={calendarChat.isPending}>
@@ -780,14 +922,14 @@ export default function CalendarPage() {
             {chatMessages.map((item) => (
               <div key={item.id} className={`ai-copilot-message ${item.role}`}>
                 <div className="ai-copilot-message-meta">
-                  {item.role === "assistant" ? "AI 助手" : user?.name ?? "我"}
+                  {item.role === "assistant" ? "助手" : user?.name ?? "我"}
                   {typeof item.contextCount === "number" ? <span> · 参考 {item.contextCount} 条记录</span> : null}
                 </div>
                 <div>{item.content}</div>
               </div>
             ))}
             {calendarChat.isPending ? (
-              <div className="ai-copilot-message assistant is-loading">AI 正在结合当前页面上下文分析…</div>
+              <div className="ai-copilot-message assistant is-loading">正在结合当前页面上下文分析…</div>
             ) : null}
           </div>
 
@@ -797,6 +939,7 @@ export default function CalendarPage() {
                 value={chatInput}
                 rows={4}
                 placeholder="询问团队风险、项目进展、人员投入情况…"
+                disabled={calendarChat.isPending}
                 onChange={(event) => setChatInput(event.target.value)}
                 onPressEnter={(event) => {
                   if (!event.shiftKey) {
@@ -805,8 +948,13 @@ export default function CalendarPage() {
                   }
                 }}
               />
-              <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} onClick={() => submitCalendarChat()} />
+              <Button type="primary" icon={<Send size={16} />} loading={calendarChat.isPending} disabled={calendarChat.isPending} onClick={() => submitCalendarChat()} />
             </div>
+            {calendarChat.isPending ? (
+              <div className="ai-copilot-waiting" role="status" aria-live="polite">
+                正在调用模型分析当前页面上下文，正式环境可能需要几秒，请稍候。
+              </div>
+            ) : null}
             <div className="ai-copilot-prompt-bar">
               <span>快速追问</span>
               <div className="ai-copilot-pills">
@@ -833,7 +981,7 @@ export default function CalendarPage() {
         {selectedDate ? (
           <div className="workday-detail-hero">
             <div>
-              <div className="workday-product">AI 工作日历</div>
+              <div className="workday-product">工作日历</div>
               <div className="workday-date">{chineseDateLabel(selectedDate)}</div>
               <div className="workday-subtitle">{detailTitle}</div>
             </div>
@@ -852,7 +1000,7 @@ export default function CalendarPage() {
                   <div className="workday-empty-title">
                     {selectedDateKind === "future" ? "这一天还没有团队成员提交计划" : "今天还没有团队成员提交日报"}
                   </div>
-                  <div className="workday-empty-copy">提醒员工填写后，AI 会自动生成团队观察和风险提示。</div>
+                  <div className="workday-empty-copy">提醒员工填写后，系统会生成团队观察和风险提示。</div>
                 </div>
                 <Button type="primary" onClick={() => message.success("已生成提醒动作，后续可接入通知发送。")}>
                   提醒员工填写
@@ -914,15 +1062,15 @@ export default function CalendarPage() {
             <div className="workday-ai-panel workday-ai-panel-complete">
               <div className="workday-ai-header">
                 <div>
-                  <div className="workday-section-kicker">AI 工作洞察</div>
+                  <div className="workday-section-kicker">工作判断</div>
                   <div className="workday-ai-title-line">
-                    <div className="workday-ai-title">AI 今日观察</div>
+                    <div className="workday-ai-title">今日观察</div>
                     <Button className="ai-soft-button workday-ai-title-action" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
-                      打开 AI 工作助手
+                      打开助手
                     </Button>
                   </div>
                 </div>
-                {calendarChat.isPending || dayDetail.isFetching ? <span className="ai-shimmer">AI 正在分析团队日报…</span> : null}
+                {calendarChat.isPending || dayDetail.isFetching ? <span className="ai-shimmer">正在分析团队日报…</span> : null}
               </div>
               <div className="workday-ai-stat-grid">
                 <div className="workday-ai-stat is-filled">
@@ -978,7 +1126,7 @@ export default function CalendarPage() {
                   </button>
                 ))}
               </div>
-              <div className="workday-ai-context-note">AI 助手会带着当前日期、记录、缺填和风险上下文继续分析。</div>
+              <div className="workday-ai-context-note">助手会带着当前日期、记录、缺填和风险上下文继续分析。</div>
             </div>
           </div>
         </div>
@@ -1029,7 +1177,7 @@ export default function CalendarPage() {
               <div className="rounded-[8px] border border-line p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
                   <Bot size={16} />
-                  AI 分析
+                  智能分析
                 </div>
                 <div className="text-sm leading-6 text-muted">{selectedWorkLog.aiAnalysis.summary}</div>
                 <Space className="mt-3" wrap>
@@ -1037,6 +1185,20 @@ export default function CalendarPage() {
                   {selectedWorkLog.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
                   {selectedWorkLog.aiAnalysis.risks?.map((risk) => <Tag color="red" key={risk}>{risk}</Tag>)}
                 </Space>
+              </div>
+            ) : selectedWorkLog.status === "SUBMITTED" ? (
+              <div className="rounded-[8px] border border-line p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
+                  <Bot size={16} />
+                  分析生成中
+                </div>
+                <div className="quickfill-draft-waiting mb-0" role="status" aria-live="polite">
+                  <span className="quickfill-draft-spinner" />
+                  <div>
+                    <strong>正在分析这条填报</strong>
+                    <p>系统已提交分析任务，真实模型可能需要几十秒；稍后刷新或返回列表查看结果。</p>
+                  </div>
+                </div>
               </div>
             ) : null}
           </div>

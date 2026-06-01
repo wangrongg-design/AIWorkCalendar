@@ -46,6 +46,7 @@ Page({
     searchText: "",
     logs: [],
     filteredLogs: [],
+    operatingId: "",
     loading: false,
     emptyTitle: "暂无填报记录",
     emptyDesc: "提交日报后会显示在这里。"
@@ -116,5 +117,44 @@ Page({
     const id = event.currentTarget.dataset.id;
     if (!id) return;
     wx.navigateTo({ url: `/pages/work-log-detail/work-log-detail?id=${id}` });
+  },
+
+  async submitLog(event) {
+    const id = event.currentTarget.dataset.id;
+    if (!id || this.data.operatingId) return;
+    this.setData({ operatingId: id });
+    try {
+      await request(`/work-logs/${id}/submit`, { method: "POST" });
+      wx.showToast({ title: "已提交" });
+      this.loadLogs();
+    } catch (error) {
+      wx.showToast({ title: error.message || "提交失败", icon: "none" });
+    } finally {
+      this.setData({ operatingId: "" });
+    }
+  },
+
+  deleteLog(event) {
+    const id = event.currentTarget.dataset.id;
+    if (!id || this.data.operatingId) return;
+    wx.showModal({
+      title: "删除记录",
+      content: "删除后无法恢复，确认删除这条填报记录？",
+      confirmText: "删除",
+      confirmColor: "#EE3B2B",
+      success: async (result) => {
+        if (!result.confirm) return;
+        this.setData({ operatingId: id });
+        try {
+          await request(`/work-logs/${id}`, { method: "DELETE" });
+          wx.showToast({ title: "已删除" });
+          this.loadLogs();
+        } catch (error) {
+          wx.showToast({ title: error.message || "删除失败", icon: "none" });
+        } finally {
+          this.setData({ operatingId: "" });
+        }
+      }
+    });
   }
 });

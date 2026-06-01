@@ -5,7 +5,7 @@
   justify-content: space-between;
   gap: 56rpx;
   padding-top: 56rpx;
-  background: #1F1F1F;
+  background: #1A1A1A;
 }
 
 .login-brand {
@@ -60,9 +60,9 @@
 
 .login-input,
 .password-row {
-  border: 1rpx solid rgba(255, 255, 255, 0.16);
+  border: 1rpx solid #424242;
   border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.08);
+  background: #2E2E2E;
 }
 
 .login-input {
@@ -128,7 +128,25 @@
 }
 
 .login-button {
+  height: 88rpx;
   margin-top: 6rpx;
+  border: 1rpx solid #424242;
+  border-radius: 24rpx;
+  background: #2E2E2E;
+  color: #A3A3A3;
+  font-size: 29rpx;
+  font-weight: 800;
+  line-height: 88rpx;
+}
+
+.login-button.enabled {
+  border-color: #0B57D0;
+  background: #0B57D0;
+  color: #FFFFFF;
+}
+
+.login-button[disabled] {
+  opacity: 1;
 }
 
 .login-footer {

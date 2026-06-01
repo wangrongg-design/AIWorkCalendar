@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, DatePicker, Empty, Form, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { FileDown, RotateCw, WandSparkles } from "lucide-react";
@@ -142,7 +142,7 @@ export default function ReportsPage() {
       title: "内容",
       render: (_, record) => {
         if (record.status === "FAILED") return <Typography.Text type="danger">{reportErrorText(record.error)}</Typography.Text>;
-        if (!record.content) return <Typography.Text className="text-muted">等待 AI 生成</Typography.Text>;
+        if (!record.content) return <Typography.Text className="text-muted">正在生成报告，真实模型可能需要几十秒，本页会自动刷新。</Typography.Text>;
         return (
           <div className="space-y-3">
             <div className="font-medium">{record.content.summary}</div>
@@ -190,7 +190,7 @@ export default function ReportsPage() {
       <div className="page-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            AI 汇报
+            汇报
           </Typography.Title>
           <Typography.Text className="page-subtitle">可下载报告入口：把日报、计划、风险和工时整理成 Word 报告，用于汇报和归档。</Typography.Text>
         </div>
@@ -199,7 +199,7 @@ export default function ReportsPage() {
       <div className="surface-panel report-guide">
         <div className="report-guide-copy">
           <div className="section-title">生成报告向导</div>
-          <div className="section-subtitle">选择报告类型、时间范围和部门后，AI 会生成可下载报告；实时状态请看 AI日历，周期复盘请看 AI整体分析。</div>
+          <div className="section-subtitle">选择报告类型、时间范围和部门后，系统会生成可下载报告；实时状态请看工作日历，周期复盘请看周期判断。</div>
         </div>
         <Form
           form={form}
@@ -231,13 +231,22 @@ export default function ReportsPage() {
               />
             </Form.Item>
           ) : null}
-          <Button className="ai-soft-button" htmlType="submit" icon={<WandSparkles size={16} />} loading={generate.isPending}>
+          <Button className="ai-soft-button" htmlType="submit" icon={<WandSparkles size={16} />} loading={generate.isPending} disabled={generate.isPending}>
             生成报告
           </Button>
         </Form>
         <Button icon={<RotateCw size={16} />} onClick={() => reports.refetch()} loading={reports.isFetching}>
           刷新
         </Button>
+        {generate.isPending ? (
+          <Alert
+            className="report-generate-waiting"
+            type="info"
+            showIcon
+            message="正在提交报告生成任务"
+            description="系统会在后台调用模型整理日报、计划、风险和工时，通常需要几十秒。提交后可留在本页等待状态刷新。"
+          />
+        ) : null}
       </div>
 
       <Table

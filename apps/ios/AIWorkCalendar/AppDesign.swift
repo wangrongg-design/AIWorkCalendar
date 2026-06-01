@@ -205,7 +205,7 @@ struct CompactAIActionPanel: View {
     let action: (() -> Void)?
 
     init(
-        title: String = "AI 洞察",
+        title: String = "智能判断",
         conclusion: String,
         risk: String,
         actionTitle: String? = nil,

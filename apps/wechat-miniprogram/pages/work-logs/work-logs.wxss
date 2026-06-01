@@ -137,6 +137,34 @@
   font-weight: 700;
 }
 
+.log-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.log-action {
+  width: auto;
+  min-width: 112rpx;
+  height: 60rpx;
+  border-radius: 18rpx;
+  padding: 0 20rpx;
+  font-size: 23rpx;
+  font-weight: 800;
+  line-height: 60rpx;
+}
+
+.log-action.submit {
+  background: #EEF5FF;
+  color: #0B57D0;
+}
+
+.log-action.delete {
+  background: #FEF2F2;
+  color: #EE3B2B;
+}
+
 .loading {
   color: #737373;
   font-size: 24rpx;

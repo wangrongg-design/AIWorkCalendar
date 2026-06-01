@@ -6,6 +6,7 @@ Page({
     account: "",
     password: "",
     showPassword: false,
+    canLogin: false,
     loading: false
   },
 
@@ -16,11 +17,17 @@ Page({
   },
 
   onAccountInput(event) {
-    this.setData({ account: event.detail.value.trim() });
+    this.setData({ account: event.detail.value.trim() }, () => this.updateLoginState());
   },
 
   onPasswordInput(event) {
-    this.setData({ password: event.detail.value });
+    this.setData({ password: event.detail.value }, () => this.updateLoginState());
+  },
+
+  updateLoginState() {
+    this.setData({
+      canLogin: Boolean(this.data.account && this.data.password)
+    });
   },
 
   togglePassword() {
@@ -28,7 +35,8 @@ Page({
   },
 
   async login() {
-    const { account, password } = this.data;
+    const { account, password, canLogin } = this.data;
+    if (!canLogin || this.data.loading) return;
     if (!account || !password) {
       wx.showToast({ title: "请填写登录信息", icon: "none" });
       return;

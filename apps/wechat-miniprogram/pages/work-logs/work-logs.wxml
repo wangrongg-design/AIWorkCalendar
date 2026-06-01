@@ -34,6 +34,25 @@
       </view>
       <view class="log-preview">{{item.contentPreview}}</view>
       <view wx:if="{{item.hasRisk}}" class="risk-line">AI 发现风险或阻塞</view>
+      <view class="log-actions">
+        <button
+          wx:if="{{item.status === 'DRAFT'}}"
+          class="log-action submit"
+          data-id="{{item.id}}"
+          loading="{{operatingId === item.id}}"
+          catchtap="submitLog"
+        >
+          提交
+        </button>
+        <button
+          class="log-action delete"
+          data-id="{{item.id}}"
+          loading="{{operatingId === item.id}}"
+          catchtap="deleteLog"
+        >
+          删除
+        </button>
+      </view>
     </view>
   </view>
 

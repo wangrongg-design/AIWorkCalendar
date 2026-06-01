@@ -72,6 +72,12 @@
   --radius-xl: 20px;
   --radius-card: 16px;
   --radius-panel: 16px;
+  --motion-fast: 120ms;
+  --motion-standard: 200ms;
+  --motion-emphasis: 280ms;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --md-primary: var(--color-primary);
   --md-on-primary: #ffffff;
   --md-primary-container: var(--color-primary-soft);
@@ -425,13 +431,43 @@ body {
 }
 
 .workbench-ai {
-  border: 1px solid rgba(11, 87, 208, 0.14);
+  border: 1px solid var(--md-outline-variant);
   border-radius: var(--radius-panel);
-  background:
-    linear-gradient(135deg, rgba(232, 242, 255, 0.9), rgba(255, 255, 255, 0.96) 55%),
-    radial-gradient(circle at 92% 8%, rgba(231, 248, 245, 0.88), transparent 28%);
+  background: var(--md-surface-bright);
   padding: 20px;
   box-shadow: var(--shadow-card);
+}
+
+.workbench-decision.is-danger {
+  border-color: rgba(238, 59, 43, 0.22);
+  background: var(--color-danger-bg);
+}
+
+.workbench-decision.is-warning {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: var(--color-warning-bg);
+}
+
+.workbench-decision.is-success {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: var(--color-success-bg);
+}
+
+.workbench-decision.is-neutral {
+  border-color: var(--md-outline-variant);
+  background: var(--md-surface-bright);
+}
+
+.workbench-decision.is-danger .workbench-ai-kicker {
+  color: var(--color-danger);
+}
+
+.workbench-decision.is-warning .workbench-ai-kicker {
+  color: var(--color-warning);
+}
+
+.workbench-decision.is-success .workbench-ai-kicker {
+  color: var(--color-success);
 }
 
 .workbench-ai-kicker {
@@ -450,6 +486,14 @@ body {
   font-size: 22px;
   font-weight: 700;
   line-height: 1.45;
+}
+
+.workbench-decision-copy {
+  margin-top: 8px;
+  max-width: 720px;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .workbench-ai-evidence {
@@ -496,6 +540,25 @@ body {
   border-color: rgba(11, 87, 208, 0.34);
   box-shadow: var(--shadow-card);
   transform: translateY(-1px);
+}
+
+.workbench-action.primary-action-button,
+.primary-action-button {
+  border-color: var(--md-primary);
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+
+.workbench-action.primary-action-button svg,
+.primary-action-button svg {
+  color: var(--md-on-primary);
+}
+
+.workbench-action.primary-action-button:hover,
+.primary-action-button:hover {
+  border-color: var(--color-primary-hover);
+  background: var(--color-primary-hover);
+  color: var(--md-on-primary);
 }
 
 .workbench-action.ai-action-button,
@@ -1094,6 +1157,11 @@ body {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.report-generate-waiting {
+  flex: 1 0 100%;
+  margin-top: 2px;
 }
 
 .calendar-cell {
@@ -2175,6 +2243,12 @@ body {
     margin-top: 4px;
     font-size: 16px;
     line-height: 1.35;
+  }
+
+  .calendar-home-content .workbench-decision-copy {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 18px;
   }
 
   .calendar-home-content .workbench-ai-evidence {
@@ -3740,7 +3814,6 @@ body {
   background: var(--color-primary);
 }
 
-.workbench-ai,
 .ai-copilot-context,
 .login-ai-status,
 .register-ai-insight,
@@ -3975,6 +4048,129 @@ body {
   color: var(--color-danger) !important;
 }
 
+.quickfill-draft-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.quickfill-draft-list {
+  display: grid;
+  gap: 10px;
+}
+
+.quickfill-draft-item {
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  padding: 12px;
+}
+
+.quickfill-draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quickfill-draft-head strong {
+  min-width: 0;
+  color: var(--color-black);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 20px;
+}
+
+.quickfill-draft-head span,
+.quickfill-draft-warning {
+  border-radius: 999px;
+  background: var(--color-ai-bg);
+  padding: 3px 8px;
+  color: var(--color-ai);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.quickfill-draft-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quickfill-draft-meta span {
+  border-radius: 999px;
+  background: var(--color-gray-1);
+  padding: 3px 8px;
+  color: var(--color-gray-6);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.quickfill-draft-item p {
+  margin: 10px 0 0;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.quickfill-draft-warning {
+  display: inline-flex;
+  margin-top: 10px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.quickfill-draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.quickfill-draft-waiting {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-ai-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-ai-bg);
+  padding: 12px;
+  color: var(--color-ai-pressed);
+}
+
+.quickfill-draft-waiting strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 20px;
+}
+
+.quickfill-draft-waiting p {
+  margin: 2px 0 0;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.quickfill-draft-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(15, 118, 110, 0.22);
+  border-top-color: var(--color-ai);
+  border-radius: 999px;
+  animation: quickfill-spin 0.8s linear infinite;
+}
+
+@keyframes quickfill-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .login-stage,
 .login-product-stage,
 .h5-page,
@@ -4189,6 +4385,18 @@ body {
   min-height: 112px;
   font-size: 14px;
   line-height: 1.7;
+}
+
+.ai-copilot-waiting {
+  margin-top: 8px;
+  border: 1px solid var(--color-ai-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-ai-bg);
+  padding: 9px 11px;
+  color: var(--color-ai-pressed);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
 }
 
 @media (max-width: 760px) {
@@ -8436,5 +8644,324 @@ body {
   .premium-footer {
     align-items: flex-start;
     padding: 20px 16px;
+  }
+}
+
+/* Calendar design health refinements */
+.workday-detail-modal .workday-ai-panel,
+.ai-copilot-modal .ai-copilot-context,
+.ai-copilot-modal .ai-copilot-section,
+.ai-copilot-modal .ai-copilot-action-bar,
+.ai-copilot-modal .ai-copilot-prompt-bar {
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-2);
+  box-shadow: none;
+}
+
+.workday-detail-modal .workday-ai-panel {
+  border-color: var(--color-ai-soft);
+}
+
+.workday-detail-modal .workday-ai-risk-summary {
+  border-left: 1px solid rgba(15, 118, 110, 0.14);
+}
+
+.workday-detail-modal .workday-ai-risk-summary.has-risk {
+  border-color: rgba(238, 59, 43, 0.3);
+  border-left-color: rgba(238, 59, 43, 0.3);
+}
+
+.workday-ai-pill:hover,
+.ai-copilot-actions button:hover,
+.ai-copilot-pills button:hover:not(:disabled),
+.calendar-cell:hover {
+  transform: none;
+}
+
+@media (max-width: 960px) {
+  .dashboard-calendar-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+    overflow: hidden;
+    padding: 6px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell,
+  .dashboard-calendar-grid .calendar-empty-cell,
+  .calendar-cell,
+  .calendar-empty-cell {
+    min-height: 82px;
+    border-radius: 12px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell {
+    padding: 6px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell > div:first-child {
+    min-height: 18px;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body {
+    display: grid !important;
+    gap: 2px;
+    margin-top: 6px !important;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body .calendar-count {
+    min-width: 0;
+    font-size: 11px;
+    line-height: 15px;
+    white-space: nowrap;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body .calendar-count svg {
+    display: none;
+  }
+
+  .dashboard-calendar-grid .calendar-rate-track {
+    height: 3px;
+    margin-top: 2px;
+  }
+
+  .dashboard-calendar-grid .calendar-rate-label {
+    display: none;
+  }
+
+  .dashboard-calendar-grid .calendar-risk-tag {
+    display: inline-flex !important;
+    max-width: 42px;
+    margin-inline-end: 0;
+    overflow: hidden;
+    padding-inline: 4px;
+    font-size: 10px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-calendar-grid .calendar-cell,
+  .dashboard-calendar-grid .calendar-empty-cell,
+  .calendar-cell,
+  .calendar-empty-cell {
+    min-height: 72px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell {
+    padding: 5px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body {
+    margin-top: 4px !important;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body .calendar-count {
+    font-size: 10px;
+    line-height: 14px;
+  }
+
+  .dashboard-calendar-grid .calendar-cell-body .calendar-count.muted {
+    display: flex;
+  }
+
+  .dashboard-calendar-grid .calendar-risk-tag {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    padding: 0;
+    color: transparent !important;
+  }
+
+  .quickfill-draft-actions {
+    flex-direction: column;
+  }
+
+  .quickfill-draft-actions .ant-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-shimmer,
+  .ai-copilot-message.is-loading,
+  .quickfill-draft-spinner {
+    animation: none;
+  }
+}
+
+/* Calendar motion refinements */
+.dashboard-calendar-grid .calendar-cell {
+  transition:
+    background-color var(--motion-standard) var(--ease-out-quart),
+    border-color var(--motion-standard) var(--ease-out-quart),
+    box-shadow var(--motion-standard) var(--ease-out-quart),
+    transform var(--motion-fast) var(--ease-out-quart);
+}
+
+.dashboard-calendar-grid .calendar-cell:active {
+  transform: scale(0.985);
+  transition-duration: 80ms;
+}
+
+.dashboard-calendar-grid .calendar-cell:focus-visible {
+  outline-offset: 2px;
+  transition: outline-color var(--motion-standard) var(--ease-out-quart);
+}
+
+.dashboard-calendar-grid .calendar-rate-fill {
+  transition: width var(--motion-emphasis) var(--ease-out-expo);
+}
+
+.workbench-decision {
+  transition:
+    background-color var(--motion-emphasis) var(--ease-out-quart),
+    border-color var(--motion-emphasis) var(--ease-out-quart),
+    box-shadow var(--motion-emphasis) var(--ease-out-quart);
+}
+
+.quickfill-draft-preview {
+  animation: calendar-panel-in var(--motion-emphasis) var(--ease-out-quint) both;
+  transform-origin: top center;
+}
+
+.quickfill-draft-item {
+  animation: calendar-row-in 220ms var(--ease-out-quint) both;
+}
+
+.quickfill-draft-item:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.quickfill-draft-item:nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.quickfill-draft-item:nth-child(4) {
+  animation-delay: 105ms;
+}
+
+.quickfill-draft-waiting {
+  animation: calendar-panel-in var(--motion-standard) var(--ease-out-quart) both;
+}
+
+.ai-copilot-modal .ant-modal-content,
+.workday-detail-modal .ant-modal-content {
+  animation: calendar-modal-in var(--motion-emphasis) var(--ease-out-quint) both;
+}
+
+.ai-copilot-modal .ai-copilot-message {
+  animation: calendar-message-in var(--motion-standard) var(--ease-out-quart) both;
+}
+
+.workday-detail-modal .workday-employee-record,
+.workday-detail-modal .workday-empty-state,
+.workday-detail-modal .workday-ai-panel {
+  animation: calendar-row-in 240ms var(--ease-out-quint) both;
+}
+
+.workday-detail-modal .workday-employee-record:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.workday-detail-modal .workday-employee-record:nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.workday-detail-modal .workday-employee-record:nth-child(4) {
+  animation-delay: 105ms;
+}
+
+.workday-detail-modal .workday-log-card {
+  transition:
+    background-color var(--motion-standard) var(--ease-out-quart),
+    border-color var(--motion-standard) var(--ease-out-quart),
+    box-shadow var(--motion-standard) var(--ease-out-quart),
+    transform var(--motion-fast) var(--ease-out-quart);
+}
+
+.workday-detail-modal .workday-log-card:active {
+  transform: scale(0.99);
+  transition-duration: 80ms;
+}
+
+.ai-copilot-input {
+  transition:
+    border-color var(--motion-standard) var(--ease-out-quart),
+    box-shadow var(--motion-standard) var(--ease-out-quart);
+}
+
+.ai-copilot-input:focus-within {
+  border-color: rgba(11, 87, 208, 0.34);
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.08);
+}
+
+@keyframes calendar-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes calendar-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes calendar-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes calendar-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-calendar-grid .calendar-cell,
+  .dashboard-calendar-grid .calendar-rate-fill,
+  .workbench-decision,
+  .quickfill-draft-preview,
+  .quickfill-draft-item,
+  .quickfill-draft-waiting,
+  .ai-copilot-modal .ant-modal-content,
+  .workday-detail-modal .ant-modal-content,
+  .ai-copilot-modal .ai-copilot-message,
+  .workday-detail-modal .workday-employee-record,
+  .workday-detail-modal .workday-empty-state,
+  .workday-detail-modal .workday-ai-panel,
+  .workday-detail-modal .workday-log-card,
+  .ai-copilot-input {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }

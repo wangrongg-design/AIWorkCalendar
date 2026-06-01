@@ -102,7 +102,7 @@ export default function WorkLogsPage() {
   const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
     {
       role: "assistant",
-      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
+      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会先识别整理，等待完成后再写入填报。"
     }
   ]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
@@ -328,7 +328,7 @@ export default function WorkLogsPage() {
     setAiMessages([
       {
         role: "assistant",
-        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会拆分后直接填报。"
+        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会先识别整理，等待完成后再写入填报。"
       }
     ]);
     setModalOpen(true);
@@ -431,7 +431,7 @@ export default function WorkLogsPage() {
           <Typography.Title level={3} className="page-title">
             填报记录
           </Typography.Title>
-          <Typography.Text className="page-subtitle">每天可填写多条工作记录，提交后自动进入 AI 分析队列。</Typography.Text>
+          <Typography.Text className="page-subtitle">每天可填写多条工作记录，提交后自动进入分析队列。</Typography.Text>
         </div>
       </div>
 
@@ -515,11 +515,21 @@ export default function WorkLogsPage() {
               ))}
             </div>
             {draftLog.error ? <Alert className="mb-3" type="error" showIcon message={(draftLog.error as Error).message} /> : null}
+            {draftLog.isPending ? (
+              <div className="quickfill-draft-waiting" role="status" aria-live="polite">
+                <span className="quickfill-draft-spinner" />
+                <div>
+                  <strong>{editing ? "正在整理到表单" : "正在生成并提交填报"}</strong>
+                  <p>正在调用模型识别日期、工时和工作内容，正式环境可能需要 5-20 秒，请稍候。</p>
+                </div>
+              </div>
+            ) : null}
             <div className="flex gap-2">
               <Input.TextArea
                 value={aiInput}
                 autoSize={{ minRows: 2, maxRows: 4 }}
                 placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
+                disabled={draftLog.isPending}
                 onChange={(event) => setAiInput(event.target.value)}
                 onPressEnter={(event) => {
                   if (!event.shiftKey) {
@@ -528,8 +538,8 @@ export default function WorkLogsPage() {
                   }
                 }}
               />
-              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftLog.isPending} onClick={sendAiMessage}>
-                {editing ? "整理到表单" : "直接填报"}
+              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftLog.isPending} disabled={draftLog.isPending} onClick={sendAiMessage}>
+                {editing ? "整理到表单" : "生成并提交"}
               </Button>
             </div>
           </div>
@@ -647,7 +657,7 @@ export default function WorkLogsPage() {
               <div className="rounded-[8px] border border-line p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
                   <Bot size={16} />
-                  AI 分析
+                  分析结果
                 </div>
                 <div className="mb-4 rounded-[12px] bg-surface-container-low p-3 text-sm leading-6 text-muted">{detailRecord.aiAnalysis.summary}</div>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -668,6 +678,20 @@ export default function WorkLogsPage() {
                   <Tag color="blue">{detailRecord.aiAnalysis.category}</Tag>
                   {detailRecord.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
                 </Space>
+              </div>
+            ) : detailRecord.status === "SUBMITTED" ? (
+              <div className="rounded-[8px] border border-line p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
+                  <Bot size={16} />
+                  分析生成中
+                </div>
+                <div className="quickfill-draft-waiting mb-0" role="status" aria-live="polite">
+                  <span className="quickfill-draft-spinner" />
+                  <div>
+                    <strong>正在分析这条填报</strong>
+                    <p>系统已提交分析任务，真实模型可能需要几十秒；稍后刷新或返回列表查看结果。</p>
+                  </div>
+                </div>
               </div>
             ) : null}
           </div>
