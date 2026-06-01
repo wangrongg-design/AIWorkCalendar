@@ -520,7 +520,7 @@ export default function CalendarPage() {
           <Typography.Text className="page-subtitle">当日和具体日期的团队状态入口：看今天谁填了、谁缺填、哪里有风险。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel dashboard-calendar-toolbar">
-          <DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} allowClear={false} />
+          <DatePicker picker="month" value={month} format="YYYY年M月" onChange={(value) => value && setMonth(value)} allowClear={false} />
           <Button onClick={goToday}>今天</Button>
           <Select
             value={scope}

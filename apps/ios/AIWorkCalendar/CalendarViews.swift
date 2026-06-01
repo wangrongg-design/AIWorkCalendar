@@ -67,6 +67,88 @@ fileprivate enum CalendarHomeMode: String, CaseIterable, Identifiable {
     }
 }
 
+fileprivate enum CalendarAssistantActionKind: Hashable, Identifiable {
+    case openTodayRisk
+    case remindMissing
+    case openAIInsight
+    case createReport
+    case openProjects
+    case openLogs
+
+    var id: String {
+        switch self {
+        case .openTodayRisk:
+            return "openTodayRisk"
+        case .remindMissing:
+            return "remindMissing"
+        case .openAIInsight:
+            return "openAIInsight"
+        case .createReport:
+            return "createReport"
+        case .openProjects:
+            return "openProjects"
+        case .openLogs:
+            return "openLogs"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .openTodayRisk:
+            return "查看风险记录"
+        case .remindMissing:
+            return "查看缺填成员"
+        case .openAIInsight:
+            return "打开 AI 洞察"
+        case .createReport:
+            return "填写今日日报"
+        case .openProjects:
+            return "查看项目进度"
+        case .openLogs:
+            return "查看填报记录"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .openTodayRisk:
+            return "exclamationmark.triangle.fill"
+        case .remindMissing:
+            return "person.crop.circle.badge.exclamationmark"
+        case .openAIInsight:
+            return "sparkles"
+        case .createReport:
+            return "square.and.pencil"
+        case .openProjects:
+            return "folder"
+        case .openLogs:
+            return "list.bullet.rectangle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .openTodayRisk:
+            return AITheme.ColorToken.danger
+        case .remindMissing:
+            return AITheme.ColorToken.warning
+        case .openAIInsight:
+            return AITheme.ColorToken.ai
+        case .createReport, .openProjects:
+            return AITheme.ColorToken.primary
+        case .openLogs:
+            return AITheme.ColorToken.ink700
+        }
+    }
+}
+
+fileprivate struct CalendarAssistantReply: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let actions: [CalendarAssistantActionKind]
+}
+
 fileprivate struct CalendarPeriodSummary {
     let rangeText: String
     let fillRate: Double
@@ -585,6 +667,8 @@ struct CalendarDashboardView: View {
     @State private var didConfigureHomeMode = false
     @State private var actionMessage: String?
     @State private var selectedDetailRoute: CalendarDetailRoute?
+    @State private var assistantInput = ""
+    @State private var assistantReply: CalendarAssistantReply?
     var onCreateReport: ((String) -> Void)?
     var onOpenLogs: (() -> Void)?
     var onOpenProjects: (() -> Void)?
@@ -617,20 +701,19 @@ struct CalendarDashboardView: View {
                         }
                     )
 
-                    CalendarNextActionList(
+                    CalendarAICommandCenter(
                         viewModel: viewModel,
                         isManager: isManagerHome,
-                        onPrimary: {
-                            handleTodayPrimaryAction()
+                        input: $assistantInput,
+                        reply: assistantReply,
+                        onSubmit: { prompt in
+                            handleAssistantPrompt(prompt)
                         },
-                        onSecondary: {
-                            handleTodaySecondaryAction()
+                        onQuickCommand: { prompt in
+                            handleAssistantPrompt(prompt)
                         },
-                        onAIInsight: {
-                            showsOverallAnalysis = true
-                        },
-                        onOpenProjects: {
-                            onOpenProjects?()
+                        onAction: { action in
+                            handleAssistantAction(action)
                         }
                     )
 
@@ -660,6 +743,13 @@ struct CalendarDashboardView: View {
                         },
                         onCreateReport: { dateKey in
                             onCreateReport?(dateKey)
+                        }
+                    )
+
+                    CalendarRiskSignalPreviewList(
+                        days: viewModel.weekMobileDays,
+                        onOpenDate: { dateKey in
+                            selectedDetailRoute = CalendarDetailRoute(date: dateKey)
                         }
                     )
 
@@ -698,10 +788,12 @@ struct CalendarDashboardView: View {
             .onChange(of: homeMode) {
                 syncScopeForHomeMode()
                 showsAllWeekDays = false
+                assistantReply = nil
             }
             .onChange(of: viewModel.scope) {
                 viewModel.dayDetails = [:]
                 showsAllWeekDays = false
+                assistantReply = nil
                 Task { await viewModel.refresh(auth: auth) }
             }
             .alert("操作提示", isPresented: actionMessageBinding) {
@@ -831,6 +923,96 @@ struct CalendarDashboardView: View {
                 showsOverallAnalysis = true
             }
         } else {
+            onOpenLogs?()
+        }
+    }
+
+    private func handleAssistantPrompt(_ prompt: String) {
+        let cleaned = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else {
+            return
+        }
+        assistantInput = ""
+        assistantReply = makeAssistantReply(for: cleaned)
+    }
+
+    private func makeAssistantReply(for prompt: String) -> CalendarAssistantReply {
+        let today = viewModel.todayMobileDay
+        let normalized = prompt.lowercased()
+        let asksRisk = normalized.contains("风险") || normalized.contains("阻塞") || normalized.contains("异常")
+        let asksMissing = normalized.contains("未填") || normalized.contains("缺填") || normalized.contains("提醒")
+        let asksReport = normalized.contains("汇报") || normalized.contains("周报") || normalized.contains("总结")
+        let asksEntry = normalized.contains("日报") || normalized.contains("填报") || normalized.contains("整理")
+        let asksProject = normalized.contains("项目") || normalized.contains("进度")
+
+        if asksProject {
+            return CalendarAssistantReply(
+                title: "我会先打开项目状态",
+                message: "项目页会展示负责人、截止日期和 AI 风险提示，适合继续判断延期或阻塞。",
+                actions: [.openProjects, .openAIInsight]
+            )
+        }
+
+        if asksRisk {
+            let message = today.riskCount > 0
+                ? "今天有 \(today.riskCount) 条风险信号，建议先进入日期详情确认影响项目和负责人。"
+                : "今天暂无明显风险，可以继续查看本周 AI 洞察，确认是否存在低覆盖或临期项目。"
+            return CalendarAssistantReply(
+                title: "已整理风险处理入口",
+                message: message,
+                actions: today.riskCount > 0 ? [.openTodayRisk, .openAIInsight] : [.openAIInsight, .openProjects]
+            )
+        }
+
+        if asksMissing {
+            let message = today.missingCount > 0
+                ? "今天还有 \(today.missingCount) 人未填报，先查看名单，再决定是否线下提醒。"
+                : "当前今日缺填不明显，可以打开 AI 洞察查看本周覆盖情况。"
+            return CalendarAssistantReply(
+                title: "已准备缺填处理入口",
+                message: message,
+                actions: today.missingCount > 0 ? [.remindMissing, .openAIInsight] : [.openAIInsight]
+            )
+        }
+
+        if asksReport {
+            return CalendarAssistantReply(
+                title: "已准备汇报生成入口",
+                message: "先进入 AI 洞察查看本周风险、缺填和人员状态，再生成适合汇报的结构化结论。",
+                actions: [.openAIInsight, .openTodayRisk]
+            )
+        }
+
+        if asksEntry {
+            return CalendarAssistantReply(
+                title: "我可以帮你进入日报整理",
+                message: "到填报页后，可以直接说或写今天完成的工作，再用 AI 整理成日报草稿。",
+                actions: [.createReport, .openLogs]
+            )
+        }
+
+        return CalendarAssistantReply(
+            title: "我建议先处理今天的关键状态",
+            message: isManagerHome
+                ? "可以先看风险和缺填，再进入 AI 洞察生成汇报材料。"
+                : "可以先完成今日日报，再回看本周风险和最近记录。",
+            actions: isManagerHome ? [.openTodayRisk, .remindMissing, .openAIInsight] : [.createReport, .openAIInsight, .openLogs]
+        )
+    }
+
+    private func handleAssistantAction(_ action: CalendarAssistantActionKind) {
+        switch action {
+        case .openTodayRisk:
+            selectedDetailRoute = CalendarDetailRoute(date: viewModel.todayMobileDay.dateKey)
+        case .remindMissing:
+            handleTodaySecondaryAction()
+        case .openAIInsight:
+            showsOverallAnalysis = true
+        case .createReport:
+            onCreateReport?(DateHelpers.dayKey())
+        case .openProjects:
+            onOpenProjects?()
+        case .openLogs:
             onOpenLogs?()
         }
     }
@@ -1389,6 +1571,216 @@ private struct CalendarActionRow: View {
     }
 }
 
+private struct CalendarAICommandCenter: View {
+    let viewModel: CalendarViewModel
+    let isManager: Bool
+    @Binding var input: String
+    let reply: CalendarAssistantReply?
+    let onSubmit: (String) -> Void
+    let onQuickCommand: (String) -> Void
+    let onAction: (CalendarAssistantActionKind) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
+                Image(systemName: "sparkles")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ai)
+                    .frame(width: 36, height: 36)
+                    .background(AITheme.ColorToken.aiSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("问问 AI，或直接处理工作")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text(subtitle)
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(alignment: .bottom, spacing: AITheme.Spacing.xs) {
+                TextField("例如：今天有哪些风险？", text: $input, axis: .vertical)
+                    .font(AITheme.Typography.body)
+                    .lineLimit(1...3)
+                    .submitLabel(.send)
+                    .padding(.horizontal, AITheme.Spacing.md)
+                    .padding(.vertical, AITheme.Spacing.sm)
+                    .frame(minHeight: AITheme.Layout.minTouchTarget)
+                    .background(AITheme.ColorToken.activeBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                            .stroke(AITheme.ColorToken.separator, lineWidth: 0.8)
+                    }
+                    .onSubmit {
+                        submitCurrentInput()
+                    }
+
+                Button {
+                    submitCurrentInput()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: AITheme.Layout.minTouchTarget, height: AITheme.Layout.minTouchTarget)
+                        .background(canSubmit ? AITheme.ColorToken.primary : AITheme.ColorToken.disabledBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSubmit)
+                .accessibilityLabel("发送给 AI")
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.xs) {
+                ForEach(quickCommands, id: \.self) { command in
+                    Button {
+                        onQuickCommand(command)
+                    } label: {
+                        Text(command)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(commandTint(command))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .padding(.horizontal, AITheme.Spacing.xs)
+                            .background(commandSurface(command))
+                            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if let reply {
+                CalendarAssistantResultCard(reply: reply, onAction: onAction)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.7)
+        }
+        .animation(.snappy(duration: 0.2), value: reply?.id)
+    }
+
+    private var subtitle: String {
+        if isManager {
+            return "可以问风险、缺填、项目进度，也可以一键生成汇报入口。"
+        }
+        return "可以问本周风险，也可以直接进入 AI 日报整理。"
+    }
+
+    private var quickCommands: [String] {
+        if isManager {
+            return ["生成今日汇报", "提醒未填报成员", "查看本周风险", "查看项目进度"]
+        }
+        return ["帮我整理日报", "查看本周风险", "生成今日汇报", "查看最近记录"]
+    }
+
+    private var canSubmit: Bool {
+        !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func submitCurrentInput() {
+        let prompt = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            return
+        }
+        onSubmit(prompt)
+    }
+
+    private func commandTint(_ command: String) -> Color {
+        if command.contains("风险") {
+            return AITheme.ColorToken.danger
+        }
+        if command.contains("未填") || command.contains("提醒") {
+            return AITheme.ColorToken.warning
+        }
+        if command.contains("日报") || command.contains("项目") {
+            return AITheme.ColorToken.primary
+        }
+        return AITheme.ColorToken.ai
+    }
+
+    private func commandSurface(_ command: String) -> Color {
+        if command.contains("风险") {
+            return AITheme.ColorToken.dangerSurface
+        }
+        if command.contains("未填") || command.contains("提醒") {
+            return AITheme.ColorToken.warningSurface
+        }
+        if command.contains("日报") || command.contains("项目") {
+            return AITheme.ColorToken.primarySurface
+        }
+        return AITheme.ColorToken.aiSurface
+    }
+}
+
+private struct CalendarAssistantResultCard: View {
+    let reply: CalendarAssistantReply
+    let onAction: (CalendarAssistantActionKind) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .top, spacing: AITheme.Spacing.xs) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ai)
+                    .frame(width: 28, height: 28)
+                    .background(AITheme.ColorToken.aiSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(reply.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text(reply.message)
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.ink700)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            ForEach(reply.actions) { action in
+                Button {
+                    onAction(action)
+                } label: {
+                    HStack(spacing: AITheme.Spacing.xs) {
+                        Image(systemName: action.systemImage)
+                            .foregroundStyle(action.tint)
+                        Text(action.title)
+                            .foregroundStyle(AITheme.ColorToken.ink900)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                        Spacer(minLength: AITheme.Spacing.xs)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AITheme.ColorToken.textTertiary)
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .frame(minHeight: 34)
+                    .padding(.horizontal, AITheme.Spacing.sm)
+                    .background(AITheme.ColorToken.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(AITheme.Spacing.sm)
+        .background(AITheme.ColorToken.aiSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.5)
+        }
+    }
+}
+
 private struct CalendarWeekOverviewCard: View {
     let rangeTitle: String
     let onPrevious: () -> Void
@@ -1869,6 +2261,97 @@ private struct CalendarMobileDateCard: View {
             return AITheme.ColorToken.warning
         }
         return nil
+    }
+}
+
+private struct CalendarRiskSignalPreviewList: View {
+    let days: [CalendarMobileDayItem]
+    let onOpenDate: (String) -> Void
+
+    var body: some View {
+        if !riskDays.isEmpty {
+            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("最近风险记录")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AITheme.ColorToken.ink900)
+                        Text("按本周风险日期聚合，点击进入当天详情。")
+                            .font(AITheme.Typography.footnote)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                    }
+
+                    Spacer(minLength: AITheme.Spacing.xs)
+
+                    Text("\(riskDays.reduce(0) { $0 + $1.riskCount }) 条")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.danger)
+                        .padding(.vertical, 5)
+                        .padding(.horizontal, 8)
+                        .background(AITheme.ColorToken.dangerSurface)
+                        .clipShape(Capsule())
+                }
+
+                VStack(spacing: AITheme.Spacing.xs) {
+                    ForEach(riskDays) { day in
+                        Button {
+                            onOpenDate(day.dateKey)
+                        } label: {
+                            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                    .fill(AITheme.ColorToken.danger)
+                                    .frame(width: 4, height: 44)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(formatShortDate(day.date)) \(formatWeekday(day.date))")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(AITheme.ColorToken.ink900)
+                                    Text(day.summaryText)
+                                        .font(AITheme.Typography.footnote)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: AITheme.Spacing.xs)
+
+                                Text("风险 \(day.riskCount)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AITheme.ColorToken.danger)
+                                    .padding(.vertical, 5)
+                                    .padding(.horizontal, 8)
+                                    .background(AITheme.ColorToken.dangerSurface)
+                                    .clipShape(Capsule())
+                            }
+                            .padding(AITheme.Spacing.sm)
+                            .background(AITheme.ColorToken.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var riskDays: [CalendarMobileDayItem] {
+        Array(
+            days
+                .filter { $0.riskCount > 0 }
+                .sorted { lhs, rhs in
+                    if lhs.riskCount != rhs.riskCount {
+                        return lhs.riskCount > rhs.riskCount
+                    }
+                    if lhs.isToday != rhs.isToday {
+                        return lhs.isToday
+                    }
+                    return lhs.date > rhs.date
+                }
+                .prefix(3)
+        )
     }
 }
 

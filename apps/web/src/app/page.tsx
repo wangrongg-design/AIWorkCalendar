@@ -15,11 +15,9 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser } from "@/lib/types";
-import { normalizeUnifiedSocialCreditCode, unifiedSocialCreditCodeMessage, unifiedSocialCreditCodePattern } from "@/lib/unified-social-credit-code";
 
 type RegisterForm = {
   companyName: string;
-  tenantCode: string;
   adminName: string;
   adminEmail: string;
   password: string;
@@ -295,18 +293,10 @@ export default function HomePage() {
               form={form}
               className="premium-signup-form"
               layout="vertical"
-              onFinish={(values) => register.mutate({ ...values, tenantCode: normalizeUnifiedSocialCreditCode(values.tenantCode) })}
+              onFinish={(values) => register.mutate(values)}
             >
               <Form.Item name="companyName" label="企业名称" rules={[{ required: true, min: 2 }]}>
                 <Input placeholder="例如：星河科技有限公司" />
-              </Form.Item>
-              <Form.Item
-                name="tenantCode"
-                label="统一社会信用代码"
-                normalize={normalizeUnifiedSocialCreditCode}
-                rules={[{ required: true, pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
-              >
-                <Input placeholder="例如：91110105MA01A1B2X3" />
               </Form.Item>
               <div className="premium-form-grid">
                 <Form.Item name="adminName" label="管理员姓名" rules={[{ required: true, min: 2 }]}>

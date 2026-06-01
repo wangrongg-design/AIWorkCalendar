@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomBytes } from "node:crypto";
 import { URL } from "node:url";
 
 const PORT = Number(process.env.API_PORT ?? 3001);
@@ -376,7 +377,7 @@ function login(res, body) {
     );
   });
   if (matches.length > 1 && !tenantCode) {
-    return error(res, 400, "该账号存在于多个企业，请填写统一社会信用代码");
+    return error(res, 400, "该账号存在于多个企业，请联系管理员确认账号归属");
   }
   const found = matches[0];
   if (!found || !found.isActive || body.password !== (found.password ?? PASSWORD)) {
@@ -391,7 +392,7 @@ function login(res, body) {
 }
 
 function registerTenant(body) {
-  const tenantCode = normalizeUnifiedSocialCreditCode(body.tenantCode);
+  const tenantCode = normalizeOptionalUnifiedSocialCreditCode(body.tenantCode) ?? generateTrialTenantCode();
   if (!UNIFIED_SOCIAL_CREDIT_CODE_PATTERN.test(tenantCode)) throw httpError(400, "请输入 18 位营业执照统一社会信用代码");
   if (tenants.some((item) => item.code === tenantCode)) throw httpError(400, "该统一社会信用代码已注册");
   const tenantId = `tenant-${Date.now()}`;
@@ -1993,6 +1994,14 @@ function normalizeUnifiedSocialCreditCode(value) {
 function normalizeOptionalUnifiedSocialCreditCode(value) {
   const normalized = normalizeUnifiedSocialCreditCode(value);
   return normalized || undefined;
+}
+
+function generateTrialTenantCode() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = randomBytes(9).toString("hex").toUpperCase();
+    if (!tenants.some((item) => item.code === code)) return code;
+  }
+  throw httpError(400, "无法生成企业试用标识，请稍后重试");
 }
 
 function normalizeTenantLogoUrl(value) {

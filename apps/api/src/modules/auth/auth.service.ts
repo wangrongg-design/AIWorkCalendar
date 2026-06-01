@@ -54,9 +54,18 @@ export class AuthService {
     private readonly rateLimit: RateLimitService
   ) {}
 
+  private async generateTrialTenantCode() {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const code = randomBytes(9).toString("hex").toUpperCase();
+      const existing = await this.prisma.tenant.findUnique({ where: { code } });
+      if (!existing) return code;
+    }
+    throw new BadRequestException("无法生成企业试用标识，请稍后重试");
+  }
+
   async register(dto: RegisterTenantDto) {
     const adminEmail = dto.adminEmail.trim().toLowerCase();
-    const tenantCode = normalizeUnifiedSocialCreditCode(dto.tenantCode);
+    const tenantCode = dto.tenantCode ? normalizeUnifiedSocialCreditCode(dto.tenantCode) : await this.generateTrialTenantCode();
     this.rateLimit.consume(`register:${adminEmail}`, 5, 60 * 60 * 1000);
     const existingTenant = await this.prisma.tenant.findUnique({ where: { code: tenantCode } });
     if (existingTenant && !existingTenant.deletedAt) {
