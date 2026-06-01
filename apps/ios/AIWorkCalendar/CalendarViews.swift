@@ -1124,66 +1124,53 @@ private struct CalendarHomeHeroCard: View {
     var body: some View {
         let today = viewModel.todayMobileDay
 
-        return VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
-                Image(systemName: heroIcon(today))
-                    .font(.headline.weight(.semibold))
+        return VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.xs) {
+                Text(isManager ? "今天先处理" : "今天先完成")
+                    .font(AITheme.Typography.eyebrow)
                     .foregroundStyle(heroAccent(today))
-                    .frame(width: 42, height: 42)
-                    .background(heroAccent(today).opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(isManager ? "今日团队态势" : "今日日报")
-                        .font(AITheme.Typography.eyebrow)
-                        .foregroundStyle(heroAccent(today))
-                    Text(heroTitle(today))
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(AITheme.ColorToken.ink900)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(heroSubtitle(today))
-                        .font(AITheme.Typography.support)
-                        .foregroundStyle(AITheme.ColorToken.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
 
                 Spacer(minLength: AITheme.Spacing.xs)
 
                 Button(action: onAIInsight) {
-                    CalendarStatusPill(title: today.status.title, tint: today.status.tint, surface: today.status.surface)
+                    Label("AI洞察", systemImage: "sparkles")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ai)
+                        .lineLimit(1)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 9)
+                        .background(AITheme.ColorToken.aiSurface)
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看今日分析")
+                .accessibilityLabel("查看 AI 洞察")
             }
+
+            Text(heroTitle(today))
+                .font(.system(size: 32, weight: .bold, design: .default))
+                .foregroundStyle(AITheme.ColorToken.ink900)
+                .lineLimit(2)
+                .minimumScaleFactor(0.86)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(heroSubtitle(today))
+                .font(AITheme.Typography.support)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             CalendarHeroMetricStrip(today: today, isManager: isManager)
+                .padding(.top, AITheme.Spacing.xxs)
 
-            HStack(spacing: AITheme.Spacing.xs) {
-                Button(action: onPrimary) {
-                    Label(primaryActionTitle(today), systemImage: primaryActionIcon(today))
-                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
-                }
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.white)
-                .background(primaryActionTint(today))
-                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-                .buttonStyle(.plain)
-
-                Button(action: onSecondary) {
-                    Label(secondaryActionTitle(today), systemImage: secondaryActionIcon(today))
-                        .labelStyle(.titleAndIcon)
-                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(secondaryActionTint(today))
-                .background(secondaryActionBackground(today))
-                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                        .stroke(secondaryActionStroke(today), lineWidth: 0.8)
-                }
-                .buttonStyle(.plain)
+            Button(action: onPrimary) {
+                Label(primaryActionTitle(today), systemImage: primaryActionIcon(today))
+                    .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
             }
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(.white)
+            .background(primaryActionTint(today))
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+            .buttonStyle(.plain)
+            .padding(.top, AITheme.Spacing.xs)
         }
         .padding(AITheme.Spacing.md)
         .background(AITheme.ColorToken.cardBackground)
@@ -1192,22 +1179,20 @@ private struct CalendarHomeHeroCard: View {
             RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
                 .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
         }
-        .overlay(alignment: .top) {
-            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
-                .fill(heroAccent(today))
-                .frame(height: 3)
-        }
     }
 
     private func heroTitle(_ today: CalendarMobileDayItem) -> String {
         if isManager {
-            if today.riskCount > 0 || today.missingCount > 0 {
-                return "今日 \(today.missingCount) 人未填报，\(today.riskCount) 条风险"
+            if today.riskCount > 0 {
+                return "\(today.riskCount) 条风险待确认"
+            }
+            if today.missingCount > 0 {
+                return "\(today.missingCount) 人未填报"
             }
             if today.filledCount > 0 {
-                return "今日团队填报正常"
+                return "团队今日状态正常"
             }
-            return "今天还没有团队填报信号"
+            return "等待团队填报"
         }
         if today.filledCount > 0 {
             return today.riskCount > 0 ? "今天已提交，但有风险待补充" : "今天已完成填报"
@@ -1218,27 +1203,17 @@ private struct CalendarHomeHeroCard: View {
     private func heroSubtitle(_ today: CalendarMobileDayItem) -> String {
         if isManager {
             if today.riskCount > 0 {
-                return "先确认影响项目和负责人，再决定跟进动作。"
+                return "先确认影响项目和负责人，再决定是否提醒或升级。"
             }
             if today.missingCount > 0 {
-                return "先补齐团队状态，避免周报和复盘失真。"
+                return "先看名单并提醒，避免周报和复盘失真。"
             }
-            return "团队今日状态稳定，可继续查看本周趋势。"
+            return "暂无风险和缺填，可继续查看本周节奏。"
         }
         if today.filledCount > 0 {
             return "可继续补充风险、工时，或查看最近记录。"
         }
         return "先完成今天的日报，AI 会同步更新本周状态。"
-    }
-
-    private func heroIcon(_ today: CalendarMobileDayItem) -> String {
-        if today.riskCount > 0 {
-            return "exclamationmark.triangle.fill"
-        }
-        if today.missingCount > 0 || today.filledCount == 0 {
-            return isManager ? "person.crop.circle.badge.exclamationmark" : "square.and.pencil"
-        }
-        return "checkmark.seal.fill"
     }
 
     private func heroAccent(_ today: CalendarMobileDayItem) -> Color {
@@ -1254,10 +1229,10 @@ private struct CalendarHomeHeroCard: View {
     private func primaryActionTitle(_ today: CalendarMobileDayItem) -> String {
         if isManager {
             if today.riskCount > 0 {
-                return "处理今日风险"
+                return "查看风险记录"
             }
             if today.missingCount > 0 {
-                return "查看缺填成员"
+                return "查看未填报成员"
             }
             return "查看今日状态"
         }
@@ -1274,65 +1249,6 @@ private struct CalendarHomeHeroCard: View {
     private func primaryActionTint(_ today: CalendarMobileDayItem) -> Color {
         return AITheme.ColorToken.primary
     }
-
-    private func secondaryActionTitle(_ today: CalendarMobileDayItem) -> String {
-        if isManager {
-            return today.missingCount > 0 ? "查看未填报" : "AI复盘"
-        }
-        return "查看我的记录"
-    }
-
-    private func secondaryActionIcon(_ today: CalendarMobileDayItem) -> String {
-        if isManager {
-            return today.missingCount > 0 ? "person.crop.circle.badge.exclamationmark" : "sparkles"
-        }
-        return "list.bullet.rectangle"
-    }
-
-    private func secondaryActionTint(_ today: CalendarMobileDayItem) -> Color {
-        if isManager && today.missingCount > 0 {
-            return AITheme.ColorToken.warning
-        }
-        return isManager ? AITheme.ColorToken.ai : AITheme.ColorToken.ink900
-    }
-
-    private func secondaryActionBackground(_ today: CalendarMobileDayItem) -> Color {
-        if isManager && today.missingCount > 0 {
-            return AITheme.ColorToken.warningSurface
-        }
-        if isManager {
-            return AITheme.ColorToken.aiSurface
-        }
-        return AITheme.ColorToken.cardBackground
-    }
-
-    private func secondaryActionStroke(_ today: CalendarMobileDayItem) -> Color {
-        if isManager && today.missingCount > 0 {
-            return AITheme.ColorToken.warningSoft
-        }
-        if isManager {
-            return AITheme.ColorToken.aiSoft
-        }
-        return AITheme.ColorToken.separator
-    }
-}
-
-private struct CalendarStatusPill: View {
-    let title: String
-    let tint: Color
-    let surface: Color
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 9)
-            .background(surface)
-            .clipShape(Capsule())
-    }
 }
 
 private struct CalendarHeroMetricStrip: View {
@@ -1345,7 +1261,7 @@ private struct CalendarHeroMetricStrip: View {
                 CalendarHeroMetric(
                     title: "填报率",
                     value: String(format: "%.0f%%", today.fillRate),
-                    tint: today.fillRate >= 80 ? AITheme.ColorToken.success : AITheme.ColorToken.primary
+                    tint: today.fillRate >= 80 ? AITheme.ColorToken.ink800 : AITheme.ColorToken.primary
                 )
                 CalendarHeroMetric(
                     title: "未填",
@@ -1354,8 +1270,8 @@ private struct CalendarHeroMetricStrip: View {
                 )
                 CalendarHeroMetric(
                     title: "风险",
-                    value: "\(today.riskCount)",
-                    tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
+                    value: today.riskCount > 0 ? "\(today.riskCount)" : "暂无",
+                    tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink500
                 )
             } else {
                 CalendarHeroMetric(
@@ -1365,8 +1281,8 @@ private struct CalendarHeroMetricStrip: View {
                 )
                 CalendarHeroMetric(
                     title: "风险",
-                    value: "\(today.riskCount)",
-                    tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
+                    value: today.riskCount > 0 ? "\(today.riskCount)" : "暂无",
+                    tint: today.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink500
                 )
                 CalendarHeroMetric(
                     title: "工时",
@@ -1385,24 +1301,23 @@ private struct CalendarHeroMetric: View {
     let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .monospacedDigit()
+        HStack(spacing: 4) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(AITheme.ColorToken.textSecondary)
                 .lineLimit(1)
+
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .monospacedDigit()
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
         .background(AITheme.ColorToken.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+        .clipShape(Capsule())
     }
 }
 
@@ -1581,33 +1496,16 @@ private struct CalendarAICommandCenter: View {
     let onAction: (CalendarAssistantActionKind) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-            HStack(alignment: .top, spacing: AITheme.Spacing.sm) {
-                Image(systemName: "sparkles")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AITheme.ColorToken.ai)
-                    .frame(width: 36, height: 36)
-                    .background(AITheme.ColorToken.aiSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+            Label("AI 快捷处理", systemImage: "sparkles")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ai)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("问问 AI，或直接处理工作")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AITheme.ColorToken.ink900)
-                    Text(subtitle)
-                        .font(AITheme.Typography.footnote)
-                        .foregroundStyle(AITheme.ColorToken.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            HStack(alignment: .bottom, spacing: AITheme.Spacing.xs) {
-                TextField("例如：今天有哪些风险？", text: $input, axis: .vertical)
-                    .font(AITheme.Typography.body)
-                    .lineLimit(1...3)
+            HStack(alignment: .center, spacing: AITheme.Spacing.xs) {
+                TextField("问 AI 今天有什么需要处理？", text: $input)
+                    .font(AITheme.Typography.support)
                     .submitLabel(.send)
-                    .padding(.horizontal, AITheme.Spacing.md)
-                    .padding(.vertical, AITheme.Spacing.sm)
+                    .padding(.horizontal, AITheme.Spacing.sm)
                     .frame(minHeight: AITheme.Layout.minTouchTarget)
                     .background(AITheme.ColorToken.activeBackground)
                     .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
@@ -1623,8 +1521,8 @@ private struct CalendarAICommandCenter: View {
                     submitCurrentInput()
                 } label: {
                     Image(systemName: "arrow.up")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(canSubmit ? .white : AITheme.ColorToken.disabledText)
                         .frame(width: AITheme.Layout.minTouchTarget, height: AITheme.Layout.minTouchTarget)
                         .background(canSubmit ? AITheme.ColorToken.primary : AITheme.ColorToken.disabledBackground)
                         .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
@@ -1634,7 +1532,7 @@ private struct CalendarAICommandCenter: View {
                 .accessibilityLabel("发送给 AI")
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.xs) {
+            HStack(spacing: AITheme.Spacing.xs) {
                 ForEach(quickCommands, id: \.self) { command in
                     Button {
                         onQuickCommand(command)
@@ -1658,12 +1556,12 @@ private struct CalendarAICommandCenter: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(AITheme.Spacing.md)
+        .padding(AITheme.Spacing.sm)
         .background(AITheme.ColorToken.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
-                .stroke(AITheme.ColorToken.aiSoft, lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
         }
         .animation(.snappy(duration: 0.2), value: reply?.id)
     }
@@ -1677,9 +1575,9 @@ private struct CalendarAICommandCenter: View {
 
     private var quickCommands: [String] {
         if isManager {
-            return ["生成今日汇报", "提醒未填报成员", "查看本周风险", "查看项目进度"]
+            return ["生成今日汇报", "查看项目进度"]
         }
-        return ["帮我整理日报", "查看本周风险", "生成今日汇报", "查看最近记录"]
+        return ["帮我整理日报", "查看本周风险"]
     }
 
     private var canSubmit: Bool {
@@ -1695,12 +1593,6 @@ private struct CalendarAICommandCenter: View {
     }
 
     private func commandTint(_ command: String) -> Color {
-        if command.contains("风险") {
-            return AITheme.ColorToken.danger
-        }
-        if command.contains("未填") || command.contains("提醒") {
-            return AITheme.ColorToken.warning
-        }
         if command.contains("日报") || command.contains("项目") {
             return AITheme.ColorToken.primary
         }
@@ -1708,12 +1600,6 @@ private struct CalendarAICommandCenter: View {
     }
 
     private func commandSurface(_ command: String) -> Color {
-        if command.contains("风险") {
-            return AITheme.ColorToken.dangerSurface
-        }
-        if command.contains("未填") || command.contains("提醒") {
-            return AITheme.ColorToken.warningSurface
-        }
         if command.contains("日报") || command.contains("项目") {
             return AITheme.ColorToken.primarySurface
         }

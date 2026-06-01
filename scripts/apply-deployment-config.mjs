@@ -34,6 +34,7 @@ const env = [
   "",
   `JWT_SECRET=${value(config.auth?.jwtSecret)}`,
   `JWT_EXPIRES_IN=${value(config.auth?.jwtExpiresIn ?? "7d")}`,
+  `OPS_ADMIN_PASSWORD=${value(config.auth?.opsAdminPassword)}`,
   `REQUIRE_EMAIL_VERIFICATION=${bool(config.auth?.requireEmailVerification)}`,
   `CORS_ORIGIN=${value(config.api?.corsOrigin ?? config.domains?.webUrl)}`,
   "",

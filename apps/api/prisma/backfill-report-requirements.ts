@@ -7,7 +7,7 @@ async function main() {
     where: {
       deletedAt: null,
       role: {
-        code: { in: [RoleCode.SUPER_ADMIN, RoleCode.COMPANY_ADMIN] },
+        code: RoleCode.COMPANY_ADMIN,
         deletedAt: null
       },
       user: {

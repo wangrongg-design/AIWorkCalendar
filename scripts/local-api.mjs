@@ -4,6 +4,20 @@ import { URL } from "node:url";
 
 const PORT = Number(process.env.API_PORT ?? 3001);
 const PASSWORD = "Passw0rd!";
+const OPS_ADMIN_PASSWORD = process.env.OPS_ADMIN_PASSWORD ?? PASSWORD;
+const OPS_USER = {
+  id: "platform-ops",
+  tenantId: "platform",
+  email: null,
+  phone: null,
+  name: "平台超级管理员",
+  departmentId: null,
+  roles: ["SUPER_ADMIN"],
+  password: OPS_ADMIN_PASSWORD,
+  isActive: true,
+  requiresWorkReport: false,
+  createdAt: new Date().toISOString()
+};
 
 const today = new Date();
 const todayKey = dateKey(today);
@@ -96,6 +110,7 @@ const server = http.createServer(async (req, res) => {
     if (route === "GET /health") return json(res, { ok: true, mode: "local-memory" });
     if (route === "POST /dev/clear-data") return json(res, clearLocalData(requireUser(currentUser)));
     if (route === "POST /auth/login") return login(res, body);
+    if (route === "POST /auth/ops-login") return opsLogin(res, body);
     if (route === "POST /auth/register") return json(res, registerTenant(body));
     if (route === "GET /auth/me") return json(res, me(requireUser(currentUser)));
     if (route === "POST /auth/password-reset/request") return json(res, requestPasswordReset(body));
@@ -117,6 +132,9 @@ const server = http.createServer(async (req, res) => {
     if (route === "GET /ops/overview") return json(res, opsOverview(requireUser(currentUser)));
     if (req.method === "PATCH" && url.pathname.startsWith("/ops/tenants/") && url.pathname.endsWith("/logo")) {
       return json(res, updateOpsTenantLogo(requireUser(currentUser), url.pathname.split("/")[3], body));
+    }
+    if (req.method === "POST" && url.pathname.startsWith("/ops/accounts/") && url.pathname.endsWith("/reset-password")) {
+      return json(res, resetOpsAccountPassword(requireUser(currentUser), url.pathname.split("/")[3]));
     }
     if (req.method === "PATCH" && url.pathname.startsWith("/ops/accounts/")) {
       return json(res, updateOpsAccount(requireUser(currentUser), lastPath(url.pathname), body));
@@ -261,7 +279,6 @@ function createDemoDepartments() {
 
 function createDemoUsers() {
   return [
-    makeUser("super", "super@example.com", "平台超管", null, ["SUPER_ADMIN"], tenant.id, PASSWORD, "13900000001", false),
     makeUser("admin", "admin@example.com", "林知远", "dept-executive", ["COMPANY_ADMIN"], tenant.id, PASSWORD, "13900000002", true),
     makeUser("market-manager", "market.manager@example.com", "周婧", "dept-market", ["DEPARTMENT_MANAGER"], tenant.id, PASSWORD, "13900000003", true),
     makeUser("market-ops", "market.ops@example.com", "陈思琪", "dept-market", ["EMPLOYEE"], tenant.id, PASSWORD, "13900000004", true),
@@ -383,11 +400,24 @@ function login(res, body) {
   if (!found || !found.isActive || body.password !== (found.password ?? PASSWORD)) {
     return error(res, 401, "Invalid email or password");
   }
+  if (hasRole(found, ["SUPER_ADMIN"])) {
+    return error(res, 401, "Use platform ops login");
+  }
   found.lastLoginAt = new Date().toISOString();
   audit(found, "AUTH_LOGIN", "User", found.id);
   return json(res, {
     accessToken: `local:${found.id}`,
     user: me(found)
+  });
+}
+
+function opsLogin(res, body) {
+  if (String(body.password ?? "") !== OPS_ADMIN_PASSWORD) {
+    return error(res, 401, "Invalid ops password");
+  }
+  return json(res, {
+    accessToken: "local-ops",
+    user: me(OPS_USER)
   });
 }
 
@@ -499,7 +529,7 @@ function clearLocalData(user) {
     remaining: {
       tenants: tenants.length,
       users: users.length,
-      opsUsers: users.filter((item) => hasRole(item, ["SUPER_ADMIN"])).length,
+      opsUsers: 1,
       departments: departments.length,
       projects: projects.length,
       workLogs: workLogs.length,
@@ -545,6 +575,7 @@ function verifyEmail(body) {
 }
 
 function changePassword(user, body) {
+  if (user.id === OPS_USER.id) throw httpError(400, "平台运维口令由服务器环境变量 OPS_ADMIN_PASSWORD 管理");
   if (body.currentPassword !== (user.password ?? PASSWORD)) throw httpError(400, "当前密码不正确");
   user.password = body.newPassword;
   user.lastPasswordChangedAt = new Date().toISOString();
@@ -553,6 +584,22 @@ function changePassword(user, body) {
 }
 
 function me(user) {
+  if (user.id === OPS_USER.id) {
+    return {
+      id: OPS_USER.id,
+      tenantId: "platform",
+      tenantName: "北京七数智联科技有限公司",
+      tenantCode: "PLATFORM",
+      tenantLogoUrl: null,
+      email: null,
+      phone: null,
+      name: OPS_USER.name,
+      departmentId: null,
+      departmentName: null,
+      roles: OPS_USER.roles,
+      requiresWorkReport: false
+    };
+  }
   const ownerTenant = tenants.find((item) => item.id === user.tenantId) ?? tenant;
   const dept = departments.find((item) => item.id === user.departmentId && item.tenantId === user.tenantId);
   return {
@@ -986,6 +1033,34 @@ function updateOpsAccount(user, accountId, body) {
   if (body.name !== undefined) target.name = String(body.name).trim();
   if (body.isActive !== undefined) target.isActive = Boolean(body.isActive);
   audit(user, "OPS_ACCOUNT_UPDATED", "User", target.id, { targetTenantId: target.tenantId, email: target.email, phone: target.phone, isActive: target.isActive });
+  const ownerTenant = tenants.find((candidate) => candidate.id === target.tenantId) ?? tenant;
+  return {
+    id: target.id,
+    tenantId: target.tenantId,
+    tenantName: ownerTenant.name,
+    tenantCode: ownerTenant.code,
+    tenantLogoUrl: ownerTenant.logoUrl ?? null,
+    email: target.email,
+    phone: target.phone ?? null,
+    name: target.name,
+    departmentName: departments.find((dept) => dept.id === target.departmentId && dept.tenantId === target.tenantId)?.name ?? null,
+    isActive: target.isActive,
+    requiresWorkReport: target.requiresWorkReport ?? true,
+    roles: target.roles,
+    lastLoginAt: target.lastLoginAt ?? null,
+    createdAt: target.createdAt
+  };
+}
+
+function resetOpsAccountPassword(user, accountId) {
+  requireRole(user, ["SUPER_ADMIN"]);
+  const target = users.find((item) => item.id === accountId);
+  if (!target) throw httpError(404, "Account not found");
+  target.password = "123321";
+  target.failedLoginCount = 0;
+  target.lockedUntil = null;
+  target.updatedAt = new Date().toISOString();
+  audit(user, "OPS_ACCOUNT_PASSWORD_RESET", "User", target.id, { targetTenantId: target.tenantId, email: target.email, phone: target.phone });
   const ownerTenant = tenants.find((candidate) => candidate.id === target.tenantId) ?? tenant;
   return {
     id: target.id,
@@ -2117,6 +2192,7 @@ function getCurrentUser(req) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
   const token = header.slice("Bearer ".length);
+  if (token === "local-ops") return OPS_USER;
   if (!token.startsWith("local:")) return null;
   return users.find((item) => item.id === token.slice("local:".length)) ?? null;
 }

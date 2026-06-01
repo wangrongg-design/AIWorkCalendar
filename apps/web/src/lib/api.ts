@@ -14,6 +14,7 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   const upperMethod = method.toUpperCase();
   const isAttachmentEndpoint = path.includes("/attachments");
   const isLoginEndpoint = path === "/auth/login";
+  const isOpsLoginEndpoint = path === "/auth/ops-login";
 
   if (isAttachmentEndpoint && upperMethod === "POST" && (status === 404 || normalized.includes("not found"))) {
     return "演示环境暂不支持附件上传。可以先保存日报正文，稍后在正式环境补充附件。";
@@ -22,6 +23,9 @@ export function humanizeApiError(message: string, status?: number, path = "", me
     return "附件暂时不可用，可能已被删除或移动。请刷新页面后重试，必要时重新上传。";
   }
   if (isLoginEndpoint && (status === 401 || normalized.includes("unauthorized"))) {
+    if (normalized.includes("platform ops login")) {
+      return "平台超级管理员请从运维端入口使用运维口令登录。";
+    }
     if (normalized.includes("temporarily locked")) {
       return "账号因连续登录失败被临时锁定，请稍后再试或联系企业管理员。";
     }
@@ -32,6 +36,12 @@ export function humanizeApiError(message: string, status?: number, path = "", me
       return "账号已停用，请联系企业管理员恢复后再登录。";
     }
     return "账号或密码不正确，请检查手机号/邮箱和密码。";
+  }
+  if (isOpsLoginEndpoint && (status === 401 || normalized.includes("unauthorized"))) {
+    if (normalized.includes("not configured")) {
+      return "运维口令尚未配置，请在服务器环境变量 OPS_ADMIN_PASSWORD 中设置后重启服务。";
+    }
+    return "运维口令不正确，请检查服务器配置的 OPS_ADMIN_PASSWORD。";
   }
   if (status === 401 || normalized.includes("unauthorized")) {
     return "登录状态已失效，请重新登录后继续操作。";

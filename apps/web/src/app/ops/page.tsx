@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Avatar, Button, Form, Input, Layout, Modal, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
+import { Alert, Avatar, Button, Layout, Modal, Popconfirm, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
@@ -68,12 +68,6 @@ type OpsOverview = {
   accounts: OpsAccount[];
 };
 
-type ChangePasswordForm = {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-};
-
 function dateText(value?: string | null) {
   return value ? dayjs(value).format("YYYY-MM-DD") : "-";
 }
@@ -109,11 +103,9 @@ export default function OpsPage() {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
   const isOps = Boolean(user?.roles.includes("SUPER_ADMIN"));
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [logoTenant, setLogoTenant] = useState<OpsTenant | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
-  const [passwordForm] = Form.useForm<ChangePasswordForm>();
 
   useEffect(() => {
     if (!token) {
@@ -142,6 +134,18 @@ export default function OpsPage() {
     }
   });
 
+  const resetAccountPassword = useMutation({
+    mutationFn: (id: string) => apiFetch<OpsAccount>(`/ops/accounts/${id}/reset-password`, { method: "POST" }),
+    onSuccess: (_, accountId) => {
+      const account = overview.data?.accounts.find((item) => item.id === accountId);
+      message.success(account ? `${account.name} 的密码已重置为 123321` : "账号密码已重置为 123321");
+      queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "密码重置失败，请刷新账号列表后重试。");
+    }
+  });
+
   const updateTenantLogo = useMutation({
     mutationFn: ({ tenantId, nextLogoUrl }: { tenantId: string; nextLogoUrl: string | null }) =>
       apiFetch<OpsTenant>(`/ops/tenants/${tenantId}/logo`, {
@@ -157,27 +161,6 @@ export default function OpsPage() {
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "企业 Logo 更新失败，请检查图片规格后重试。");
-    }
-  });
-
-  const changePassword = useMutation({
-    mutationFn: (values: ChangePasswordForm) =>
-      apiFetch<{ ok: boolean }>("/auth/change-password", {
-        method: "POST",
-        body: JSON.stringify({
-          currentPassword: values.currentPassword,
-          newPassword: values.newPassword
-        })
-      }),
-    onSuccess: () => {
-      message.success("运维账号密码已更新，请使用新密码重新登录。");
-      passwordForm.resetFields();
-      setPasswordModalOpen(false);
-      clearSession();
-      router.replace("/ops/login");
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : "密码更新失败，请检查当前密码后重试。");
     }
   });
 
@@ -291,15 +274,28 @@ export default function OpsPage() {
     },
     { title: "最近登录", width: 150, render: (_, record) => (record.lastLoginAt ? dayjs(record.lastLoginAt).format("YYYY-MM-DD HH:mm") : "-") },
     {
-      title: "启用",
-      width: 90,
+      title: "操作",
+      width: 190,
       render: (_, record) => (
-        <Switch
-          checked={record.isActive}
-          disabled={record.id === user?.id}
-          loading={updateAccount.isPending}
-          onChange={(checked) => updateAccount.mutate({ id: record.id, isActive: checked })}
-        />
+        <Space>
+          <Switch
+            checked={record.isActive}
+            disabled={record.id === user?.id}
+            loading={updateAccount.isPending}
+            onChange={(checked) => updateAccount.mutate({ id: record.id, isActive: checked })}
+          />
+          <Popconfirm
+            title="确认重置这个账号的密码？"
+            description="重置后密码为 123321，请提醒用户登录后尽快修改。"
+            okText="确认重置"
+            cancelText="取消"
+            onConfirm={() => resetAccountPassword.mutate(record.id)}
+          >
+            <Button size="small" icon={<KeyRound size={14} />} loading={resetAccountPassword.isPending}>
+              重置密码
+            </Button>
+          </Popconfirm>
+        </Space>
       )
     }
   ];
@@ -311,7 +307,7 @@ export default function OpsPage() {
   if (!isOps) {
     return (
       <main className="min-h-screen bg-surface p-6">
-        <Alert type="error" showIcon message="无权访问运维端" description="请使用北京七数智联科技有限公司的超级管理员账号登录。" />
+        <Alert type="error" showIcon message="无权访问运维端" description="请使用北京七数智联科技有限公司的平台运维口令登录。" />
       </main>
     );
   }
@@ -335,9 +331,6 @@ export default function OpsPage() {
         <Space>
           <Button icon={<RefreshCw size={16} />} onClick={() => overview.refetch()} loading={overview.isFetching}>
             刷新
-          </Button>
-          <Button icon={<KeyRound size={16} />} onClick={() => setPasswordModalOpen(true)}>
-            修改密码
           </Button>
           <div className="flex items-center gap-2 rounded-full bg-surface-container px-3 py-2">
             <Avatar size={28} className="bg-primary">
@@ -402,50 +395,6 @@ export default function OpsPage() {
           <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.accounts ?? []} columns={accountColumns} pagination={{ pageSize: 10 }} />
         </section>
       </main>
-
-      <Modal
-        title="修改运维账号密码"
-        open={passwordModalOpen}
-        onCancel={() => setPasswordModalOpen(false)}
-        footer={null}
-        destroyOnClose
-      >
-        <Alert
-          className="mb-4"
-          type="info"
-          showIcon
-          message="建议首次进入运维端后立即修改初始化密码。"
-        />
-        <Form form={passwordForm} layout="vertical" onFinish={(values) => changePassword.mutate(values)}>
-          <Form.Item name="currentPassword" label="当前密码" rules={[{ required: true }]}>
-            <Input.Password autoComplete="current-password" />
-          </Form.Item>
-          <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 8 }]}>
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item
-            name="confirmPassword"
-            label="确认新密码"
-            dependencies={["newPassword"]}
-            rules={[
-              { required: true },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue("newPassword") === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error("两次输入的新密码不一致"));
-                }
-              })
-            ]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" block loading={changePassword.isPending}>
-            更新密码
-          </Button>
-        </Form>
-      </Modal>
 
       <Modal
         title="修改企业 Logo"

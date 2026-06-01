@@ -31,9 +31,8 @@ docker compose up --build
 - `manager@example.com` 研发经理
 - `employee@example.com` 普通员工
 - `employee2@example.com` 产品员工
-- `super@example.com` 超级管理员
 
-运维端入口为 `http://localhost:3000/ops/login`。初始化运维账号为 `super@example.com` / `Passw0rd!`，首次进入后可在运维控制台右上角点击「修改密码」更新密码。清空本地演示数据时会保留该运维账号和一个企业管理员账号，避免系统无法进入。
+运维端入口为 `http://localhost:3000/ops/login`。平台超级管理员不属于任何企业账号，本地默认运维口令为 `Passw0rd!`；生产环境必须通过 `OPS_ADMIN_PASSWORD` 配置强口令并重启 API 服务。
 
 ## 本地演示模式
 
@@ -153,6 +152,7 @@ pnpm build
 发布前建议确认：
 
 - `.env` 已设置强随机 `JWT_SECRET`
+- `.env` 已设置强随机 `OPS_ADMIN_PASSWORD`
 - `DATABASE_URL` 指向生产 PostgreSQL
 - `REDIS_HOST` / `REDIS_PORT` 指向生产 Redis
 - `AI_PROVIDER` 已设为目标 Provider
@@ -163,6 +163,7 @@ pnpm build
 ## 核心接口
 
 - `POST /auth/login`
+- `POST /auth/ops-login` 平台运维口令登录，不绑定企业账号
 - `POST /auth/register` 企业自助注册，默认 1 个月免费试用，试用期不限制成员人数
 - `GET /auth/me`
 - `POST /auth/password-reset/request`

@@ -11,6 +11,7 @@ export class AccessService {
   }
 
   isCompanyAdmin(user: CurrentUser) {
+    if (user.isPlatformOps) return false;
     return user.roles.includes(RoleCode.COMPANY_ADMIN) || this.isSuperAdmin(user);
   }
 
@@ -96,4 +97,3 @@ export class AccessService {
     throw new ForbiddenException("Cannot access this user");
   }
 }
-

@@ -4,7 +4,7 @@ import { CurrentUserParam } from "../../common/decorators/current-user.decorator
 import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/types/current-user";
 import { AuthService } from "./auth.service";
-import { LoginDto } from "./dto/login.dto";
+import { LoginDto, OpsLoginDto } from "./dto/login.dto";
 import { ChangePasswordDto, PasswordResetConfirmDto, PasswordResetRequestDto, VerifyEmailDto } from "./dto/password.dto";
 import { RegisterTenantDto } from "./dto/register.dto";
 
@@ -17,6 +17,12 @@ export class AuthController {
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post("ops-login")
+  opsLogin(@Body() dto: OpsLoginDto) {
+    return this.authService.opsLogin(dto);
   }
 
   @Public()

@@ -3,12 +3,14 @@ import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { RoleCode } from "@prisma/client";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
+import { buildPlatformOpsCurrentUser, isPlatformOpsTokenPayload } from "../platform-ops";
 import { PrismaService } from "../prisma.service";
 import { CurrentUser } from "../types/current-user";
 
 type JwtPayload = {
   sub: string;
   tenantId: string;
+  scope?: string;
 };
 
 @Injectable()
@@ -42,6 +44,11 @@ export class JwtAuthGuard implements CanActivate {
       });
     } catch {
       throw new UnauthorizedException("Invalid token");
+    }
+
+    if (isPlatformOpsTokenPayload(payload)) {
+      request.user = buildPlatformOpsCurrentUser();
+      return true;
     }
 
     const user = await this.prisma.user.findFirst({

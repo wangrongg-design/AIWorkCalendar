@@ -18,6 +18,7 @@
   "auth": {
     "jwtSecret": "replace-with-a-long-random-secret",
     "jwtExpiresIn": "7d",
+    "opsAdminPassword": "replace-with-a-strong-ops-password",
     "requireEmailVerification": false
   },
   "ai": {

@@ -49,7 +49,6 @@ async function main() {
   });
 
   const roleDefs: Array<{ code: RoleCode; name: string }> = [
-    { code: RoleCode.SUPER_ADMIN, name: "超级管理员" },
     { code: RoleCode.COMPANY_ADMIN, name: "企业管理员" },
     { code: RoleCode.DEPARTMENT_MANAGER, name: "部门经理" },
     { code: RoleCode.EMPLOYEE, name: "普通员工" }
@@ -64,6 +63,17 @@ async function main() {
     });
     roles.set(roleDef.code, role.id);
   }
+  await prisma.user.updateMany({
+    where: {
+      tenantId: tenant.id,
+      roles: { some: { role: { code: RoleCode.SUPER_ADMIN } } }
+    },
+    data: { isActive: false, deletedAt: new Date() }
+  });
+  await prisma.role.updateMany({
+    where: { tenantId: tenant.id, code: RoleCode.SUPER_ADMIN },
+    data: { deletedAt: new Date() }
+  });
 
   const executive = await prisma.department.upsert({
     where: { id: "seed-dept-executive" },
@@ -90,14 +100,6 @@ async function main() {
   });
 
   const users = [
-    {
-      email: "super@example.com",
-      phone: "13900000001",
-      name: "平台超管",
-      departmentId: null,
-      role: RoleCode.SUPER_ADMIN,
-      requiresWorkReport: false
-    },
     {
       email: "admin@example.com",
       phone: "13900000002",
@@ -533,6 +535,7 @@ async function main() {
   console.log(`Demo company: ${demoCompanyName}`);
   console.log("Organization: 总经办 1 人，市场部 5 人，研发部 6 人，行政部 2 人");
   console.log(`Password for all seed users: ${password}`);
+  console.log("Platform ops login uses OPS_ADMIN_PASSWORD. Local fallback password: Passw0rd!");
 }
 
 main()

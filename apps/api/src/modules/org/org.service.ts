@@ -92,7 +92,6 @@ export class OrgService {
     const passwordHash = await bcrypt.hash(dto.adminPassword ?? "Passw0rd!", 10);
     const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
     const roleDefs: Array<{ code: RoleCode; name: string }> = [
-      { code: RoleCode.SUPER_ADMIN, name: "超级管理员" },
       { code: RoleCode.COMPANY_ADMIN, name: "企业管理员" },
       { code: RoleCode.DEPARTMENT_MANAGER, name: "部门经理" },
       { code: RoleCode.EMPLOYEE, name: "普通员工" }

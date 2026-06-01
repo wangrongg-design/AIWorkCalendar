@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma, RoleCode } from "@prisma/client";
+import * as bcrypt from "bcryptjs";
 import { AuditService } from "../../common/audit/audit.service";
 import { PrismaService } from "../../common/prisma.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
@@ -7,6 +9,15 @@ import { UpdateOpsAccountDto } from "./dto/update-account.dto";
 import { UpdateOpsTenantLogoDto } from "./dto/update-tenant-logo.dto";
 
 const activeMemberMonthlyPriceCents = 1900;
+const opsResetPassword = "123321";
+const businessAccountWhere: Prisma.UserWhereInput = {
+  deletedAt: null,
+  roles: {
+    none: {
+      role: { code: RoleCode.SUPER_ADMIN }
+    }
+  }
+};
 
 @Injectable()
 export class OpsService {
@@ -16,7 +27,7 @@ export class OpsService {
   ) {}
 
   async overview() {
-    const [tenants, accounts, activeUsersByTenant, totals] = await Promise.all([
+    const [tenants, accounts, usersByTenant, activeUsersByTenant, totals] = await Promise.all([
       this.prisma.tenant.findMany({
         where: { deletedAt: null },
         include: {
@@ -34,7 +45,7 @@ export class OpsService {
         orderBy: [{ createdAt: "desc" }]
       }),
       this.prisma.user.findMany({
-        where: { deletedAt: null },
+        where: businessAccountWhere,
         include: {
           tenant: { select: { id: true, name: true, code: true, logoUrl: true } },
           department: { select: { id: true, name: true } },
@@ -45,19 +56,25 @@ export class OpsService {
       }),
       this.prisma.user.groupBy({
         by: ["tenantId"],
-        where: { deletedAt: null, isActive: true },
+        where: businessAccountWhere,
+        _count: { _all: true }
+      }),
+      this.prisma.user.groupBy({
+        by: ["tenantId"],
+        where: { ...businessAccountWhere, isActive: true },
         _count: { _all: true }
       }),
       Promise.all([
         this.prisma.tenant.count({ where: { deletedAt: null } }),
-        this.prisma.user.count({ where: { deletedAt: null } }),
-        this.prisma.user.count({ where: { deletedAt: null, isActive: true } }),
+        this.prisma.user.count({ where: businessAccountWhere }),
+        this.prisma.user.count({ where: { ...businessAccountWhere, isActive: true } }),
         this.prisma.workLog.count({ where: { deletedAt: null } }),
         this.prisma.report.count({ where: { deletedAt: null } })
       ])
     ]);
 
     const [tenantCount, accountCount, activeAccountCount, workLogCount, reportCount] = totals;
+    const userCountMap = new Map(usersByTenant.map((item) => [item.tenantId, item._count._all]));
     const activeUserCountMap = new Map(activeUsersByTenant.map((item) => [item.tenantId, item._count._all]));
 
     return {
@@ -70,6 +87,7 @@ export class OpsService {
         reports: reportCount
       },
       tenants: tenants.map((tenant) => {
+        const userCount = userCountMap.get(tenant.id) ?? 0;
         const activeUserCount = activeUserCountMap.get(tenant.id) ?? 0;
         return {
           id: tenant.id,
@@ -89,7 +107,10 @@ export class OpsService {
                 estimatedMonthlyAmountCents: activeUserCount * activeMemberMonthlyPriceCents
               }
             : null,
-          counts: tenant._count
+          counts: {
+            ...tenant._count,
+            users: userCount
+          }
         };
       }),
       accounts: accounts.map((account) => ({
@@ -116,7 +137,7 @@ export class OpsService {
       throw new BadRequestException("Cannot deactivate your own ops account");
     }
     const existing = await this.prisma.user.findFirst({
-      where: { id: accountId, deletedAt: null },
+      where: { id: accountId, ...businessAccountWhere },
       select: { id: true, tenantId: true, name: true, email: true, phone: true }
     });
     if (!existing) {
@@ -135,8 +156,8 @@ export class OpsService {
       }
     });
     await this.audit.log({
-      tenantId: actor.tenantId,
-      actorUserId: actor.id,
+      tenantId: existing.tenantId,
+      actorUserId: actor.isPlatformOps ? null : actor.id,
       action: "OPS_ACCOUNT_UPDATED",
       targetType: "User",
       targetId: accountId,
@@ -146,6 +167,58 @@ export class OpsService {
         phone: existing.phone,
         isActive: dto.isActive,
         name: dto.name
+      }
+    });
+    return {
+      id: updated.id,
+      tenantId: updated.tenantId,
+      tenantName: updated.tenant.name,
+      tenantCode: updated.tenant.code,
+      tenantLogoUrl: updated.tenant.logoUrl,
+      email: updated.email,
+      phone: updated.phone,
+      name: updated.name,
+      departmentName: updated.department?.name ?? null,
+      isActive: updated.isActive,
+      requiresWorkReport: updated.requiresWorkReport,
+      roles: updated.roles.map((item) => item.role.code),
+      lastLoginAt: updated.lastLoginAt,
+      createdAt: updated.createdAt
+    };
+  }
+
+  async resetAccountPassword(actor: CurrentUser, accountId: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { id: accountId, ...businessAccountWhere },
+      select: { id: true, tenantId: true, name: true, email: true, phone: true }
+    });
+    if (!existing) {
+      throw new NotFoundException("Account not found");
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: accountId },
+      data: {
+        passwordHash: await bcrypt.hash(opsResetPassword, 10),
+        failedLoginCount: 0,
+        lockedUntil: null,
+        lastPasswordChangedAt: new Date()
+      },
+      include: {
+        tenant: { select: { id: true, name: true, code: true, logoUrl: true } },
+        department: { select: { id: true, name: true } },
+        roles: { where: { deletedAt: null }, include: { role: true } }
+      }
+    });
+    await this.audit.log({
+      tenantId: existing.tenantId,
+      actorUserId: actor.isPlatformOps ? null : actor.id,
+      action: "OPS_ACCOUNT_PASSWORD_RESET",
+      targetType: "User",
+      targetId: accountId,
+      metadata: {
+        targetTenantId: existing.tenantId,
+        email: existing.email,
+        phone: existing.phone
       }
     });
     return {
@@ -180,8 +253,8 @@ export class OpsService {
       data: { logoUrl }
     });
     await this.audit.log({
-      tenantId: actor.tenantId,
-      actorUserId: actor.id,
+      tenantId: existing.id,
+      actorUserId: actor.isPlatformOps ? null : actor.id,
       action: "OPS_TENANT_LOGO_UPDATED",
       targetType: "Tenant",
       targetId: tenantId,

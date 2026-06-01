@@ -21,3 +21,9 @@ export class LoginDto {
   @Matches(unifiedSocialCreditCodePattern, { message: "请输入 18 位营业执照统一社会信用代码" })
   tenantCode?: string;
 }
+
+export class OpsLoginDto {
+  @IsString()
+  @MinLength(6)
+  password: string;
+}

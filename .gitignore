@@ -10,6 +10,9 @@ coverage
 tmp
 storage
 test-artifacts
+.agents
+.impeccable
+*.tsbuildinfo
 apps/ios/build
 *.xcuserstate
 xcuserdata

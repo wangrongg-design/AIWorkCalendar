@@ -173,10 +173,12 @@ https://app.example.com
 种子账号：
 
 ```txt
-企业代码: demo
+企业统一社会信用代码: 91110105MA01A1B2X3
 邮箱: admin@example.com
 密码: Passw0rd!
 ```
+
+运维端入口为 `https://app.example.com/ops/login`。平台超级管理员不属于企业账号，登录只使用服务器环境变量 `OPS_ADMIN_PASSWORD` 配置的运维口令。
 
 订阅制说明：
 

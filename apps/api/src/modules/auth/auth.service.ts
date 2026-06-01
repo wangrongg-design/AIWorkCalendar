@@ -9,7 +9,12 @@ import { RateLimitService } from "../../common/rate-limit/rate-limit.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
 import { normalizeUnifiedSocialCreditCode } from "../../common/unified-social-credit-code";
-import { LoginDto } from "./dto/login.dto";
+import {
+  buildPlatformOpsAuthUser,
+  PLATFORM_OPS_TENANT_ID,
+  PLATFORM_OPS_USER_ID
+} from "../../common/platform-ops";
+import { LoginDto, OpsLoginDto } from "./dto/login.dto";
 import { ChangePasswordDto, PasswordResetConfirmDto, PasswordResetRequestDto, VerifyEmailDto } from "./dto/password.dto";
 import { RegisterTenantDto } from "./dto/register.dto";
 
@@ -45,6 +50,10 @@ function normalizePhone(value: string) {
   return value.replace(/[\s-]/g, "");
 }
 
+function configuredOpsPassword() {
+  return process.env.OPS_ADMIN_PASSWORD ?? (process.env.NODE_ENV === "production" ? "" : "Passw0rd!");
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -74,7 +83,6 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
     const roleDefs: Array<{ code: RoleCode; name: string }> = [
-      { code: RoleCode.SUPER_ADMIN, name: "超级管理员" },
       { code: RoleCode.COMPANY_ADMIN, name: "企业管理员" },
       { code: RoleCode.DEPARTMENT_MANAGER, name: "部门经理" },
       { code: RoleCode.EMPLOYEE, name: "普通员工" }
@@ -223,6 +231,10 @@ export class AuthService {
       });
       throw new UnauthorizedException("Invalid email or password");
     }
+    const roleCodes = user.roles.map((item) => item.role.code);
+    if (roleCodes.includes(RoleCode.SUPER_ADMIN)) {
+      throw new UnauthorizedException("Use platform ops login");
+    }
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -236,10 +248,34 @@ export class AuthService {
       targetId: user.id
     });
 
-    return this.buildAuthResponse(user, user.roles.map((item) => item.role.code));
+    return this.buildAuthResponse(user, roleCodes);
+  }
+
+  async opsLogin(dto: OpsLoginDto) {
+    const opsPassword = configuredOpsPassword();
+    this.rateLimit.consume("ops-login", 10, 15 * 60 * 1000);
+    if (!opsPassword) {
+      throw new UnauthorizedException("Ops login is not configured");
+    }
+    if (dto.password !== opsPassword) {
+      throw new UnauthorizedException("Invalid ops password");
+    }
+
+    return {
+      accessToken: await this.jwtService.signAsync({
+        sub: PLATFORM_OPS_USER_ID,
+        tenantId: PLATFORM_OPS_TENANT_ID,
+        scope: "ops",
+        roles: [RoleCode.SUPER_ADMIN]
+      }),
+      user: buildPlatformOpsAuthUser()
+    };
   }
 
   async me(user: CurrentUser) {
+    if (user.isPlatformOps) {
+      return buildPlatformOpsAuthUser();
+    }
     const fullUser = await this.prisma.user.findUnique({
       where: { id: user.id },
       include: {
@@ -339,6 +375,9 @@ export class AuthService {
   }
 
   async changePassword(user: CurrentUser, dto: ChangePasswordDto) {
+    if (user.isPlatformOps) {
+      throw new BadRequestException("平台运维口令由服务器环境变量 OPS_ADMIN_PASSWORD 管理");
+    }
     const fullUser = await this.prisma.user.findFirstOrThrow({
       where: { id: user.id, tenantId: user.tenantId, deletedAt: null }
     });

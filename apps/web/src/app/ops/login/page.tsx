@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser } from "@/lib/types";
-import { demoUnifiedSocialCreditCode, normalizeUnifiedSocialCreditCode, unifiedSocialCreditCodeMessage, unifiedSocialCreditCodePattern } from "@/lib/unified-social-credit-code";
 
 type LoginResponse = {
   accessToken: string;
@@ -19,13 +18,13 @@ export default function OpsLoginPage() {
   const setSession = useAuthStore((state) => state.setSession);
 
   const login = useMutation({
-    mutationFn: async (values: { account: string; password: string; tenantCode?: string }) => {
-      const data = await apiFetch<LoginResponse>("/auth/login", {
+    mutationFn: async (values: { password: string }) => {
+      const data = await apiFetch<LoginResponse>("/auth/ops-login", {
         method: "POST",
-        body: JSON.stringify(values)
+        body: JSON.stringify({ password: values.password })
       });
       if (!data.user.roles.includes("SUPER_ADMIN")) {
-        throw new Error("该账号不是开发公司运维账号");
+        throw new Error("当前口令未获得平台运维权限");
       }
       return data;
     },
@@ -59,22 +58,11 @@ export default function OpsLoginPage() {
           <Form
             className="mt-6"
             layout="vertical"
-            initialValues={{ tenantCode: demoUnifiedSocialCreditCode, account: "super@example.com", password: "Passw0rd!" }}
+            initialValues={process.env.NODE_ENV === "production" ? undefined : { password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
-            <Form.Item
-              name="tenantCode"
-              label="运维账号所属企业统一社会信用代码"
-              normalize={normalizeUnifiedSocialCreditCode}
-              rules={[{ pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
-            >
-              <Input placeholder={demoUnifiedSocialCreditCode} />
-            </Form.Item>
-            <Form.Item name="account" label="运维账号邮箱或手机号" rules={[{ required: true }]}>
-              <Input placeholder="super@example.com / 13900000001" />
-            </Form.Item>
-            <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-              <Input.Password placeholder="Passw0rd!" />
+            <Form.Item name="password" label="运维口令" rules={[{ required: true }]}>
+              <Input.Password placeholder="请输入服务器配置的 OPS_ADMIN_PASSWORD" />
             </Form.Item>
             <Button type="primary" htmlType="submit" block loading={login.isPending}>
               登录运维端

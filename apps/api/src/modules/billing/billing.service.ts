@@ -232,7 +232,7 @@ export class BillingService {
     if (order.status !== BillingOrderStatus.PENDING) {
       return this.prisma.billingOrder.findFirst({ where: { id: order.id }, include: { payments: true } });
     }
-    return this.applyPaidOrder(user.id, order, PaymentProvider.MANUAL, dto.transactionId ?? `manual-${order.id}`, { manual: true });
+    return this.applyPaidOrder(user.isPlatformOps ? null : user.id, order, PaymentProvider.MANUAL, dto.transactionId ?? `manual-${order.id}`, { manual: true });
   }
 
   async handleWechatNotify(rawBody: string, headers: Record<string, string | string[] | undefined>) {

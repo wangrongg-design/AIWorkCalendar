@@ -73,11 +73,9 @@ const report = await request(
 );
 console.log("report task created:", report.id, report.status);
 
-const opsLogin = await request("/auth/login", {
+const opsLogin = await request("/auth/ops-login", {
   method: "POST",
   body: JSON.stringify({
-    tenantCode: DEMO_UNIFIED_SOCIAL_CREDIT_CODE,
-    email: "super@example.com",
     password: "Passw0rd!"
   })
 });

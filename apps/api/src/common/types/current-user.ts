@@ -8,4 +8,5 @@ export type CurrentUser = {
   name: string;
   departmentId: string | null;
   roles: RoleCode[];
+  isPlatformOps?: boolean;
 };
