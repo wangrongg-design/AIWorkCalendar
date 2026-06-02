@@ -9,8 +9,8 @@ const neutralColors = [
   { name: "Black", token: "black", hex: "#1A1A1A", usage: "标题、核心文字" },
   { name: "Gray 7", token: "gray-7", hex: "#2E2E2E", usage: "强正文、重要说明" },
   { name: "Gray 6", token: "gray-6", hex: "#424242", usage: "正文" },
-  { name: "Gray 5", token: "gray-5", hex: "#737373", usage: "次级文字" },
-  { name: "Gray 4", token: "gray-4", hex: "#A3A3A3", usage: "辅助文字、占位符" },
+  { name: "Gray 5", token: "gray-5", hex: "#737373", usage: "次级文字、可读占位符" },
+  { name: "Gray 4", token: "gray-4", hex: "#A3A3A3", usage: "装饰性辅助文字，不用于正文和输入占位" },
   { name: "Gray 3", token: "gray-3", hex: "#CCCCCC", usage: "禁用、弱分割" },
   { name: "Gray 2", token: "gray-2", hex: "#E6E6E6", usage: "边框、分割线" },
   { name: "Gray 1", token: "gray-1", hex: "#F6F6F6", usage: "页面背景" },
@@ -37,16 +37,18 @@ const semanticColors = [
 ];
 
 const typographyRows = [
-  { platform: "iOS", role: "Large Title", size: "34 / 41", weight: "700", usage: "首页主标题" },
-  { platform: "iOS", role: "Title 1", size: "28 / 34", weight: "700", usage: "页面标题" },
-  { platform: "iOS", role: "Title 2", size: "22 / 28", weight: "600", usage: "模块标题" },
+  { platform: "iOS", role: "Large Title", size: "32 / 38", weight: "600", usage: "少量主标题" },
+  { platform: "iOS", role: "Page Title", size: "30 / 36", weight: "600", usage: "首页和一级页面标题" },
+  { platform: "iOS", role: "Hero", size: "28 / 34", weight: "600", usage: "今日待处理主判断" },
   { platform: "iOS", role: "Body", size: "16 / 24", weight: "400", usage: "正文" },
-  { platform: "iOS", role: "Metric", size: "32 / 38", weight: "700", usage: "关键数据" },
-  { platform: "Web", role: "H1", size: "32 / 40", weight: "700", usage: "后台一级标题" },
-  { platform: "Web", role: "H2", size: "24 / 32", weight: "600", usage: "页面模块标题" },
-  { platform: "Web", role: "Body", size: "14 / 22", weight: "400", usage: "正文与表格" },
-  { platform: "Web", role: "Caption", size: "12 / 18", weight: "400", usage: "标签、表头、说明" },
-  { platform: "Web", role: "Metric", size: "32 / 40", weight: "700", usage: "数据指标" }
+  { platform: "iOS", role: "Support", size: "15 / 22", weight: "400", usage: "辅助说明" },
+  { platform: "iOS", role: "Metric", size: "28 / 34", weight: "600", usage: "关键数据" },
+  { platform: "Web", role: "Display", size: "2rem / 2.5rem", weight: "600", usage: "高强调数据和展示标题" },
+  { platform: "Web", role: "Page", size: "1.75rem / 2.25rem", weight: "600", usage: "后台一级标题" },
+  { platform: "Web", role: "Title", size: "1.25rem / 1.75rem", weight: "600", usage: "页面模块标题" },
+  { platform: "Web", role: "Body", size: "1rem / 1.5rem", weight: "400", usage: "正文与说明" },
+  { platform: "Web", role: "UI", size: "0.875rem / 1.25rem", weight: "400-600", usage: "表格、控件、元信息" },
+  { platform: "Web", role: "Caption", size: "0.75rem / 1rem", weight: "600", usage: "标签、表头、说明" }
 ];
 
 const statusTags = [
@@ -92,6 +94,14 @@ const cssTokens = `:root {
   --color-success: #16A34A;
   --color-warning: #D97706;
   --color-danger: #EE3B2B;
+  --color-placeholder: #737373;
+
+  --text-display: 2rem;
+  --text-page: 1.75rem;
+  --text-title: 1.25rem;
+  --text-body: 1rem;
+  --text-ui: 0.875rem;
+  --text-caption: 0.75rem;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -119,8 +129,8 @@ function ColorCard({ color }: { color: { name: string; token?: string; hex: stri
 function Section({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-[24px] border border-line bg-white p-6 shadow-[0_16px_42px_rgba(26,26,26,0.04)]">
-      <div className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">{eyebrow}</div>
-      <h2 className="mt-2 text-2xl font-bold leading-8 text-black">{title}</h2>
+      <div className="text-sm font-semibold tracking-normal text-secondary">{eyebrow}</div>
+      <h2 className="mt-2 text-2xl font-semibold leading-8 text-black">{title}</h2>
       <div className="mt-5">{children}</div>
     </section>
   );

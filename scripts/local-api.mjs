@@ -136,6 +136,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/ops/accounts/") && url.pathname.endsWith("/reset-password")) {
       return json(res, resetOpsAccountPassword(requireUser(currentUser), url.pathname.split("/")[3]));
     }
+    if (req.method === "DELETE" && url.pathname.startsWith("/ops/accounts/")) {
+      return json(res, deleteOpsAccount(requireUser(currentUser), lastPath(url.pathname)));
+    }
     if (req.method === "PATCH" && url.pathname.startsWith("/ops/accounts/")) {
       return json(res, updateOpsAccount(requireUser(currentUser), lastPath(url.pathname), body));
     }
@@ -973,6 +976,7 @@ function planUnitPriceCents(plan, interval) {
 
 function opsOverview(user) {
   requireRole(user, ["SUPER_ADMIN"]);
+  const businessUsers = users.filter(isOpsBusinessAccount);
   const tenantSummaries = tenants
     .filter((item) => !item.deletedAt)
     .map((item) => ({
@@ -983,7 +987,7 @@ function opsOverview(user) {
       createdAt: item.createdAt,
       subscription: subscriptionSummary(item.id),
       counts: {
-        users: users.filter((candidate) => candidate.tenantId === item.id).length,
+        users: businessUsers.filter((candidate) => candidate.tenantId === item.id).length,
         departments: departments.filter((candidate) => candidate.tenantId === item.id).length,
         projects: projects.filter((candidate) => candidate.tenantId === item.id && !candidate.deletedAt).length,
         workLogs: workLogs.filter((candidate) => candidate.tenantId === item.id && !candidate.deletedAt).length,
@@ -994,13 +998,13 @@ function opsOverview(user) {
     developerCompany: "北京七数智联科技有限公司",
     totals: {
       tenants: tenantSummaries.length,
-      accounts: users.length,
-      activeAccounts: users.filter((item) => item.isActive).length,
+      accounts: businessUsers.length,
+      activeAccounts: businessUsers.filter((item) => item.isActive).length,
       workLogs: workLogs.filter((item) => !item.deletedAt).length,
       reports: reports.length
     },
     tenants: tenantSummaries,
-    accounts: users
+    accounts: businessUsers
       .slice()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((item) => {
@@ -1025,10 +1029,14 @@ function opsOverview(user) {
   };
 }
 
+function isOpsBusinessAccount(item) {
+  return Boolean(item && !item.deletedAt && !hasRole(item, ["SUPER_ADMIN"]));
+}
+
 function updateOpsAccount(user, accountId, body) {
   requireRole(user, ["SUPER_ADMIN"]);
   if (user.id === accountId && body.isActive === false) throw httpError(400, "Cannot deactivate your own ops account");
-  const target = users.find((item) => item.id === accountId);
+  const target = users.find((item) => item.id === accountId && isOpsBusinessAccount(item));
   if (!target) throw httpError(404, "Account not found");
   if (body.name !== undefined) target.name = String(body.name).trim();
   if (body.isActive !== undefined) target.isActive = Boolean(body.isActive);
@@ -1054,7 +1062,7 @@ function updateOpsAccount(user, accountId, body) {
 
 function resetOpsAccountPassword(user, accountId) {
   requireRole(user, ["SUPER_ADMIN"]);
-  const target = users.find((item) => item.id === accountId);
+  const target = users.find((item) => item.id === accountId && isOpsBusinessAccount(item));
   if (!target) throw httpError(404, "Account not found");
   target.password = "123321";
   target.failedLoginCount = 0;
@@ -1078,6 +1086,25 @@ function resetOpsAccountPassword(user, accountId) {
     lastLoginAt: target.lastLoginAt ?? null,
     createdAt: target.createdAt
   };
+}
+
+function deleteOpsAccount(user, accountId) {
+  requireRole(user, ["SUPER_ADMIN"]);
+  const target = users.find((item) => item.id === accountId && isOpsBusinessAccount(item));
+  if (!target) throw httpError(404, "Account not found");
+  const deletedAt = new Date().toISOString();
+  target.isActive = false;
+  target.failedLoginCount = 0;
+  target.lockedUntil = null;
+  target.deletedAt = deletedAt;
+  target.updatedAt = deletedAt;
+  for (const token of passwordResetTokens.values()) {
+    if (token.userId === target.id && !token.usedAt) {
+      token.usedAt = deletedAt;
+    }
+  }
+  audit(user, "OPS_ACCOUNT_DELETED", "User", target.id, { targetTenantId: target.tenantId, email: target.email, phone: target.phone, name: target.name });
+  return { ok: true };
 }
 
 function updateOpsTenantLogo(user, tenantId, body) {
@@ -1577,12 +1604,13 @@ function calendarChat(user, body) {
 function workLogDraft(user, body) {
   requireUser(user);
   const currentDate = body.currentDate ?? todayKey;
+  const today = body.today ?? todayKey;
   const text = (body.messages ?? [])
     .filter((item) => item.role === "user")
     .map((item) => item.content)
     .join("\n")
     .trim();
-  const items = inferDraftItems(text, currentDate);
+  const items = inferDraftItems(text, currentDate, today);
   const first = items[0];
   return {
     ...first,
@@ -1594,9 +1622,9 @@ function workLogDraft(user, body) {
   };
 }
 
-function inferDraftItems(text, currentDate) {
+function inferDraftItems(text, currentDate, today) {
   const content = text.trim();
-  if (!content) return [buildDraftItem("请补充工作内容。", currentDate, undefined, true)];
+  if (!content) return [buildDraftItem("请补充工作内容。", currentDate, today, undefined, true)];
   const globalDate = inferDraftDate(content, currentDate);
 
   const ranges = Array.from(content.matchAll(timeRangePattern()));
@@ -1604,23 +1632,23 @@ function inferDraftItems(text, currentDate) {
     const items = splitDraftClauses(content, true).flatMap((clause) => {
       const clauseRanges = Array.from(clause.matchAll(timeRangePattern()));
       if (!clauseRanges.length) {
-        return [applyGlobalDraftDate(buildDraftItem(clause, currentDate), clause, globalDate, currentDate)];
+        return [applyGlobalDraftDate(buildDraftItem(clause, currentDate, today), clause, globalDate, currentDate, today)];
       }
       return clauseRanges.map((match, index) => {
         const start = match.index ?? 0;
         const end = start + match[0].length;
         const segment = rangeSegment(clause, start, end, clauseRanges[index + 1]?.index);
-        return applyGlobalDraftDate(buildDraftItem(segment, currentDate, parseDraftTimeRange(match)), segment, globalDate, currentDate);
+        return applyGlobalDraftDate(buildDraftItem(segment, currentDate, today, parseDraftTimeRange(match)), segment, globalDate, currentDate, today);
       });
     });
-    return items.length ? items : [buildDraftItem(content, currentDate)];
+    return items.length ? items : [buildDraftItem(content, currentDate, today)];
   }
 
   const clauses = splitDraftClauses(content);
   const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
-  if (hourClauses.length > 1) return hourClauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate), item, globalDate, currentDate));
-  if (clauses.length > 1) return clauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate), item, globalDate, currentDate));
-  return [buildDraftItem(content, currentDate)];
+  if (hourClauses.length > 1) return hourClauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
+  if (clauses.length > 1) return clauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
+  return [buildDraftItem(content, currentDate, today)];
 }
 
 function splitDraftClauses(text, includeSoftSeparators = false) {
@@ -1642,12 +1670,12 @@ function hasDraftClauseContent(text) {
   return cleaned.length > 0;
 }
 
-function buildDraftItem(text, currentDate, timing, missingContent = false) {
+function buildDraftItem(text, currentDate, today, timing, missingContent = false) {
   const date = inferDraftDate(text, currentDate);
   const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/);
   const hours = timing?.hours ?? (hoursMatch ? Math.min(Math.max(Number(hoursMatch[1]), 0), 24) : 1);
   const title = inferDraftTitle(text);
-  const kind = date > currentDate || /计划|明天|后天|下周|安排/.test(text) ? "PLAN" : "DAILY";
+  const kind = inferDraftKind(date, text, today);
   return {
     date,
     kind,
@@ -1709,12 +1737,16 @@ function formatDraftClock(hour, minute) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function applyGlobalDraftDate(item, text, globalDate, currentDate) {
+function inferDraftKind(date, text, today) {
+  return date > today || /计划|明天|后天|下周|安排/.test(text) ? "PLAN" : "DAILY";
+}
+
+function applyGlobalDraftDate(item, text, globalDate, currentDate, today) {
   if (globalDate === currentDate || hasDraftDateHint(text)) return item;
   return {
     ...item,
     date: globalDate,
-    kind: globalDate > currentDate ? "PLAN" : "DAILY"
+    kind: inferDraftKind(globalDate, text, today)
   };
 }
 

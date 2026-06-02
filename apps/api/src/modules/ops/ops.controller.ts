@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { RoleCode } from "@prisma/client";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
@@ -28,6 +28,11 @@ export class OpsController {
   @Post("accounts/:id/reset-password")
   resetAccountPassword(@CurrentUserParam() user: CurrentUser, @Param("id") id: string) {
     return this.opsService.resetAccountPassword(user, id);
+  }
+
+  @Delete("accounts/:id")
+  deleteAccount(@CurrentUserParam() user: CurrentUser, @Param("id") id: string) {
+    return this.opsService.deleteAccount(user, id);
   }
 
   @Patch("tenants/:id/logo")

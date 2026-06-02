@@ -74,6 +74,7 @@ type CalendarChatInput = {
 
 type DraftWorkLogInput = {
   currentDate: string;
+  today: string;
   messages: Array<{
     role: "user" | "assistant";
     content: string;
@@ -611,7 +612,7 @@ export class OpenAiService {
       .map((message) => message.content)
       .join("\n")
       .trim();
-    const items = this.inferDraftItems(userText, input.currentDate);
+    const items = this.inferDraftItems(userText, input.currentDate, input.today);
     const first = items[0];
     return {
       ...first,
@@ -623,10 +624,10 @@ export class OpenAiService {
     };
   }
 
-  private inferDraftItems(text: string, currentDate: string): WorkLogDraftItem[] {
+  private inferDraftItems(text: string, currentDate: string, today: string): WorkLogDraftItem[] {
     const content = text.trim();
     if (!content) {
-      return [this.buildDraftItem("请补充工作内容。", currentDate, undefined, true)];
+      return [this.buildDraftItem("请补充工作内容。", currentDate, today, undefined, true)];
     }
     const globalDate = this.inferDraftDate(content, currentDate);
 
@@ -635,29 +636,29 @@ export class OpenAiService {
       const items = this.splitDraftClauses(content, true).flatMap((clause) => {
         const clauseRanges = Array.from(clause.matchAll(this.timeRangePattern()));
         if (!clauseRanges.length) {
-          return [this.applyGlobalDraftDate(this.buildDraftItem(clause, currentDate), clause, globalDate, currentDate)];
+          return [this.applyGlobalDraftDate(this.buildDraftItem(clause, currentDate, today), clause, globalDate, currentDate, today)];
         }
         return clauseRanges.map((match, index) => {
           const start = match.index ?? 0;
           const end = start + match[0].length;
           const nextStart = clauseRanges[index + 1]?.index;
           const segment = this.rangeSegment(clause, start, end, nextStart);
-          return this.applyGlobalDraftDate(this.buildDraftItem(segment, currentDate, this.parseDraftTimeRange(match)), segment, globalDate, currentDate);
+          return this.applyGlobalDraftDate(this.buildDraftItem(segment, currentDate, today, this.parseDraftTimeRange(match)), segment, globalDate, currentDate, today);
         });
       });
-      return items.length ? items : [this.buildDraftItem(content, currentDate)];
+      return items.length ? items : [this.buildDraftItem(content, currentDate, today)];
     }
 
     const clauses = this.splitDraftClauses(content);
     const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
     if (hourClauses.length > 1) {
-      return hourClauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate), item, globalDate, currentDate));
+      return hourClauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
     }
     if (clauses.length > 1) {
-      return clauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate), item, globalDate, currentDate));
+      return clauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
     }
 
-    return [this.buildDraftItem(content, currentDate)];
+    return [this.buildDraftItem(content, currentDate, today)];
   }
 
   private splitDraftClauses(text: string, includeSoftSeparators = false) {
@@ -679,7 +680,7 @@ export class OpenAiService {
     return cleaned.length > 0;
   }
 
-  private buildDraftItem(text: string, currentDate: string, timing?: DraftTiming, missingContent = false): WorkLogDraftItem {
+  private buildDraftItem(text: string, currentDate: string, today: string, timing?: DraftTiming, missingContent = false): WorkLogDraftItem {
     const date = this.inferDraftDate(text, currentDate);
     const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/);
     const hours = timing?.hours ?? (hoursMatch ? Math.min(Math.max(Number(hoursMatch[1]), 0), 24) : 1);
@@ -688,7 +689,7 @@ export class OpenAiService {
       missingContent ? "content" : null,
       timing || hoursMatch ? null : "hours"
     ].filter(Boolean) as string[];
-    const kind = date > currentDate || /计划|明天|后天|下周|下个月|安排/.test(text) ? "PLAN" : "DAILY";
+    const kind = this.inferDraftKind(date, text, today);
     return {
       date,
       kind,
@@ -750,12 +751,16 @@ export class OpenAiService {
     return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
   }
 
-  private applyGlobalDraftDate(item: WorkLogDraftItem, text: string, globalDate: string, currentDate: string): WorkLogDraftItem {
+  private inferDraftKind(date: string, text: string, today: string) {
+    return date > today || /计划|明天|后天|下周|下个月|安排/.test(text) ? "PLAN" : "DAILY";
+  }
+
+  private applyGlobalDraftDate(item: WorkLogDraftItem, text: string, globalDate: string, currentDate: string, today: string): WorkLogDraftItem {
     if (globalDate === currentDate || this.hasDraftDateHint(text)) return item;
     return {
       ...item,
       date: globalDate,
-      kind: globalDate > currentDate ? "PLAN" : "DAILY"
+      kind: this.inferDraftKind(globalDate, text, today)
     };
   }
 
@@ -812,7 +817,7 @@ export class OpenAiService {
   private normalizeDraft(result: WorkLogDraftResult, input: DraftWorkLogInput): WorkLogDraftResult {
     const fallback = this.localWorkLogDraft(input);
     const sourceItems = Array.isArray(result.items) && result.items.length ? result.items : [result];
-    const items = sourceItems.map((item, index) => this.normalizeDraftItem(item, fallback.items[index] ?? fallback.items[0]));
+    const items = sourceItems.map((item, index) => this.normalizeDraftItem(item, fallback.items[index] ?? fallback.items[0], input.today));
     const first = items[0] ?? fallback.items[0];
     return {
       ...first,
@@ -821,12 +826,12 @@ export class OpenAiService {
     };
   }
 
-  private normalizeDraftItem(result: Partial<WorkLogDraftItem>, fallback: WorkLogDraftItem): WorkLogDraftItem {
+  private normalizeDraftItem(result: Partial<WorkLogDraftItem>, fallback: WorkLogDraftItem, today: string): WorkLogDraftItem {
     const date = result.date && /^\d{4}-\d{2}-\d{2}$/.test(result.date) ? result.date : fallback.date;
     const hours = Number.isFinite(Number(result.hours)) ? Math.min(Math.max(Number(result.hours), 0), 24) : fallback.hours;
     return {
       date,
-      kind: result.kind === "PLAN" ? "PLAN" : "DAILY",
+      kind: date > today || result.kind === "PLAN" ? "PLAN" : "DAILY",
       title: result.title?.trim() || fallback.title,
       content: result.content?.trim() || fallback.content,
       hours,

@@ -144,9 +144,11 @@ export class AiService {
   }
 
   async draftWorkLog(user: CurrentUser, dto: WorkLogDraftDto) {
+    const today = dateKey(new Date());
     return this.openAi.draftWorkLog(
       {
-        currentDate: dto.currentDate ?? dateKey(new Date()),
+        currentDate: dto.currentDate ?? today,
+        today,
         messages: dto.messages.slice(-12).map((message) => ({
           role: message.role,
           content: message.content

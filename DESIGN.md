@@ -17,40 +17,46 @@ colors:
   ink: "#1A1A1A"
   text: "#424242"
   muted: "#737373"
-  placeholder: "#A3A3A3"
+  placeholder: "#737373"
   line: "#E6E6E6"
   page: "#F6F6F6"
   panel: "#FFFFFF"
 typography:
   display:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
-    fontSize: "32px"
+    fontSize: "2rem"
     fontWeight: 600
-    lineHeight: "40px"
+    lineHeight: "2.5rem"
     letterSpacing: "0"
   headline:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
-    fontSize: "28px"
+    fontSize: "1.75rem"
     fontWeight: 600
-    lineHeight: "36px"
+    lineHeight: "2.25rem"
     letterSpacing: "0"
   title:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
-    fontSize: "20px"
+    fontSize: "1.25rem"
     fontWeight: 600
-    lineHeight: "28px"
+    lineHeight: "1.75rem"
     letterSpacing: "0"
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
-    fontSize: "14px"
+    fontSize: "1rem"
     fontWeight: 400
-    lineHeight: "22px"
+    lineHeight: "1.5rem"
+    letterSpacing: "0"
+  ui:
+    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: "1.25rem"
     letterSpacing: "0"
   label:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
-    fontSize: "12px"
+    fontSize: "0.75rem"
     fontWeight: 600
-    lineHeight: "20px"
+    lineHeight: "1rem"
     letterSpacing: "0"
 rounded:
   sm: "8px"
@@ -139,7 +145,7 @@ The palette is a restrained enterprise system with one operational blue, one AI 
 
 - **Ink** (`ink`): Page titles, key metrics, and primary text.
 - **Body Gray** (`text`): Main readable copy and table body.
-- **Muted Gray** (`muted`): Secondary descriptions and labels.
+- **Muted Gray** (`muted`, `placeholder`): Secondary descriptions, labels, and readable input placeholders.
 - **Line Gray** (`line`): Borders, table dividers, and panel separation.
 - **Work Surface** (`page`, `panel`): Light gray app background with white panels.
 
@@ -161,17 +167,25 @@ The palette is a restrained enterprise system with one operational blue, one AI 
 
 ### Hierarchy
 
-- **Display** (600, 32px, 40px): Product homepage and major marketing headings only.
-- **Headline** (600, 28px, 36px): App page titles and important admin screens.
-- **Title** (600, 20px, 28px): Panel titles, modal titles, card headings.
-- **Body** (400, 14px, 22px): Tables, forms, descriptions, and operational copy.
-- **Label** (600, 12px, 20px): Table headers, metric labels, compact control labels.
+- **Display** (600, 2rem / 2.5rem): Product homepage and high-emphasis metrics only.
+- **Headline** (600, 1.75rem / 2.25rem): Web app page titles and important admin screens.
+- **Title** (600, 1.25rem / 1.75rem): Panel titles, modal titles, card headings.
+- **Body** (400, 1rem / 1.5rem): Readable paragraphs, form help, and operational explanations.
+- **UI** (400-600, 0.875rem / 1.25rem): Dense tables, controls, compact metadata, and toolbar copy.
+- **Label** (600, 0.75rem / 1rem): Table headers, metric labels, chips, and compact status labels.
+
+### Platform Notes
+
+- **Web:** use fixed `rem` tokens. Do not use fluid type inside app, dashboard, or data grids.
+- **iOS:** use Apple system typography with semibold titles. Core app roles: Page Title 30pt, Hero 28pt, Body 16pt, Support 15pt, Caption 12pt, Metric 28pt.
 
 ### Named Rules
 
 **The Native Legibility Rule.** Use the system sans stack everywhere. Do not introduce decorative fonts into workflow surfaces.
 
 **The No Negative Tracking Rule.** Letter spacing is `0` in app UI. Do not tighten Chinese or mixed Chinese-English labels.
+
+**The Placeholder Contrast Rule.** Placeholder text uses `#737373`, not `#A3A3A3`, so login, search, and daily report inputs remain readable on mobile and desktop.
 
 ## 4. Elevation
 

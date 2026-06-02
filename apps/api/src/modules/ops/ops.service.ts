@@ -239,6 +239,54 @@ export class OpsService {
     };
   }
 
+  async deleteAccount(actor: CurrentUser, accountId: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { id: accountId, ...businessAccountWhere },
+      select: { id: true, tenantId: true, name: true, email: true, phone: true }
+    });
+    if (!existing) {
+      throw new NotFoundException("Account not found");
+    }
+    const deletedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: accountId },
+        data: {
+          isActive: false,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          deletedAt
+        }
+      }),
+      this.prisma.userRole.updateMany({
+        where: { tenantId: existing.tenantId, userId: accountId, deletedAt: null },
+        data: { deletedAt }
+      }),
+      this.prisma.passwordResetToken.updateMany({
+        where: { tenantId: existing.tenantId, userId: accountId, usedAt: null },
+        data: { usedAt: deletedAt }
+      }),
+      this.prisma.emailVerificationToken.updateMany({
+        where: { tenantId: existing.tenantId, userId: accountId, usedAt: null },
+        data: { usedAt: deletedAt }
+      })
+    ]);
+    await this.audit.log({
+      tenantId: existing.tenantId,
+      actorUserId: actor.isPlatformOps ? null : actor.id,
+      action: "OPS_ACCOUNT_DELETED",
+      targetType: "User",
+      targetId: accountId,
+      metadata: {
+        targetTenantId: existing.tenantId,
+        email: existing.email,
+        phone: existing.phone,
+        name: existing.name
+      }
+    });
+    return { ok: true };
+  }
+
   async updateTenantLogo(actor: CurrentUser, tenantId: string, dto: UpdateOpsTenantLogoDto) {
     const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
     const existing = await this.prisma.tenant.findFirst({

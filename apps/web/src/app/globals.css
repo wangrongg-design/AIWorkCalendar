@@ -44,7 +44,7 @@
   --color-ink: var(--color-black);
   --color-text: var(--color-gray-6);
   --color-muted: var(--color-gray-5);
-  --color-placeholder: var(--color-gray-4);
+  --color-placeholder: var(--color-gray-5);
   --color-line: var(--color-gray-2);
   --font-sans:
     -apple-system,
@@ -54,16 +54,39 @@
     "Microsoft YaHei",
     "Noto Sans CJK SC",
     sans-serif;
-  --font-size-title: 32px;
-  --font-size-section: 24px;
-  --font-size-card-title: 20px;
-  --font-size-body: 14px;
-  --font-size-small: 13px;
-  --font-size-caption: 12px;
-  --line-height-title: 40px;
-  --line-height-section: 32px;
-  --line-height-body: 22px;
-  --line-height-small: 20px;
+  --text-display: 2rem;
+  --text-page: 1.75rem;
+  --text-headline: 1.5rem;
+  --text-title: 1.25rem;
+  --text-subtitle: 1.125rem;
+  --text-body: 1rem;
+  --text-ui: 0.875rem;
+  --text-small: 0.8125rem;
+  --text-caption: 0.75rem;
+  --leading-display: 2.5rem;
+  --leading-page: 2.25rem;
+  --leading-headline: 2rem;
+  --leading-title: 1.75rem;
+  --leading-subtitle: 1.5rem;
+  --leading-body: 1.5rem;
+  --leading-ui: 1.25rem;
+  --leading-caption: 1rem;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-strong: 650;
+  --weight-bold: 700;
+  --measure-copy: 65ch;
+  --font-size-title: var(--text-page);
+  --font-size-section: var(--text-headline);
+  --font-size-card-title: var(--text-title);
+  --font-size-body: var(--text-body);
+  --font-size-small: var(--text-small);
+  --font-size-caption: var(--text-caption);
+  --line-height-title: var(--leading-page);
+  --line-height-section: var(--leading-headline);
+  --line-height-body: var(--leading-body);
+  --line-height-small: var(--leading-ui);
   --shadow-card: 0 10px 28px rgba(26, 26, 26, 0.06);
   --shadow-float: 0 24px 70px rgba(26, 26, 26, 0.14);
   --radius-sm: 8px;
@@ -109,9 +132,14 @@ body {
 body {
   margin: 0;
   font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   font-feature-settings: "kern";
+  font-kerning: normal;
+  font-optical-sizing: auto;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+  text-rendering: optimizeLegibility;
 }
 
 .ant-layout {
@@ -316,16 +344,19 @@ body {
 
 .page-title {
   margin: 0 !important;
-  font-size: 28px !important;
-  line-height: 36px !important;
-  font-weight: 600 !important;
+  font-size: var(--text-page) !important;
+  line-height: var(--leading-page) !important;
+  font-weight: var(--weight-semibold) !important;
   letter-spacing: 0 !important;
+  text-wrap: balance;
 }
 
 .page-subtitle {
   color: var(--md-on-surface-variant);
-  font-size: 14px;
-  line-height: 22px;
+  max-width: var(--measure-copy);
+  font-size: var(--text-ui);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
 }
 
 .surface-panel {
@@ -352,16 +383,16 @@ body {
 
 .metric-label {
   color: var(--md-on-surface-variant);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-caption);
 }
 
 .metric-value {
   color: var(--md-on-surface);
-  font-size: 28px;
-  font-weight: 500;
-  line-height: 36px;
+  font-size: var(--text-page);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-page);
 }
 
 .metric-hint {
@@ -380,8 +411,10 @@ body {
 
 .section-title {
   color: var(--md-on-surface);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+  text-wrap: balance;
 }
 
 .section-subtitle {
@@ -426,8 +459,9 @@ body {
 
 .workbench-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 240px);
+  align-items: stretch;
+  gap: 10px;
 }
 
 .workbench-ai {
@@ -435,7 +469,7 @@ body {
   border-radius: var(--radius-panel);
   background: var(--md-surface-bright);
   padding: 20px;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .workbench-decision.is-danger {
@@ -475,25 +509,28 @@ body {
   align-items: center;
   gap: 8px;
   color: var(--md-primary);
-  font-size: 13px;
-  font-weight: 750;
+  font-size: var(--text-small);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-ui);
 }
 
 .workbench-ai-title {
   margin-top: 10px;
   max-width: 760px;
   color: var(--md-on-surface);
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.45;
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-title);
+  text-wrap: balance;
 }
 
 .workbench-decision-copy {
   margin-top: 8px;
   max-width: 720px;
   color: var(--md-on-surface-variant);
-  font-size: 14px;
-  line-height: 22px;
+  font-size: var(--text-ui);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
 }
 
 .workbench-ai-evidence {
@@ -508,14 +545,15 @@ body {
   background: rgba(255, 255, 255, 0.78);
   padding: 5px 10px;
   color: var(--md-on-surface-variant);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-caption);
 }
 
 .workbench-actions {
   display: grid;
-  gap: 10px;
-  min-width: 210px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .workbench-actions.is-ai-only {
@@ -527,9 +565,10 @@ body {
   align-items: center;
   gap: 10px;
   border: 1px solid var(--md-outline-variant);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-md);
   background: var(--md-surface-bright);
-  padding: 14px;
+  min-height: 44px;
+  padding: 11px 14px;
   color: var(--md-on-surface);
   cursor: pointer;
   font-weight: 650;
@@ -1165,11 +1204,11 @@ body {
 }
 
 .calendar-cell {
-  min-height: 124px;
+  min-height: 108px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--md-surface-bright);
-  padding: 12px;
+  padding: 10px;
   cursor: pointer;
   color: var(--md-on-surface-variant);
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
@@ -1177,7 +1216,7 @@ body {
 
 .calendar-cell:hover {
   background: #f8fbff;
-  box-shadow: var(--md-elevation-1);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -1192,9 +1231,9 @@ body {
 }
 
 .calendar-empty-cell {
-  min-height: 124px;
+  min-height: 108px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 14px;
   background: transparent;
 }
 
@@ -1203,7 +1242,7 @@ body {
 }
 
 .calendar-cell:not(.is-today) .calendar-cell-body {
-  opacity: 0.58;
+  opacity: 0.74;
 }
 
 .calendar-cell:not(.is-today) .calendar-risk-tag {
@@ -1230,9 +1269,11 @@ body {
 }
 
 .calendar-rate-fill {
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--md-primary);
+  transform-origin: left center;
 }
 
 .workday-detail-modal .ant-modal-content {
@@ -1257,23 +1298,26 @@ body {
 
 .workday-product {
   color: var(--md-primary);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--text-small);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-ui);
   letter-spacing: 0;
 }
 
 .workday-date {
   margin-top: 8px;
   color: #111827;
-  font-size: 30px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: var(--text-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-display);
+  text-wrap: balance;
 }
 
 .workday-subtitle {
   margin-top: 8px;
   color: var(--md-on-surface-variant);
-  font-size: 15px;
+  font-size: var(--text-ui);
+  line-height: var(--leading-body);
 }
 
 .workday-metrics {
@@ -1298,16 +1342,17 @@ body {
 }
 
 .workday-metric-label {
-  font-size: 12px;
-  font-weight: 650;
   color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-caption);
 }
 
 .workday-metric-value {
   margin-top: 10px;
-  font-size: 36px;
-  font-weight: 720;
-  line-height: 1;
+  font-size: var(--text-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-display);
   letter-spacing: 0;
   animation: metric-rise 0.36s ease both;
 }
@@ -1903,8 +1948,8 @@ body {
   }
 
   .page-title {
-    font-size: 22px !important;
-    line-height: 30px !important;
+    font-size: var(--text-headline) !important;
+    line-height: var(--leading-headline) !important;
   }
 
   .toolbar-panel {
@@ -1951,7 +1996,8 @@ body {
   }
 
   .workbench-ai-title {
-    font-size: 18px;
+    font-size: var(--text-subtitle);
+    line-height: var(--leading-subtitle);
   }
 
   .calendar-home-content,
@@ -2025,7 +2071,7 @@ body {
 }
 
 .dashboard-calendar-page {
-  gap: 18px;
+  gap: 14px;
 }
 
 .dashboard-calendar-header {
@@ -2089,11 +2135,12 @@ body {
 
 .dashboard-calendar-grid {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 0.8fr));
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   border-color: rgba(230, 233, 239, 0.72);
   background: rgba(255, 255, 255, 0.64);
-  padding: 10px;
+  padding: 8px;
+  box-shadow: none;
 }
 
 .calendar-board-scroll {
@@ -2102,20 +2149,20 @@ body {
 
 .dashboard-calendar-grid .calendar-cell,
 .dashboard-calendar-grid .calendar-empty-cell {
-  min-height: clamp(124px, calc((100vh - 330px) / 6), 168px);
+  min-height: clamp(104px, calc((100vh - 318px) / 6), 142px);
 }
 
 .dashboard-calendar-grid .calendar-cell {
-  padding: 13px;
-  border-radius: 20px;
+  padding: 10px;
+  border-radius: 14px;
 }
 
 .dashboard-calendar-grid .calendar-empty-cell {
-  border-radius: 20px;
+  border-radius: 14px;
 }
 
 .dashboard-calendar-grid .calendar-cell-body {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 @media (min-width: 961px) {
@@ -2212,13 +2259,13 @@ body {
   }
 
   .calendar-home-content .page-title {
-    font-size: 24px !important;
-    line-height: 30px !important;
+    font-size: var(--text-headline) !important;
+    line-height: var(--leading-headline) !important;
   }
 
   .calendar-home-content .page-subtitle {
-    font-size: 12px;
-    line-height: 18px;
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
   }
 
   .calendar-home-content .dashboard-calendar-toolbar {
@@ -2226,7 +2273,7 @@ body {
   }
 
   .calendar-home-content .workbench-hero {
-    grid-template-columns: minmax(0, 1fr) minmax(148px, 180px);
+    grid-template-columns: minmax(0, 1fr) minmax(164px, 196px);
     gap: 8px;
   }
 
@@ -2236,13 +2283,13 @@ body {
   }
 
   .calendar-home-content .workbench-ai-kicker {
-    font-size: 12px;
+    font-size: var(--text-caption);
   }
 
   .calendar-home-content .workbench-ai-title {
     margin-top: 4px;
-    font-size: 16px;
-    line-height: 1.35;
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
   }
 
   .calendar-home-content .workbench-decision-copy {
@@ -2268,8 +2315,9 @@ body {
   }
 
   .calendar-home-content .workbench-action {
-    border-radius: 14px;
-    padding: 10px 12px;
+    border-radius: 12px;
+    min-height: 38px;
+    padding: 8px 11px;
     font-size: 13px;
   }
 
@@ -2341,9 +2389,10 @@ body {
 
   .calendar-home-content .dashboard-calendar-grid {
     flex: 1 1 auto;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     min-height: 0;
     overflow: hidden;
-    gap: 6px;
+    gap: 5px;
     padding: 8px;
   }
 
@@ -2356,7 +2405,7 @@ body {
 
   .calendar-home-content .dashboard-calendar-grid .calendar-cell,
   .calendar-home-content .dashboard-calendar-grid .calendar-empty-cell {
-    min-height: clamp(74px, calc((100vh - 260px) / 6), 132px);
+    min-height: clamp(78px, calc((100vh - 260px) / 6), 118px);
   }
 
   .calendar-home-content .dashboard-calendar-grid .calendar-cell {
@@ -3649,7 +3698,7 @@ body {
 .ant-input::placeholder,
 .ant-input-number-input::placeholder,
 .ant-select-selection-placeholder {
-  color: var(--color-gray-4) !important;
+  color: var(--color-placeholder) !important;
 }
 
 .ant-input:hover,
@@ -3743,8 +3792,9 @@ body {
 .page-title {
   color: var(--color-black) !important;
   font-size: var(--font-size-title) !important;
-  font-weight: 700 !important;
+  font-weight: var(--weight-semibold) !important;
   line-height: var(--line-height-title) !important;
+  text-wrap: balance;
 }
 
 .page-subtitle,
@@ -4568,14 +4618,14 @@ body {
 
 .workday-detail-modal .workday-risk-panel {
   min-height: 0;
-  border-left: 4px solid var(--color-warning);
+  border-color: var(--color-warning-soft);
   padding: 12px 14px;
-  background: var(--color-white);
+  background: var(--color-warning-bg);
 }
 
 .workday-detail-modal .workday-risk-panel.has-risk {
-  border-left-color: var(--color-danger);
-  background: var(--color-white);
+  border-color: var(--color-danger-soft);
+  background: var(--color-danger-bg);
 }
 
 .workday-detail-modal .workday-risk-panel.has-risk .workday-section-kicker {
@@ -4688,11 +4738,13 @@ body {
 }
 
 .workday-detail-modal .workday-ai-risk-summary {
-  border-left: 4px solid var(--color-warning);
+  border-color: var(--color-warning-soft);
+  background: var(--color-warning-bg);
 }
 
 .workday-detail-modal .workday-ai-risk-summary.has-risk {
-  border-left-color: var(--color-danger);
+  border-color: var(--color-danger-soft);
+  background: var(--color-danger-bg);
 }
 
 .workday-detail-modal .workday-ai-risk-summary strong {
@@ -8815,7 +8867,7 @@ body {
 }
 
 .dashboard-calendar-grid .calendar-rate-fill {
-  transition: width var(--motion-emphasis) var(--ease-out-expo);
+  transition: transform var(--motion-emphasis) var(--ease-out-expo);
 }
 
 .workbench-decision {

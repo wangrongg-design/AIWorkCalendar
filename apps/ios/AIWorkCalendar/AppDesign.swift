@@ -133,15 +133,17 @@ enum AITheme {
 
     enum Typography {
         static let eyebrow = Font.system(size: 13, weight: .semibold, design: .default)
-        static let title = Font.system(size: 34, weight: .bold, design: .default)
-        static let pageTitle = Font.system(size: 28, weight: .bold, design: .default)
+        static let title = Font.system(size: 32, weight: .semibold, design: .default)
+        static let pageTitle = Font.system(size: 30, weight: .semibold, design: .default)
+        static let hero = Font.system(size: 28, weight: .semibold, design: .default)
         static let title2 = Font.system(size: 22, weight: .semibold, design: .default)
         static let section = Font.system(size: 20, weight: .semibold, design: .default)
         static let body = Font.system(size: 16, weight: .regular, design: .default)
         static let support = Font.system(size: 15, weight: .regular, design: .default)
         static let footnote = Font.system(size: 13, weight: .regular, design: .default)
         static let caption = Font.system(size: 12, weight: .regular, design: .default)
-        static let metric = Font.system(size: 32, weight: .bold, design: .default)
+        static let action = Font.system(size: 17, weight: .semibold, design: .default)
+        static let metric = Font.system(size: 28, weight: .semibold, design: .default)
     }
 
     enum Layout {

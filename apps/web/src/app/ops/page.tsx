@@ -5,7 +5,7 @@ import { Alert, Avatar, Button, Layout, Modal, Popconfirm, Space, Switch, Table,
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -146,6 +146,18 @@ export default function OpsPage() {
     }
   });
 
+  const deleteAccount = useMutation({
+    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/ops/accounts/${id}`, { method: "DELETE" }),
+    onSuccess: (_, accountId) => {
+      const account = overview.data?.accounts.find((item) => item.id === accountId);
+      message.success(account ? `${account.name} 已删除，历史填报数据仍保留` : "账号已删除，历史填报数据仍保留");
+      queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "账号删除失败，请刷新账号列表后重试。");
+    }
+  });
+
   const updateTenantLogo = useMutation({
     mutationFn: ({ tenantId, nextLogoUrl }: { tenantId: string; nextLogoUrl: string | null }) =>
       apiFetch<OpsTenant>(`/ops/tenants/${tenantId}/logo`, {
@@ -275,9 +287,9 @@ export default function OpsPage() {
     { title: "最近登录", width: 150, render: (_, record) => (record.lastLoginAt ? dayjs(record.lastLoginAt).format("YYYY-MM-DD HH:mm") : "-") },
     {
       title: "操作",
-      width: 190,
+      width: 280,
       render: (_, record) => (
-        <Space>
+        <Space wrap size={[8, 8]}>
           <Switch
             checked={record.isActive}
             disabled={record.id === user?.id}
@@ -293,6 +305,18 @@ export default function OpsPage() {
           >
             <Button size="small" icon={<KeyRound size={14} />} loading={resetAccountPassword.isPending}>
               重置密码
+            </Button>
+          </Popconfirm>
+          <Popconfirm
+            title="确认删除这个账号？"
+            description="删除后该账号不能登录，账号列表不再显示；历史填报、报告和审计记录会保留。"
+            okText="确认删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true, loading: deleteAccount.isPending }}
+            onConfirm={() => deleteAccount.mutate(record.id)}
+          >
+            <Button size="small" danger icon={<Trash2 size={14} />} loading={deleteAccount.isPending}>
+              删除
             </Button>
           </Popconfirm>
         </Space>

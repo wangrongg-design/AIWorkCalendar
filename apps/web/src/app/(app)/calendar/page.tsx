@@ -159,6 +159,14 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
   };
 }
 
+function formDateKey(value: Dayjs | Date | string | number | null | undefined, fallback = dayjs().format("YYYY-MM-DD")) {
+  if (dayjs.isDayjs(value)) {
+    return value.isValid() ? value.format("YYYY-MM-DD") : fallback;
+  }
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.format("YYYY-MM-DD") : fallback;
+}
+
 export default function CalendarPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -282,10 +290,11 @@ export default function CalendarPage() {
 
   const draftWorkLog = useMutation({
     mutationFn: async (messages: AiDraftMessage[]) => {
+      const currentDate = formDateKey(quickFillForm.getFieldValue("date"));
       const draft = await apiFetch<WorkLogDraft>("/ai/work-log-draft", {
         method: "POST",
         body: JSON.stringify({
-          currentDate: dayjs().format("YYYY-MM-DD"),
+          currentDate,
           messages
         })
       });
@@ -565,7 +574,7 @@ export default function CalendarPage() {
     setQuickFillAiMessages([
       {
         role: "assistant",
-        content: "告诉我今天完成了什么、花了多久，或明天计划做什么；我会先生成草稿，确认后再提交。"
+        content: `当前填报日期是 ${dateValue.format("YYYY年M月D日")}。如果不写日期，我会按这一天生成草稿。`
       }
     ]);
     setDraftPreview(null);
@@ -716,7 +725,7 @@ export default function CalendarPage() {
                       </div>
                     ) : null}
                     <div className="calendar-rate-track">
-                      <div className="calendar-rate-fill" style={{ width: `${day?.fillRate ?? 0}%` }} />
+                      <div className="calendar-rate-fill" style={{ transform: `scaleX(${(day?.fillRate ?? 0) / 100})` }} />
                     </div>
                     <div className="calendar-rate-label text-muted">{isFuture ? "计划率" : "填报率"} {day?.fillRate ?? 0}%</div>
                   </div>

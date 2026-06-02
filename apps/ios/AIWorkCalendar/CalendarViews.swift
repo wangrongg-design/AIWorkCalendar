@@ -701,21 +701,9 @@ struct CalendarDashboardView: View {
                         }
                     )
 
-                    CalendarAICommandCenter(
-                        viewModel: viewModel,
-                        isManager: isManagerHome,
-                        input: $assistantInput,
-                        reply: assistantReply,
-                        onSubmit: { prompt in
-                            handleAssistantPrompt(prompt)
-                        },
-                        onQuickCommand: { prompt in
-                            handleAssistantPrompt(prompt)
-                        },
-                        onAction: { action in
-                            handleAssistantAction(action)
-                        }
-                    )
+                    if isManagerHome {
+                        calendarCommandCenter
+                    }
 
                     CalendarWeekOverviewCard(
                         rangeTitle: viewModel.weekRangeTitle,
@@ -745,6 +733,10 @@ struct CalendarDashboardView: View {
                             onCreateReport?(dateKey)
                         }
                     )
+
+                    if !isManagerHome {
+                        calendarCommandCenter
+                    }
 
                     CalendarRiskSignalPreviewList(
                         days: viewModel.weekMobileDays,
@@ -827,6 +819,24 @@ struct CalendarDashboardView: View {
                 .environmentObject(auth)
             }
         }
+    }
+
+    private var calendarCommandCenter: some View {
+        CalendarAICommandCenter(
+            viewModel: viewModel,
+            isManager: isManagerHome,
+            input: $assistantInput,
+            reply: assistantReply,
+            onSubmit: { prompt in
+                handleAssistantPrompt(prompt)
+            },
+            onQuickCommand: { prompt in
+                handleAssistantPrompt(prompt)
+            },
+            onAction: { action in
+                handleAssistantAction(action)
+            }
+        )
     }
 
     private var isManagerHome: Bool {
@@ -1078,6 +1088,8 @@ private struct CalendarHomeHeader: View {
                     Text(title)
                         .font(AITheme.Typography.pageTitle)
                         .foregroundStyle(AITheme.ColorToken.ink900)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
                     Text(subtitle)
                         .font(AITheme.Typography.footnote)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
@@ -1147,7 +1159,7 @@ private struct CalendarHomeHeroCard: View {
             }
 
             Text(heroTitle(today))
-                .font(.system(size: 32, weight: .bold, design: .default))
+                .font(AITheme.Typography.hero)
                 .foregroundStyle(AITheme.ColorToken.ink900)
                 .lineLimit(2)
                 .minimumScaleFactor(0.86)
@@ -1165,7 +1177,7 @@ private struct CalendarHomeHeroCard: View {
                 Label(primaryActionTitle(today), systemImage: primaryActionIcon(today))
                     .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
             }
-            .font(.headline.weight(.semibold))
+            .font(AITheme.Typography.action)
             .foregroundStyle(.white)
             .background(primaryActionTint(today))
             .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
