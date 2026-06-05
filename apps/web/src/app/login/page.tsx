@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Form, Input, Modal, Typography, message } from "antd";
-import { ArrowRight, CalendarCheck2, Home, LogIn } from "lucide-react";
+import { ArrowRight, Building2, CalendarCheck2, Home, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -10,15 +10,41 @@ import { useAuthStore } from "@/lib/auth-store";
 import { businessLeaderQuotes } from "@/lib/business-quotes";
 import { AuthUser } from "@/lib/types";
 
-type LoginResponse = {
+type LoginValues = {
+  account: string;
+  password: string;
+  tenantId?: string;
+};
+
+type TenantSelectionOption = {
+  tenantId: string;
+  tenantName: string;
+  tenantCode: string;
+  tenantLogoUrl?: string | null;
+  userName: string;
+  departmentName?: string | null;
+};
+
+type AuthenticatedLoginResponse = {
   accessToken: string;
   user: AuthUser;
 };
+
+type TenantSelectionLoginResponse = {
+  requiresTenantSelection: true;
+  options: TenantSelectionOption[];
+};
+
+type LoginResponse = AuthenticatedLoginResponse | TenantSelectionLoginResponse;
 
 type PasswordResetRequestResponse = {
   ok: boolean;
   resetToken?: string;
 };
+
+function isTenantSelectionResponse(data: LoginResponse): data is TenantSelectionLoginResponse {
+  return "requiresTenantSelection" in data && data.requiresTenantSelection;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,6 +54,9 @@ export default function LoginPage() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
   const [leaderQuote, setLeaderQuote] = useState(businessLeaderQuotes[0]);
+  const [tenantSelectionOpen, setTenantSelectionOpen] = useState(false);
+  const [tenantOptions, setTenantOptions] = useState<TenantSelectionOption[]>([]);
+  const [pendingLogin, setPendingLogin] = useState<LoginValues | null>(null);
 
   useEffect(() => {
     const previousQuote = window.localStorage.getItem("work-calendar-ai-login-quote");
@@ -39,16 +68,25 @@ export default function LoginPage() {
   }, []);
 
   const login = useMutation({
-    mutationFn: (values: { account: string; password: string }) =>
+    mutationFn: (values: LoginValues) =>
       apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
         body: JSON.stringify({
           account: values.account,
-          password: values.password
+          password: values.password,
+          tenantId: values.tenantId
         })
       }),
     onSuccess: (data) => {
+      if (isTenantSelectionResponse(data)) {
+        setTenantOptions(data.options);
+        setTenantSelectionOpen(true);
+        return;
+      }
       setSession(data.accessToken, data.user);
+      setTenantSelectionOpen(false);
+      setTenantOptions([]);
+      setPendingLogin(null);
       router.replace("/calendar");
     }
   });
@@ -79,6 +117,17 @@ export default function LoginPage() {
       confirmResetForm.resetFields();
     }
   });
+
+  const submitLogin = (values: LoginValues) => {
+    const nextLogin = { account: values.account, password: values.password };
+    setPendingLogin(nextLogin);
+    login.mutate(nextLogin);
+  };
+
+  const selectTenant = (option: TenantSelectionOption) => {
+    if (!pendingLogin) return;
+    login.mutate({ ...pendingLogin, tenantId: option.tenantId });
+  };
 
   return (
     <main className="system-login-page min-h-screen">
@@ -111,7 +160,7 @@ export default function LoginPage() {
                 <Typography.Text className="system-login-subtitle">进入企业工作台，查看日报、项目、风险和 AI 汇报。</Typography.Text>
 
                 {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
-                <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
+                <Form className="system-login-form mt-6" layout="vertical" onFinish={submitLogin}>
                   <Form.Item name="account" label="手机号或邮箱" rules={[{ required: true }]}>
                     <Input placeholder="请输入手机号或邮箱" />
                   </Form.Item>
@@ -144,6 +193,39 @@ export default function LoginPage() {
       <footer className="system-login-footer">
         北京七数智联科技有限公司 · 企业数据按租户隔离，管理员可导出数据备份
       </footer>
+
+      <Modal
+        title="选择要进入的企业"
+        open={tenantSelectionOpen}
+        onCancel={() => setTenantSelectionOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Typography.Text className="tenant-choice-copy">
+          这个账号已加入多个企业，请选择本次要进入的工作空间。
+        </Typography.Text>
+        {login.error ? <Alert className="mt-4" type="error" showIcon message={(login.error as Error).message} /> : null}
+        <div className="tenant-choice-list">
+          {tenantOptions.map((option) => (
+            <button
+              key={option.tenantId}
+              type="button"
+              className="tenant-choice-row"
+              disabled={login.isPending}
+              onClick={() => selectTenant(option)}
+            >
+              <span className="tenant-choice-logo">
+                {option.tenantLogoUrl ? <img src={option.tenantLogoUrl} alt="" /> : <Building2 size={18} />}
+              </span>
+              <span className="tenant-choice-body">
+                <strong>{option.tenantName}</strong>
+                <span>统一社会信用代码 {option.tenantCode}</span>
+                <em>{option.departmentName ? `${option.userName} · ${option.departmentName}` : option.userName}</em>
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
 
       <Modal title="重置密码" open={resetModalOpen} onCancel={() => setResetModalOpen(false)} footer={null}>
         {requestPasswordReset.error ? <Alert className="mb-4" type="error" showIcon message={(requestPasswordReset.error as Error).message} /> : null}

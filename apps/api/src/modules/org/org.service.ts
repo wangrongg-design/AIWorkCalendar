@@ -3,6 +3,7 @@ import { RoleCode, SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { AccessService } from "../../common/access/access.service";
 import { AuditService } from "../../common/audit/audit.service";
+import { ensureStandardDepartments } from "../../common/default-departments";
 import { PrismaService } from "../../common/prisma.service";
 import { SubscriptionService } from "../../common/subscription/subscription.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
@@ -29,6 +30,12 @@ function contactWhere(email?: string | null, phone?: string | null) {
   ].filter(Boolean) as Array<{ email: string } | { phone: string }>;
   return OR.length ? { OR } : null;
 }
+
+const tenantRoleCodes = new Set<RoleCode>([
+  RoleCode.COMPANY_ADMIN,
+  RoleCode.DEPARTMENT_MANAGER,
+  RoleCode.EMPLOYEE
+]);
 
 @Injectable()
 export class OrgService {
@@ -88,8 +95,11 @@ export class OrgService {
     if (!adminEmail) {
       throw new BadRequestException("Admin email is required");
     }
+    if (!dto.adminPassword) {
+      throw new BadRequestException("请设置初始管理员密码");
+    }
 
-    const passwordHash = await bcrypt.hash(dto.adminPassword ?? "Passw0rd!", 10);
+    const passwordHash = await bcrypt.hash(dto.adminPassword, 10);
     const logoUrl = normalizeTenantLogoUrl(dto.logoUrl);
     const roleDefs: Array<{ code: RoleCode; name: string }> = [
       { code: RoleCode.COMPANY_ADMIN, name: "企业管理员" },
@@ -128,10 +138,12 @@ export class OrgService {
         });
         roles.set(roleDef.code, role.id);
       }
+      const departmentsByKey = await ensureStandardDepartments(tx, tenant.id);
       const admin = await tx.user.upsert({
         where: { tenantId_email: { tenantId: tenant.id, email: adminEmail } },
         update: {
           name: dto.adminName,
+          departmentId: departmentsByKey.get("executive")?.id,
           passwordHash,
           isActive: true,
           requiresWorkReport: false,
@@ -139,6 +151,7 @@ export class OrgService {
         },
         create: {
           tenantId: tenant.id,
+          departmentId: departmentsByKey.get("executive")?.id,
           email: adminEmail,
           name: dto.adminName,
           passwordHash,
@@ -241,7 +254,7 @@ export class OrgService {
     }
     await this.subscriptions.assertCanAddActiveUser(user.tenantId);
 
-    const passwordHash = await bcrypt.hash(dto.password ?? "Passw0rd!", 10);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
     const data = {
       email,
       phone,
@@ -263,14 +276,14 @@ export class OrgService {
             ...data
           }
         });
-    await this.replaceRoles(user.tenantId, created.id, dto.roles);
+    const assignedRoles = await this.replaceRoles(user.tenantId, created.id, dto.roles);
     await this.audit.log({
       tenantId: user.tenantId,
       actorUserId: user.id,
       action: "USER_CREATED",
       targetType: "User",
       targetId: created.id,
-      metadata: { email: created.email, phone: created.phone, roles: dto.roles, departmentId: dto.departmentId ?? null, requiresWorkReport: created.requiresWorkReport }
+      metadata: { email: created.email, phone: created.phone, roles: assignedRoles, departmentId: dto.departmentId ?? null, requiresWorkReport: created.requiresWorkReport }
     });
     return this.getUser(user.tenantId, created.id);
   }
@@ -314,9 +327,7 @@ export class OrgService {
         requiresWorkReport: dto.requiresWorkReport
       }
     });
-    if (dto.roles) {
-      await this.replaceRoles(user.tenantId, id, dto.roles);
-    }
+    const assignedRoles = dto.roles ? await this.replaceRoles(user.tenantId, id, dto.roles) : null;
     await this.audit.log({
       tenantId: user.tenantId,
       actorUserId: user.id,
@@ -326,7 +337,7 @@ export class OrgService {
       metadata: {
         name: dto.name ?? null,
         departmentId: dto.departmentId ?? null,
-        roles: dto.roles ?? null,
+        roles: assignedRoles,
         isActive: dto.isActive ?? null,
         requiresWorkReport: dto.requiresWorkReport ?? null,
         passwordChanged: Boolean(dto.password)
@@ -336,13 +347,18 @@ export class OrgService {
   }
 
   private async replaceRoles(tenantId: string, userId: string, roleCodes: RoleCode[]) {
-    if (!roleCodes.length) {
-      throw new BadRequestException("At least one role is required");
+    const normalizedRoleCodes = [...new Set(roleCodes)];
+    if (normalizedRoleCodes.length !== 1) {
+      throw new BadRequestException("请为成员选择一个企业内角色");
+    }
+    const [roleCode] = normalizedRoleCodes;
+    if (!tenantRoleCodes.has(roleCode)) {
+      throw new BadRequestException("平台超级管理员不能分配给企业成员");
     }
     const roles = await this.prisma.role.findMany({
-      where: { tenantId, code: { in: roleCodes }, deletedAt: null }
+      where: { tenantId, code: roleCode, deletedAt: null }
     });
-    if (roles.length !== new Set(roleCodes).size) {
+    if (roles.length !== 1) {
       throw new BadRequestException("Invalid role code");
     }
     await this.prisma.$transaction([
@@ -353,6 +369,7 @@ export class OrgService {
         })
       )
     ]);
+    return normalizedRoleCodes;
   }
 
   private async ensureDepartment(tenantId: string, id: string) {

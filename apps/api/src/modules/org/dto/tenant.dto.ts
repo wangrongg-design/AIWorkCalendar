@@ -19,10 +19,9 @@ export class CreateTenantDto {
   @MinLength(2)
   adminName: string;
 
-  @IsOptional()
   @IsString()
   @MinLength(6)
-  adminPassword?: string;
+  adminPassword: string;
 
   @IsOptional()
   @IsString()

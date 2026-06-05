@@ -433,6 +433,34 @@ body {
   cursor: pointer;
 }
 
+.role-help-list {
+  display: grid;
+  gap: 8px;
+  margin: -2px 0 14px;
+}
+
+.role-help-item {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--md-surface-container);
+  padding: 10px 12px;
+}
+
+.role-help-item strong {
+  color: var(--md-on-surface);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+}
+
+.role-help-item span {
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  line-height: var(--leading-ui);
+}
+
 .auth-loading {
   display: grid;
   min-height: 100vh;
@@ -5831,6 +5859,96 @@ body {
   white-space: nowrap;
 }
 
+.tenant-choice-copy.ant-typography {
+  display: block;
+  color: var(--color-gray-6);
+  font-size: var(--text-ui);
+  line-height: var(--leading-body);
+}
+
+.tenant-choice-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tenant-choice-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+  color: var(--color-black);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--motion-fast) var(--ease-out-quart), background var(--motion-fast) var(--ease-out-quart);
+}
+
+.tenant-choice-row:hover {
+  border-color: rgba(11, 87, 208, 0.38);
+  background: var(--color-primary-bg);
+}
+
+.tenant-choice-row:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.tenant-choice-logo {
+  display: inline-flex;
+  height: 44px;
+  width: 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+}
+
+.tenant-choice-logo img {
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+}
+
+.tenant-choice-body {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.tenant-choice-body strong {
+  overflow: hidden;
+  color: var(--color-black);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-choice-body span,
+.tenant-choice-body em {
+  overflow: hidden;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tenant-choice-row {
+    transition: none;
+  }
+}
+
 .system-login-footer {
   padding: 20px 24px 24px;
   color: var(--color-gray-5);
@@ -9832,7 +9950,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 28px;
-  height: 60px;
+  height: 96px;
   padding: 0 48px;
   border-bottom: 1px solid rgba(210, 210, 215, 0.72);
   background: rgba(255, 255, 255, 0.82);
@@ -9842,7 +9960,7 @@ body {
 .calendarseven-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   border: 0;
   background: transparent;
@@ -9855,8 +9973,8 @@ body {
 }
 
 .calendarseven-brand img {
-  width: 28px;
-  height: 28px;
+  width: 84px;
+  height: 84px;
   object-fit: contain;
 }
 
@@ -10739,8 +10857,8 @@ body {
 }
 
 .calendarseven-footer img {
-  width: 26px;
-  height: 26px;
+  width: 84px;
+  height: 84px;
   object-fit: contain;
 }
 
@@ -10841,9 +10959,14 @@ body {
 
 @media (max-width: 640px) {
   .calendarseven-nav {
-    height: 56px;
+    height: 72px;
     gap: 12px;
     padding-inline: 14px;
+  }
+
+  .calendarseven-brand img {
+    width: 58px;
+    height: 58px;
   }
 
   .calendarseven-brand span {

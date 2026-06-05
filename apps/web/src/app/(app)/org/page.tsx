@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Cascader, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, MessageSquare, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
@@ -44,11 +44,10 @@ type DepartmentTreeNode = Department & {
   children?: DepartmentTreeNode[];
 };
 
-type DepartmentCascaderOption = {
+type DepartmentSelectOption = {
   value: string;
   label: string;
   disabled?: boolean;
-  children?: DepartmentCascaderOption[];
 };
 
 type SubscriptionForm = {
@@ -91,24 +90,26 @@ type FeedbackStatusForm = {
 
 type DepartmentForm = {
   name: string;
-  parentId?: string | string[] | null;
+  parentId?: string | null;
 };
+
+type TenantRoleCode = Exclude<RoleCode, "SUPER_ADMIN">;
 
 type OrgUserForm = {
   email?: string;
   phone?: string;
   name: string;
-  departmentId?: string | string[] | null;
+  departmentId?: string | null;
   password?: string;
-  roles: RoleCode[];
+  role: TenantRoleCode;
   isActive?: boolean;
   requiresWorkReport?: boolean;
 };
 
-const roleOptions: Array<{ value: RoleCode; label: string }> = [
-  { value: "COMPANY_ADMIN", label: "企业管理员" },
-  { value: "DEPARTMENT_MANAGER", label: "部门经理" },
-  { value: "EMPLOYEE", label: "普通员工" }
+const roleOptions: Array<{ value: TenantRoleCode; label: string; description: string }> = [
+  { value: "COMPANY_ADMIN", label: "企业管理员", description: "管理组织、成员、项目、订阅和企业级数据。通常不需要日报填报。" },
+  { value: "DEPARTMENT_MANAGER", label: "部门经理", description: "查看和管理本部门范围的日报、日历、风险和汇报。通常需要日报填报。" },
+  { value: "EMPLOYEE", label: "普通员工", description: "维护自己的日报、计划和相关项目记录。默认需要日报填报。" }
 ];
 
 const planOptions: Array<{ value: SubscriptionPlan; label: string }> = [
@@ -156,13 +157,18 @@ const paymentProviderLabels: Record<PaymentProvider, string> = {
 
 const activeMemberMonthlyPriceCents = 1900;
 
-function lastPathValue(value?: string | string[] | null) {
-  if (Array.isArray(value)) return value.at(-1) ?? null;
-  return value || null;
-}
-
 function contactText(record: { email?: string | null; phone?: string | null }) {
   return [record.phone, record.email].filter(Boolean).join(" / ") || "-";
+}
+
+function roleLabel(value?: RoleCode) {
+  return roleOptions.find((item) => item.value === value)?.label ?? value ?? "-";
+}
+
+function primaryTenantRole(roles?: RoleCode[]): TenantRoleCode {
+  if (roles?.includes("COMPANY_ADMIN")) return "COMPANY_ADMIN";
+  if (roles?.includes("DEPARTMENT_MANAGER")) return "DEPARTMENT_MANAGER";
+  return "EMPLOYEE";
 }
 
 const orderStatusColors: Record<string, string> = {
@@ -382,19 +388,16 @@ export default function OrgPage() {
     return false;
   };
 
-  const buildDepartmentCascaderOptions = (disabledIds = new Set<string>()) => {
-    const toOption = (node: DepartmentTreeNode): DepartmentCascaderOption => ({
-      value: node.id,
-      label: node.name,
-      disabled: disabledIds.has(node.id),
-      children: node.children?.map(toOption)
-    });
-    return departmentTree.map(toOption);
-  };
+  const departmentSelectOptions = useMemo<DepartmentSelectOption[]>(() => {
+    return (org.data?.departments ?? [])
+      .map((department) => ({
+        value: department.id,
+        label: departmentFullPath(department.id)
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+  }, [org.data?.departments, departmentById]);
 
-  const departmentCascaderOptions = useMemo(() => buildDepartmentCascaderOptions(), [departmentTree]);
-
-  const parentDepartmentCascaderOptions = useMemo(() => {
+  const parentDepartmentSelectOptions = useMemo(() => {
     const disabledIds = new Set<string>();
     if (editingDepartment) {
       disabledIds.add(editingDepartment.id);
@@ -404,8 +407,11 @@ export default function OrgPage() {
         }
       }
     }
-    return buildDepartmentCascaderOptions(disabledIds);
-  }, [departmentTree, departmentById, editingDepartment, org.data?.departments]);
+    return departmentSelectOptions.map((option) => ({
+      ...option,
+      disabled: disabledIds.has(option.value)
+    }));
+  }, [departmentSelectOptions, departmentById, editingDepartment, org.data?.departments]);
 
   const billingOrders = useQuery({
     queryKey: ["billing-orders"],
@@ -499,7 +505,7 @@ export default function OrgPage() {
     mutationFn: (values: DepartmentForm) => {
       const payload = {
         name: values.name,
-        parentId: lastPathValue(values.parentId)
+        parentId: values.parentId ?? null
       };
       if (editingDepartment) {
         return apiFetch<Department>(`/org/departments/${editingDepartment.id}`, {
@@ -530,9 +536,11 @@ export default function OrgPage() {
 
   const saveUser = useMutation({
     mutationFn: (values: OrgUserForm) => {
+      const { role, ...rest } = values;
       const payload = {
-        ...values,
-        departmentId: lastPathValue(values.departmentId)
+        ...rest,
+        departmentId: values.departmentId ?? null,
+        roles: [role]
       };
       if (editingUser) {
         return apiFetch<OrgUser>(`/org/users/${editingUser.id}`, {
@@ -542,7 +550,7 @@ export default function OrgPage() {
       }
       return apiFetch<OrgUser>("/org/users", {
         method: "POST",
-        body: JSON.stringify({ ...payload, password: values.password || "Passw0rd!" })
+        body: JSON.stringify(payload)
       });
     },
     onSuccess: () => {
@@ -756,7 +764,7 @@ export default function OrgPage() {
             icon={<Edit2 size={15} />}
             onClick={() => {
               setEditingDepartment(record);
-              departmentForm.setFieldsValue({ ...record, parentId: departmentPathIds(record.parentId) });
+              departmentForm.setFieldsValue({ ...record, parentId: record.parentId ?? null });
               setDepartmentModalOpen(true);
             }}
           />
@@ -782,7 +790,7 @@ export default function OrgPage() {
       dataIndex: "roles",
       render: (roles: RoleCode[]) => (
         <Space wrap>
-          {roles.map((role) => <Tag key={role}>{roleOptions.find((item) => item.value === role)?.label ?? role}</Tag>)}
+          {roles.map((role) => <Tag key={role}>{roleLabel(role)}</Tag>)}
         </Space>
       )
     },
@@ -802,7 +810,12 @@ export default function OrgPage() {
             icon={<Edit2 size={15} />}
             onClick={() => {
               setEditingUser(record);
-              userForm.setFieldsValue({ ...record, departmentId: departmentPathIds(record.departmentId), password: undefined });
+              userForm.setFieldsValue({
+                ...record,
+                role: primaryTenantRole(record.roles),
+                departmentId: record.departmentId ?? null,
+                password: undefined
+              });
               setUserModalOpen(true);
             }}
           />
@@ -1124,6 +1137,12 @@ export default function OrgPage() {
             label: "员工与角色",
             children: (
               <div className="space-y-3">
+                <Alert
+                  type="info"
+                  showIcon
+                  message="企业成员只选择一个主角色"
+                  description="企业管理员负责组织、成员、项目和订阅；部门经理查看本部门数据；普通员工维护自己的日报。平台超级管理员只用于运维端登录，不属于企业成员角色。"
+                />
                 {canManage ? (
                   <Button
                     type="primary"
@@ -1131,7 +1150,7 @@ export default function OrgPage() {
                     onClick={() => {
                       setEditingUser(null);
                       userForm.resetFields();
-                      userForm.setFieldsValue({ roles: ["EMPLOYEE"], isActive: true, requiresWorkReport: true });
+                      userForm.setFieldsValue({ role: "EMPLOYEE", isActive: true, requiresWorkReport: true });
                       setUserModalOpen(true);
                     }}
                   >
@@ -1450,8 +1469,8 @@ export default function OrgPage() {
           <Form.Item name="adminEmail" label="初始管理员邮箱" rules={[{ required: true, type: "email" }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="adminPassword" label="初始管理员密码">
-            <Input.Password placeholder="默认 Passw0rd!" />
+          <Form.Item name="adminPassword" label="初始管理员密码" rules={[{ required: true, min: 8 }]}>
+            <Input.Password placeholder="至少 8 位，建议包含大小写字母和数字" />
           </Form.Item>
         </Form>
       </Modal>
@@ -1467,11 +1486,12 @@ export default function OrgPage() {
           <Form.Item name="name" label="部门名称" rules={[{ required: true, min: 2 }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="parentId" label="上级部门">
-            <Cascader
+          <Form.Item name="parentId" label="上级部门" extra="不选择上级部门时，该部门会作为一级部门显示。">
+            <Select
               allowClear
-              changeOnSelect
-              options={parentDepartmentCascaderOptions}
+              showSearch
+              optionFilterProp="label"
+              options={parentDepartmentSelectOptions}
               placeholder="选择上级部门"
             />
           </Form.Item>
@@ -1497,16 +1517,17 @@ export default function OrgPage() {
             <Form.Item name="phone" label="手机号">
               <Input placeholder="13900000000" />
             </Form.Item>
-            <Form.Item name="departmentId" label="部门">
-              <Cascader
-                allowClear
-                changeOnSelect
-                options={departmentCascaderOptions}
-                placeholder="选择部门"
-              />
+            <Form.Item name="departmentId" label="部门" extra="支持按部门名称或完整路径搜索。">
+              <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={departmentSelectOptions}
+              placeholder="选择部门"
+            />
             </Form.Item>
-            <Form.Item name="password" label={editingUser ? "重置密码" : "初始密码"}>
-              <Input.Password placeholder={editingUser ? "留空不修改" : "默认 Passw0rd!"} />
+            <Form.Item name="password" label={editingUser ? "重置密码" : "初始密码"} rules={editingUser ? undefined : [{ required: true, min: 8 }]}>
+              <Input.Password placeholder={editingUser ? "留空不修改" : "至少 8 位，建议包含大小写字母和数字"} />
             </Form.Item>
           </div>
           <Alert
@@ -1516,9 +1537,19 @@ export default function OrgPage() {
             message="邮箱和手机号至少填写一个。管理员等无需日报统计的账号，可关闭“需要填报”。"
             description={memberBillingHint}
           />
-          <Form.Item name="roles" label="角色" rules={[{ required: true }]}>
-            <Select mode="multiple" options={roleOptions} />
+          <Form.Item name="role" label="主角色" rules={[{ required: true, message: "请选择一个企业内角色" }]}>
+            <Select
+              options={roleOptions.map(({ value, label }) => ({ value, label }))}
+            />
           </Form.Item>
+          <div className="role-help-list">
+            {roleOptions.map((role) => (
+              <div key={role.value} className="role-help-item">
+                <strong>{role.label}</strong>
+                <span>{role.description}</span>
+              </div>
+            ))}
+          </div>
           <Form.Item name="requiresWorkReport" label="需要填报" valuePropName="checked">
             <Switch checkedChildren="计入" unCheckedChildren="不计入" />
           </Form.Item>

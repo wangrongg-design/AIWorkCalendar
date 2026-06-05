@@ -6,7 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit --incremental false -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",

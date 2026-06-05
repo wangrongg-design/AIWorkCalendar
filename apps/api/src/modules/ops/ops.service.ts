@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, RoleCode } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import { AuditService } from "../../common/audit/audit.service";
 import { PrismaService } from "../../common/prisma.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
@@ -9,7 +10,6 @@ import { UpdateOpsAccountDto } from "./dto/update-account.dto";
 import { UpdateOpsTenantLogoDto } from "./dto/update-tenant-logo.dto";
 
 const activeMemberMonthlyPriceCents = 1900;
-const opsResetPassword = "123321";
 const businessAccountWhere: Prisma.UserWhereInput = {
   deletedAt: null,
   roles: {
@@ -18,6 +18,11 @@ const businessAccountWhere: Prisma.UserWhereInput = {
     }
   }
 };
+
+function generateTemporaryPassword(length = 14) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  return Array.from(randomBytes(length), (byte) => alphabet[byte % alphabet.length]).join("");
+}
 
 @Injectable()
 export class OpsService {
@@ -195,10 +200,11 @@ export class OpsService {
     if (!existing) {
       throw new NotFoundException("Account not found");
     }
+    const temporaryPassword = generateTemporaryPassword();
     const updated = await this.prisma.user.update({
       where: { id: accountId },
       data: {
-        passwordHash: await bcrypt.hash(opsResetPassword, 10),
+        passwordHash: await bcrypt.hash(temporaryPassword, 10),
         failedLoginCount: 0,
         lockedUntil: null,
         lastPasswordChangedAt: new Date()
@@ -235,7 +241,8 @@ export class OpsService {
       requiresWorkReport: updated.requiresWorkReport,
       roles: updated.roles.map((item) => item.role.code),
       lastLoginAt: updated.lastLoginAt,
-      createdAt: updated.createdAt
+      createdAt: updated.createdAt,
+      temporaryPassword
     };
   }
 

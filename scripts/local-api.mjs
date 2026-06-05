@@ -39,6 +39,58 @@ const BILLING_PLANS = [
   }
 ];
 
+const STANDARD_DEPARTMENT_TEMPLATES = [
+  { key: "executive", name: "总经办" },
+  { key: "product", name: "产品部", parentKey: "executive" },
+  { key: "engineering", name: "研发部", parentKey: "executive" },
+  { key: "sales", name: "销售部", parentKey: "executive" },
+  { key: "marketing", name: "市场部", parentKey: "executive" },
+  { key: "customer-success", name: "客户成功部", parentKey: "executive" },
+  { key: "finance", name: "财务部", parentKey: "executive" },
+  { key: "hr-admin", name: "人事行政部", parentKey: "executive" }
+];
+const TENANT_ROLE_CODES = new Set(["COMPANY_ADMIN", "DEPARTMENT_MANAGER", "EMPLOYEE"]);
+
+function generateTemporaryPassword(length = 14) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  return Array.from(randomBytes(length), (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+function requireInitialPassword(value, missingMessage) {
+  const password = typeof value === "string" ? value : "";
+  if (!password) throw httpError(400, missingMessage);
+  if (password.length < 6) throw httpError(400, "初始密码至少 6 位");
+  return password;
+}
+
+function ensureStandardDepartments(tenantId) {
+  const idsByKey = new Map();
+  for (const template of STANDARD_DEPARTMENT_TEMPLATES) {
+    const existing = departments.find((item) => item.tenantId === tenantId && item.name === template.name && !item.deletedAt);
+    const parentId = template.parentKey ? idsByKey.get(template.parentKey) ?? null : null;
+    const item =
+      existing ??
+      {
+        id: `dept-${tenantId}-${template.key}`,
+        tenantId,
+        name: template.name,
+        parentId
+      };
+    if (!existing) {
+      departments.push(item);
+    }
+    idsByKey.set(template.key, item.id);
+  }
+  return idsByKey;
+}
+
+function normalizeTenantRoleCodes(roleCodes) {
+  const normalized = Array.from(new Set(Array.isArray(roleCodes) ? roleCodes : []));
+  if (normalized.length !== 1) throw httpError(400, "请为成员选择一个企业内角色");
+  if (!TENANT_ROLE_CODES.has(normalized[0])) throw httpError(400, "平台超级管理员不能分配给企业成员");
+  return normalized;
+}
+
 const tenant = {
   id: "tenant-demo",
   name: DEMO_COMPANY_NAME,
@@ -386,6 +438,10 @@ function createAnalysis(log) {
 
 function login(res, body) {
   const account = normalizeAccount(body.account ?? body.email);
+  if (!account.email && !account.phone) {
+    return error(res, 400, "请输入邮箱或手机号");
+  }
+  const tenantId = typeof body.tenantId === "string" && body.tenantId.trim() ? body.tenantId.trim() : undefined;
   const tenantCode = normalizeOptionalUnifiedSocialCreditCode(body.tenantCode);
   const matches = users.filter((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
@@ -393,19 +449,25 @@ function login(res, body) {
       matchesAccount(item, account) &&
       !item.deletedAt &&
       !ownerTenant?.deletedAt &&
+      (!tenantId || item.tenantId === tenantId) &&
       (!tenantCode || ownerTenant?.code === tenantCode)
     );
   });
-  if (matches.length > 1 && !tenantCode) {
-    return error(res, 400, "该账号存在于多个企业，请联系管理员确认账号归属");
-  }
-  const found = matches[0];
-  if (!found || !found.isActive || body.password !== (found.password ?? PASSWORD)) {
+  const validMatches = matches.filter((item) => item.isActive && body.password === (item.password ?? PASSWORD));
+  const businessMatches = validMatches.filter((item) => !hasRole(item, ["SUPER_ADMIN"]));
+  if (!validMatches.length) {
     return error(res, 401, "Invalid email or password");
   }
-  if (hasRole(found, ["SUPER_ADMIN"])) {
+  if (!businessMatches.length) {
     return error(res, 401, "Use platform ops login");
   }
+  if (businessMatches.length > 1 && !tenantId && !tenantCode) {
+    return json(res, {
+      requiresTenantSelection: true,
+      options: businessMatches.map((item) => tenantSelectionOption(item))
+    });
+  }
+  const found = businessMatches[0];
   found.lastLoginAt = new Date().toISOString();
   audit(found, "AUTH_LOGIN", "User", found.id);
   return json(res, {
@@ -425,7 +487,7 @@ function opsLogin(res, body) {
 }
 
 function registerTenant(body) {
-  const tenantCode = normalizeOptionalUnifiedSocialCreditCode(body.tenantCode) ?? generateTrialTenantCode();
+  const tenantCode = normalizeUnifiedSocialCreditCode(body.tenantCode);
   if (!UNIFIED_SOCIAL_CREDIT_CODE_PATTERN.test(tenantCode)) throw httpError(400, "请输入 18 位营业执照统一社会信用代码");
   if (tenants.some((item) => item.code === tenantCode)) throw httpError(400, "该统一社会信用代码已注册");
   const tenantId = `tenant-${Date.now()}`;
@@ -458,7 +520,8 @@ function registerTenant(body) {
     updatedAt: new Date().toISOString(),
     deletedAt: null
   });
-  const admin = makeUser(`user-${Date.now()}`, body.adminEmail, body.adminName, null, ["COMPANY_ADMIN"], tenantId, body.password, null, false);
+  const departmentIds = ensureStandardDepartments(tenantId);
+  const admin = makeUser(`user-${Date.now()}`, body.adminEmail, body.adminName, departmentIds.get("executive") ?? null, ["COMPANY_ADMIN"], tenantId, body.password, null, false);
   users.push(admin);
   audit(admin, "TENANT_REGISTERED", "Tenant", tenantId, { tenantCode, adminEmail: admin.email });
   return {
@@ -621,6 +684,19 @@ function me(user) {
   };
 }
 
+function tenantSelectionOption(user) {
+  const ownerTenant = tenants.find((item) => item.id === user.tenantId) ?? tenant;
+  const dept = departments.find((item) => item.id === user.departmentId && item.tenantId === user.tenantId);
+  return {
+    tenantId: ownerTenant.id,
+    tenantName: ownerTenant.name,
+    tenantCode: ownerTenant.code,
+    tenantLogoUrl: ownerTenant.logoUrl ?? null,
+    userName: user.name,
+    departmentName: dept?.name ?? null
+  };
+}
+
 function getOrg(user) {
   const visibleUsers = filterUsersByAccess(user, new URL("http://localhost/?scope=company"));
   const ownerTenant = tenants.find((item) => item.id === user.tenantId) ?? tenant;
@@ -651,6 +727,7 @@ function createTenant(user, body) {
   if (tenants.some((item) => item.code === code && !item.deletedAt)) throw httpError(400, "该统一社会信用代码已注册");
   const adminEmail = normalizeEmail(body.adminEmail);
   if (!adminEmail) throw httpError(400, "Admin email is required");
+  const adminPassword = requireInitialPassword(body.adminPassword, "请设置初始管理员密码");
   const now = new Date().toISOString();
   const tenantId = `tenant-${Date.now()}`;
   const logoUrl = normalizeTenantLogoUrl(body.logoUrl);
@@ -682,14 +759,15 @@ function createTenant(user, body) {
     updatedAt: now,
     deletedAt: null
   });
+  const departmentIds = ensureStandardDepartments(tenantId);
   const admin = makeUser(
     `user-${Date.now()}`,
     adminEmail,
     body.adminName,
-    null,
+    departmentIds.get("executive") ?? null,
     ["COMPANY_ADMIN"],
     tenantId,
-    body.adminPassword || PASSWORD,
+    adminPassword,
     null,
     false
   );
@@ -726,6 +804,8 @@ function createOrgUser(currentUser, body) {
   assertSeatAvailable(currentUser.tenantId);
   const email = normalizeEmail(body.email);
   const phone = normalizePhone(body.phone);
+  const password = requireInitialPassword(body.password, "请设置成员初始密码");
+  const roles = normalizeTenantRoleCodes(body.roles);
   assertContact(email, phone);
   if (hasContactConflict(currentUser.tenantId, email, phone)) {
     throw httpError(400, "邮箱或手机号已被当前企业其他账号使用");
@@ -736,9 +816,9 @@ function createOrgUser(currentUser, body) {
       email,
       body.name,
       body.departmentId ?? null,
-      body.roles?.length ? body.roles : ["EMPLOYEE"],
+      roles,
       currentUser.tenantId,
-      body.password || PASSWORD,
+      password,
       phone,
       body.requiresWorkReport ?? true
     )
@@ -1064,7 +1144,8 @@ function resetOpsAccountPassword(user, accountId) {
   requireRole(user, ["SUPER_ADMIN"]);
   const target = users.find((item) => item.id === accountId && isOpsBusinessAccount(item));
   if (!target) throw httpError(404, "Account not found");
-  target.password = "123321";
+  const temporaryPassword = generateTemporaryPassword();
+  target.password = temporaryPassword;
   target.failedLoginCount = 0;
   target.lockedUntil = null;
   target.updatedAt = new Date().toISOString();
@@ -1084,7 +1165,8 @@ function resetOpsAccountPassword(user, accountId) {
     requiresWorkReport: target.requiresWorkReport ?? true,
     roles: target.roles,
     lastLoginAt: target.lastLoginAt ?? null,
-    createdAt: target.createdAt
+    createdAt: target.createdAt,
+    temporaryPassword
   };
 }
 
@@ -1200,7 +1282,7 @@ function updateOrgUser(user, id, body) {
   if (body.phone !== undefined) item.phone = nextPhone;
   if (body.name !== undefined) item.name = body.name;
   if (body.departmentId !== undefined) item.departmentId = body.departmentId;
-  if (body.roles !== undefined) item.roles = body.roles;
+  if (body.roles !== undefined) item.roles = normalizeTenantRoleCodes(body.roles);
   if (body.isActive !== undefined) item.isActive = body.isActive;
   if (body.requiresWorkReport !== undefined) item.requiresWorkReport = Boolean(body.requiresWorkReport);
   if (body.password) item.password = body.password;
@@ -2131,14 +2213,6 @@ function normalizeUnifiedSocialCreditCode(value) {
 function normalizeOptionalUnifiedSocialCreditCode(value) {
   const normalized = normalizeUnifiedSocialCreditCode(value);
   return normalized || undefined;
-}
-
-function generateTrialTenantCode() {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const code = randomBytes(9).toString("hex").toUpperCase();
-    if (!tenants.some((item) => item.code === code)) return code;
-  }
-  throw httpError(400, "无法生成企业试用标识，请稍后重试");
 }
 
 function normalizeTenantLogoUrl(value) {

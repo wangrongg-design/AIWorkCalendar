@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Card, Form, Input, Typography, message } from "antd";
+import { Alert, Button, Card, Form, Input, Typography } from "antd";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
@@ -30,7 +30,6 @@ export default function OpsLoginPage() {
     },
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
-      message.success("已进入运维端");
       router.replace("/ops");
     }
   });
@@ -58,7 +57,6 @@ export default function OpsLoginPage() {
           <Form
             className="mt-6"
             layout="vertical"
-            initialValues={process.env.NODE_ENV === "production" ? undefined : { password: "Passw0rd!" }}
             onFinish={(values) => login.mutate(values)}
           >
             <Form.Item name="password" label="运维口令" rules={[{ required: true }]}>

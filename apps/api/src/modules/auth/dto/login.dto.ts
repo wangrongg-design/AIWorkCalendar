@@ -17,6 +17,10 @@ export class LoginDto {
 
   @IsOptional()
   @IsString()
+  tenantId?: string;
+
+  @IsOptional()
+  @IsString()
   @Transform(({ value }) => normalizeOptionalUnifiedSocialCreditCode(value))
   @Matches(unifiedSocialCreditCodePattern, { message: "请输入 18 位营业执照统一社会信用代码" })
   tenantCode?: string;

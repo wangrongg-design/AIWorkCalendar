@@ -669,6 +669,7 @@ struct CalendarDashboardView: View {
     @State private var selectedDetailRoute: CalendarDetailRoute?
     @State private var assistantInput = ""
     @State private var assistantReply: CalendarAssistantReply?
+    @State private var selectedLogDetail: WorkLog?
     var onCreateReport: ((String) -> Void)?
     var onOpenLogs: (() -> Void)?
     var onOpenProjects: (() -> Void)?
@@ -681,75 +682,32 @@ struct CalendarDashboardView: View {
                         title: topTitle,
                         subtitle: homeSubtitle,
                         homeMode: $homeMode,
-                        showsModeSwitch: supportsTeamMode,
+                        showsModeSwitch: false,
                         onRefresh: {
                             Task { await viewModel.refresh(auth: auth) }
                         }
                     )
 
-                    CalendarHomeHeroCard(
-                        viewModel: viewModel,
-                        isManager: isManagerHome,
-                        onPrimary: {
-                            handleTodayPrimaryAction()
-                        },
-                        onSecondary: {
-                            handleTodaySecondaryAction()
-                        },
-                        onAIInsight: {
-                            showsOverallAnalysis = true
-                        }
-                    )
+                    CalendarDailyBriefStatusCard(day: viewModel.todayMobileDay)
 
-                    if isManagerHome {
-                        calendarCommandCenter
-                    }
+                    CalendarWeekBriefOverview(days: viewModel.weekMobileDays)
 
-                    CalendarWeekOverviewCard(
-                        rangeTitle: viewModel.weekRangeTitle,
-                        onPrevious: {
-                            Task { await viewModel.moveWeek(by: -1, auth: auth) }
-                        },
-                        onCurrent: {
-                            Task { await viewModel.moveToCurrentWeek(auth: auth) }
-                        },
-                        onNext: {
-                            Task { await viewModel.moveWeek(by: 1, auth: auth) }
-                        },
-                        days: viewModel.weekMobileDays,
-                        onSelect: { date in
-                            Task { await viewModel.selectDate(date, auth: auth) }
-                        }
-                    )
-
-                    CalendarPriorityDateList(
-                        days: viewModel.weekMobileDays,
-                        isManager: isManagerHome,
-                        showsAllDays: $showsAllWeekDays,
-                        onShowDetail: { dateKey in
-                            selectedDetailRoute = CalendarDetailRoute(date: dateKey)
-                        },
-                        onCreateReport: { dateKey in
-                            onCreateReport?(dateKey)
-                        }
-                    )
-
-                    if !isManagerHome {
-                        calendarCommandCenter
-                    }
-
-                    CalendarRiskSignalPreviewList(
+                    CalendarAttentionBriefList(
                         days: viewModel.weekMobileDays,
                         onOpenDate: { dateKey in
                             selectedDetailRoute = CalendarDetailRoute(date: dateKey)
                         }
                     )
 
-                    if !isManagerHome {
-                        CalendarRecentLogPreviewList(logs: viewModel.recentLogs) {
+                    CalendarBriefRecentRecordList(
+                        logs: viewModel.recentLogs,
+                        onOpenLog: { log in
+                            selectedLogDetail = log
+                        },
+                        onOpenLogs: {
                             onOpenLogs?()
                         }
-                    }
+                    )
                 }
                 .padding(.horizontal, AITheme.Spacing.lg)
                 .padding(.top, AITheme.Spacing.md)
@@ -818,6 +776,9 @@ struct CalendarDashboardView: View {
                 )
                 .environmentObject(auth)
             }
+            .sheet(item: $selectedLogDetail) { log in
+                WorkLogDetailView(log: log)
+            }
         }
     }
 
@@ -861,15 +822,11 @@ struct CalendarDashboardView: View {
     }
 
     private var topTitle: String {
-        isManagerHome ? "团队日历" : "今日待处理"
+        "AI日历"
     }
 
     private var homeSubtitle: String {
-        let dateText = "\(formatShortDate(Date())) \(formatWeekday(Date()))"
-        if isManagerHome {
-            return "风险和缺填优先处理 · \(dateText)"
-        }
-        return "先完成今日日报，再看本周节奏 · \(dateText)"
+        "\(formatShortDate(Date())) \(formatWeekday(Date()))"
     }
 
     private var errorBinding: Binding<Bool> {
@@ -1123,6 +1080,468 @@ private struct CalendarHomeHeader: View {
                 .accessibilityLabel("切换团队或我的首页")
             }
         }
+    }
+}
+
+private struct CalendarDailyBriefStatusCard: View {
+    let day: CalendarMobileDayItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                Image(systemName: statusIcon)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(statusTint)
+                    .frame(width: 38, height: 38)
+                    .background(statusSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(statusTitle)
+                        .font(AITheme.Typography.title2)
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.86)
+
+                    Text(statusSummary)
+                        .font(AITheme.Typography.support)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(statusMessage)
+                .font(AITheme.Typography.body)
+                .foregroundStyle(messageTint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(statusTitle)，\(statusSummary)，\(statusMessage)")
+    }
+
+    private var statusTitle: String {
+        if day.riskCount > 0 {
+            return "有风险需要关注"
+        }
+        if day.filledCount == 0 {
+            return "今天还未填报"
+        }
+        return "今天状态正常"
+    }
+
+    private var statusSummary: String {
+        let riskText = day.riskCount > 0 ? "\(day.riskCount) 条风险" : "无风险"
+        if day.filledCount > 0 {
+            return "已填报 · \(hourSummary) · \(riskText)"
+        }
+        return "未填报 · 工时待补齐 · \(riskText)"
+    }
+
+    private var statusMessage: String {
+        if day.riskCount > 0 {
+            return "AI 已发现风险信号，建议去记录页查看原始日报。"
+        }
+        if day.filledCount == 0 {
+            return "底部“填报”可以完成今日日报，提交后这里会自动更新。"
+        }
+        return "AI 暂未发现需要你处理的问题。"
+    }
+
+    private var hourSummary: String {
+        guard let totalHours = day.totalHours else {
+            return "工时待确认"
+        }
+        let rounded = (totalHours * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return "\(Int(rounded))h"
+        }
+        return String(format: "%.1fh", rounded)
+    }
+
+    private var statusTint: Color {
+        if day.riskCount > 0 {
+            return AITheme.ColorToken.danger
+        }
+        if day.filledCount == 0 {
+            return AITheme.ColorToken.warning
+        }
+        return AITheme.ColorToken.success
+    }
+
+    private var statusSurface: Color {
+        if day.riskCount > 0 {
+            return AITheme.ColorToken.dangerSurface
+        }
+        if day.filledCount == 0 {
+            return AITheme.ColorToken.warningSurface
+        }
+        return AITheme.ColorToken.successSurface
+    }
+
+    private var statusIcon: String {
+        if day.riskCount > 0 {
+            return "exclamationmark.triangle.fill"
+        }
+        if day.filledCount == 0 {
+            return "clock.badge.exclamationmark"
+        }
+        return "checkmark.seal.fill"
+    }
+
+    private var messageTint: Color {
+        day.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink700
+    }
+}
+
+private struct CalendarWeekBriefOverview: View {
+    let days: [CalendarMobileDayItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            Text("本周概览")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink900)
+
+            HStack(spacing: AITheme.Spacing.xs) {
+                CalendarBriefMetricTile(
+                    value: "\(filledDays) 天",
+                    label: "已填",
+                    tint: AITheme.ColorToken.success,
+                    surface: AITheme.ColorToken.successSurface
+                )
+                CalendarBriefMetricTile(
+                    value: "\(missingDays) 天",
+                    label: "未填",
+                    tint: missingDays > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ink500,
+                    surface: missingDays > 0 ? AITheme.ColorToken.warningSurface : AITheme.ColorToken.surface
+                )
+                CalendarBriefMetricTile(
+                    value: "\(riskCount) 条",
+                    label: "风险",
+                    tint: riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink500,
+                    surface: riskCount > 0 ? AITheme.ColorToken.dangerSurface : AITheme.ColorToken.surface
+                )
+            }
+        }
+    }
+
+    private var pastAndTodayDays: [CalendarMobileDayItem] {
+        days.filter { !$0.isFuture }
+    }
+
+    private var filledDays: Int {
+        pastAndTodayDays.filter { $0.filledCount > 0 }.count
+    }
+
+    private var missingDays: Int {
+        pastAndTodayDays.filter { $0.filledCount == 0 || $0.missingCount > 0 }.count
+    }
+
+    private var riskCount: Int {
+        pastAndTodayDays.reduce(0) { $0 + $1.riskCount }
+    }
+}
+
+private struct CalendarBriefMetricTile: View {
+    let value: String
+    let label: String
+    let tint: Color
+    let surface: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(label)
+                .font(AITheme.Typography.caption)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, AITheme.Spacing.sm)
+        .padding(.horizontal, AITheme.Spacing.sm)
+        .background(surface)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                .stroke(AITheme.ColorToken.separator.opacity(0.8), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label)\(value)")
+    }
+}
+
+private struct CalendarAttentionBriefList: View {
+    let days: [CalendarMobileDayItem]
+    let onOpenDate: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            Text("需要关注")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AITheme.ColorToken.ink900)
+
+            VStack(spacing: 0) {
+                if attentionItems.isEmpty {
+                    HStack(spacing: AITheme.Spacing.sm) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.headline)
+                            .foregroundStyle(AITheme.ColorToken.success)
+                            .frame(width: 30, height: 30)
+                            .background(AITheme.ColorToken.successSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                        Text("暂无需要关注的问题")
+                            .font(AITheme.Typography.support)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(AITheme.Spacing.sm)
+                } else {
+                    ForEach(Array(attentionItems.enumerated()), id: \.element.id) { index, item in
+                        Button {
+                            onOpenDate(item.dateKey)
+                        } label: {
+                            HStack(spacing: AITheme.Spacing.sm) {
+                                Image(systemName: item.systemImage)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(item.tint)
+                                    .frame(width: 30, height: 30)
+                                    .background(item.surface)
+                                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(AITheme.ColorToken.ink900)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.82)
+                                    Text(item.subtitle)
+                                        .font(AITheme.Typography.footnote)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                                        .lineLimit(2)
+                                }
+
+                                Spacer(minLength: AITheme.Spacing.xs)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AITheme.ColorToken.ink400)
+                            }
+                            .padding(.vertical, AITheme.Spacing.sm)
+                            .padding(.horizontal, AITheme.Spacing.sm)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(item.title)，\(item.subtitle)")
+
+                        if index < attentionItems.count - 1 {
+                            Divider()
+                                .overlay(AITheme.ColorToken.separator)
+                                .padding(.leading, 52)
+                        }
+                    }
+                }
+            }
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+            }
+        }
+    }
+
+    private var attentionItems: [CalendarBriefAttentionItem] {
+        Array(
+            days
+                .filter { !$0.isFuture }
+                .compactMap { day -> CalendarBriefAttentionItem? in
+                    if day.riskCount > 0 {
+                        return CalendarBriefAttentionItem(
+                            dateKey: day.dateKey,
+                            title: "\(formatShortDate(day.date)) 风险 \(day.riskCount) 条",
+                            subtitle: day.summaryText,
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: AITheme.ColorToken.danger,
+                            surface: AITheme.ColorToken.dangerSurface,
+                            priority: 0
+                        )
+                    }
+
+                    if day.missingCount > 0 || day.filledCount == 0 {
+                        return CalendarBriefAttentionItem(
+                            dateKey: day.dateKey,
+                            title: "\(formatShortDate(day.date)) 未填报",
+                            subtitle: "本周状态可能不完整，建议补齐日报。",
+                            systemImage: "clock.badge.exclamationmark",
+                            tint: AITheme.ColorToken.warning,
+                            surface: AITheme.ColorToken.warningSurface,
+                            priority: 1
+                        )
+                    }
+
+                    if let totalHours = day.totalHours, totalHours > 0, totalHours < 2 {
+                        return CalendarBriefAttentionItem(
+                            dateKey: day.dateKey,
+                            title: "\(formatShortDate(day.date)) 工时偏低",
+                            subtitle: "\(day.hoursText)，建议确认是否漏填。",
+                            systemImage: "chart.line.downtrend.xyaxis",
+                            tint: AITheme.ColorToken.warning,
+                            surface: AITheme.ColorToken.warningSurface,
+                            priority: 2
+                        )
+                    }
+
+                    return nil
+                }
+                .sorted { lhs, rhs in
+                    if lhs.priority != rhs.priority {
+                        return lhs.priority < rhs.priority
+                    }
+                    return lhs.dateKey > rhs.dateKey
+                }
+                .prefix(2)
+        )
+    }
+}
+
+private struct CalendarBriefAttentionItem: Identifiable {
+    let id = UUID()
+    let dateKey: String
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let tint: Color
+    let surface: Color
+    let priority: Int
+}
+
+private struct CalendarBriefRecentRecordList: View {
+    let logs: [WorkLog]
+    let onOpenLog: (WorkLog) -> Void
+    let onOpenLogs: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("最近记录")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                Button("查看全部", action: onOpenLogs)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.primary)
+            }
+
+            VStack(spacing: 0) {
+                if logs.isEmpty {
+                    HStack(spacing: AITheme.Spacing.sm) {
+                        Image(systemName: "doc.text")
+                            .font(.headline)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                            .frame(width: 30, height: 30)
+
+                        Text("提交日报后，这里会显示最近 3 条记录。")
+                            .font(AITheme.Typography.support)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(AITheme.Spacing.sm)
+                } else {
+                    ForEach(Array(logs.prefix(3).enumerated()), id: \.element.id) { index, log in
+                        Button {
+                            onOpenLog(log)
+                        } label: {
+                            CalendarBriefRecentRecordRow(log: log)
+                                .padding(.vertical, AITheme.Spacing.sm)
+                                .padding(.horizontal, AITheme.Spacing.sm)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < min(logs.count, 3) - 1 {
+                            Divider()
+                                .overlay(AITheme.ColorToken.separator)
+                                .padding(.leading, AITheme.Spacing.sm)
+                        }
+                    }
+                }
+            }
+            .background(AITheme.ColorToken.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                    .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+            }
+        }
+    }
+}
+
+private struct CalendarBriefRecentRecordRow: View {
+    let log: WorkLog
+
+    var body: some View {
+        HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(formatLogDate(log.date))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+                    .lineLimit(1)
+
+                HStack(spacing: AITheme.Spacing.xs) {
+                    Text("\(log.hoursText)h")
+                    Text(log.status.title)
+                    if let project = log.project?.displayName, !project.isEmpty {
+                        Text(project)
+                            .lineLimit(1)
+                    }
+                }
+                .font(AITheme.Typography.footnote)
+                .foregroundStyle(AITheme.ColorToken.textSecondary)
+            }
+
+            Spacer(minLength: AITheme.Spacing.xs)
+
+            if workLogHasRisk(log) {
+                Text("风险")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.danger)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .background(AITheme.ColorToken.dangerSurface)
+                    .clipShape(Capsule())
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink400)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(formatLogDate(log.date))，\(log.hoursText)小时，\(log.status.title)")
+    }
+
+    private func formatLogDate(_ dateKey: String) -> String {
+        guard let date = DateHelpers.dayFormatter.date(from: String(dateKey.prefix(10))) else {
+            return String(dateKey.prefix(10))
+        }
+        return formatShortDate(date)
     }
 }
 

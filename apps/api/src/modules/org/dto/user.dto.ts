@@ -18,10 +18,9 @@ export class CreateUserDto {
   @IsString()
   departmentId?: string | null;
 
-  @IsOptional()
   @IsString()
   @MinLength(6)
-  password?: string;
+  password: string;
 
   @IsArray()
   @IsEnum(RoleCode, { each: true })

@@ -4,6 +4,7 @@ import { Prisma, RoleCode, SubscriptionPlan, SubscriptionStatus } from "@prisma/
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { AuditService } from "../../common/audit/audit.service";
+import { ensureStandardDepartments } from "../../common/default-departments";
 import { PrismaService } from "../../common/prisma.service";
 import { RateLimitService } from "../../common/rate-limit/rate-limit.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
@@ -54,6 +55,14 @@ function configuredOpsPassword() {
   return process.env.OPS_ADMIN_PASSWORD ?? (process.env.NODE_ENV === "production" ? "" : "Passw0rd!");
 }
 
+const loginUserInclude = Prisma.validator<Prisma.UserInclude>()({
+  tenant: true,
+  department: true,
+  roles: { where: { deletedAt: null }, include: { role: true } }
+});
+
+type LoginUser = Prisma.UserGetPayload<{ include: typeof loginUserInclude }>;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -63,18 +72,9 @@ export class AuthService {
     private readonly rateLimit: RateLimitService
   ) {}
 
-  private async generateTrialTenantCode() {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const code = randomBytes(9).toString("hex").toUpperCase();
-      const existing = await this.prisma.tenant.findUnique({ where: { code } });
-      if (!existing) return code;
-    }
-    throw new BadRequestException("无法生成企业试用标识，请稍后重试");
-  }
-
   async register(dto: RegisterTenantDto) {
     const adminEmail = dto.adminEmail.trim().toLowerCase();
-    const tenantCode = dto.tenantCode ? normalizeUnifiedSocialCreditCode(dto.tenantCode) : await this.generateTrialTenantCode();
+    const tenantCode = normalizeUnifiedSocialCreditCode(dto.tenantCode);
     this.rateLimit.consume(`register:${adminEmail}`, 5, 60 * 60 * 1000);
     const existingTenant = await this.prisma.tenant.findUnique({ where: { code: tenantCode } });
     if (existingTenant && !existingTenant.deletedAt) {
@@ -115,9 +115,11 @@ export class AuthService {
         });
         rolesByCode.set(role.code, role.id);
       }
+      const departmentsByKey = await ensureStandardDepartments(tx, tenant.id);
       const admin = await tx.user.create({
         data: {
           tenantId: tenant.id,
+          departmentId: departmentsByKey.get("executive")?.id,
           email: adminEmail,
           name: dto.adminName,
           passwordHash,
@@ -183,58 +185,76 @@ export class AuthService {
     }
     const normalizedEmail = account.toLowerCase();
     const normalizedPhone = normalizePhone(account);
-    this.rateLimit.consume(`login:${dto.tenantCode ?? "any"}:${normalizedEmail}`, 10, 15 * 60 * 1000);
-    const where: Prisma.UserWhereInput = dto.tenantCode
-      ? {
-          OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
-          deletedAt: null,
-          tenant: { code: dto.tenantCode, deletedAt: null }
-        }
-      : {
-          OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
-          deletedAt: null
-        };
+    const tenantId = dto.tenantId?.trim() || undefined;
+    this.rateLimit.consume(`login:${tenantId ?? dto.tenantCode ?? "any"}:${normalizedEmail}`, 10, 15 * 60 * 1000);
+    const where: Prisma.UserWhereInput = {
+      OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
+      deletedAt: null,
+      ...(tenantId ? { tenantId } : {}),
+      tenant: {
+        deletedAt: null,
+        ...(dto.tenantCode ? { code: dto.tenantCode } : {})
+      }
+    };
 
     const users = await this.prisma.user.findMany({
       where,
-      include: {
-        tenant: true,
-        department: true,
-        roles: { where: { deletedAt: null }, include: { role: true } }
-      },
-      take: 2
+      include: loginUserInclude,
+      orderBy: [{ tenant: { createdAt: "asc" } }, { createdAt: "asc" }]
     });
 
-    if (users.length > 1 && !dto.tenantCode) {
-      throw new BadRequestException("该账号存在于多个企业，请联系管理员确认账号归属");
-    }
-    const user = users[0];
-    if (!user || !user.isActive) {
+    const activeUsers = users.filter((user) => user.isActive);
+    if (!activeUsers.length) {
       throw new UnauthorizedException("Invalid email or password");
     }
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
+    const now = new Date();
+    const unlockedUsers = activeUsers.filter((user) => !user.lockedUntil || user.lockedUntil <= now);
+    if (!unlockedUsers.length) {
       throw new UnauthorizedException("Account is temporarily locked");
     }
-    if (process.env.REQUIRE_EMAIL_VERIFICATION === "true" && user.email && !user.emailVerifiedAt) {
+    const eligibleUsers =
+      process.env.REQUIRE_EMAIL_VERIFICATION === "true"
+        ? unlockedUsers.filter((user) => !user.email || user.emailVerifiedAt)
+        : unlockedUsers;
+    if (!eligibleUsers.length) {
       throw new UnauthorizedException("Email is not verified");
     }
 
-    const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) {
-      const failedLoginCount = user.failedLoginCount + 1;
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          failedLoginCount,
-          lockedUntil: failedLoginCount >= 5 ? addHours(1) : undefined
-        }
-      });
+    const validUsers: LoginUser[] = [];
+    for (const user of eligibleUsers) {
+      if (await bcrypt.compare(dto.password, user.passwordHash)) {
+        validUsers.push(user);
+      }
+    }
+    if (!validUsers.length) {
+      await Promise.all(
+        eligibleUsers.map((user) => {
+          const failedLoginCount = user.failedLoginCount + 1;
+          return this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+              failedLoginCount,
+              lockedUntil: failedLoginCount >= 5 ? addHours(1) : undefined
+            }
+          });
+        })
+      );
       throw new UnauthorizedException("Invalid email or password");
     }
-    const roleCodes = user.roles.map((item) => item.role.code);
-    if (roleCodes.includes(RoleCode.SUPER_ADMIN)) {
+
+    const businessUsers = validUsers.filter((user) => !this.roleCodesForLogin(user).includes(RoleCode.SUPER_ADMIN));
+    if (!businessUsers.length) {
       throw new UnauthorizedException("Use platform ops login");
     }
+    if (businessUsers.length > 1 && !tenantId && !dto.tenantCode) {
+      return {
+        requiresTenantSelection: true,
+        options: businessUsers.map((user) => this.buildTenantSelectionOption(user))
+      };
+    }
+
+    const user = businessUsers[0];
+    const roleCodes = this.roleCodesForLogin(user);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -427,6 +447,21 @@ export class AuthService {
       targetId: verification.userId
     });
     return { ok: true };
+  }
+
+  private roleCodesForLogin(user: LoginUser) {
+    return user.roles.map((item) => item.role.code);
+  }
+
+  private buildTenantSelectionOption(user: LoginUser) {
+    return {
+      tenantId: user.tenantId,
+      tenantName: user.tenant.name,
+      tenantCode: user.tenant.code,
+      tenantLogoUrl: user.tenant.logoUrl ?? null,
+      userName: user.name,
+      departmentName: user.department?.name ?? null
+    };
   }
 
   private async buildAuthResponse(

@@ -55,6 +55,10 @@ type OpsAccount = {
   createdAt: string;
 };
 
+type OpsPasswordResetResult = OpsAccount & {
+  temporaryPassword: string;
+};
+
 type OpsOverview = {
   developerCompany: string;
   totals: {
@@ -135,10 +139,20 @@ export default function OpsPage() {
   });
 
   const resetAccountPassword = useMutation({
-    mutationFn: (id: string) => apiFetch<OpsAccount>(`/ops/accounts/${id}/reset-password`, { method: "POST" }),
-    onSuccess: (_, accountId) => {
+    mutationFn: (id: string) => apiFetch<OpsPasswordResetResult>(`/ops/accounts/${id}/reset-password`, { method: "POST" }),
+    onSuccess: (data, accountId) => {
       const account = overview.data?.accounts.find((item) => item.id === accountId);
-      message.success(account ? `${account.name} 的密码已重置为 123321` : "账号密码已重置为 123321");
+      Modal.info({
+        title: account ? `${account.name} 的临时密码已生成` : "临时密码已生成",
+        content: (
+          <Space direction="vertical" size={8}>
+            <Typography.Text>请仅通过安全渠道发送给本人，并提醒对方登录后立即修改。</Typography.Text>
+            <Typography.Text code copyable>
+              {data.temporaryPassword}
+            </Typography.Text>
+          </Space>
+        )
+      });
       queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
     },
     onError: (error) => {
@@ -298,7 +312,7 @@ export default function OpsPage() {
           />
           <Popconfirm
             title="确认重置这个账号的密码？"
-            description="重置后密码为 123321，请提醒用户登录后尽快修改。"
+            description="系统会生成一次性临时密码，请通过安全渠道发送给本人。"
             okText="确认重置"
             cancelText="取消"
             onConfirm={() => resetAccountPassword.mutate(record.id)}

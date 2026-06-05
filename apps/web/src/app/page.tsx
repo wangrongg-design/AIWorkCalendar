@@ -25,9 +25,15 @@ import { useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser } from "@/lib/types";
+import {
+  normalizeUnifiedSocialCreditCode,
+  unifiedSocialCreditCodeMessage,
+  unifiedSocialCreditCodePattern
+} from "@/lib/unified-social-credit-code";
 
 type RegisterForm = {
   companyName: string;
+  tenantCode: string;
   adminName: string;
   adminEmail: string;
   password: string;
@@ -115,7 +121,10 @@ export default function HomePage() {
     mutationFn: (values: RegisterForm) =>
       apiFetch<RegisterResponse>("/auth/register", {
         method: "POST",
-        body: JSON.stringify(values)
+        body: JSON.stringify({
+          ...values,
+          tenantCode: normalizeUnifiedSocialCreditCode(values.tenantCode)
+        })
       }),
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
@@ -133,7 +142,7 @@ export default function HomePage() {
       <nav className="calendarseven-nav">
         <button type="button" className="calendarseven-brand" onClick={() => scrollTo("top")} aria-label="七数AI Work Calendar AI 官网首页">
           <img src="/seven-ai-logo.png" alt="七数AI" />
-          <span>七数AI / Work Calendar AI</span>
+          <span>Work Calendar AI</span>
         </button>
 
         <div className="calendarseven-nav-links" aria-label="官网导航">
@@ -370,6 +379,15 @@ export default function HomePage() {
               <Form.Item name="companyName" label="企业名称" rules={[{ required: true, min: 2 }]}>
                 <Input prefix={<Building2 size={16} />} placeholder="请输入企业名称" />
               </Form.Item>
+              <Form.Item
+                name="tenantCode"
+                label="企业代码"
+                normalize={normalizeUnifiedSocialCreditCode}
+                rules={[{ required: true, pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
+                extra="请填写营业执照上的 18 位统一社会信用代码。"
+              >
+                <Input prefix={<Shield size={16} />} placeholder="例如：91110105MA01A1B2X3" />
+              </Form.Item>
               <Form.Item name="adminName" label="联系人姓名" rules={[{ required: true, min: 2 }]}>
                 <Input prefix={<Users size={16} />} placeholder="请输入联系人姓名" />
               </Form.Item>
@@ -457,7 +475,7 @@ export default function HomePage() {
       <footer className="calendarseven-footer">
         <div>
           <img src="/seven-ai-logo.png" alt="七数AI" />
-          <strong>七数AI / Work Calendar AI</strong>
+          <strong>Work Calendar AI</strong>
           <p>面向企业团队的 AI 工作日历系统。</p>
           <span>冀ICP备19023975号</span>
         </div>
