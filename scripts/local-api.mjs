@@ -1503,6 +1503,7 @@ function calendar(user, url) {
   const month = url.searchParams.get("month") ?? todayKey.slice(0, 7);
   const start = new Date(`${month}-01T00:00:00.000Z`);
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
+  const today = todayKeyInShanghai();
   const visibleUsers = filterUsersByAccess(user, url);
   const reportUsers = visibleUsers.filter((item) => item.requiresWorkReport);
   const visibleUserIds = new Set(reportUsers.map((item) => item.id));
@@ -1511,13 +1512,16 @@ function calendar(user, url) {
     const key = dateKey(cursor);
     const logs = workLogs.filter((item) => item.date === key && item.status === "SUBMITTED" && !item.deletedAt && visibleUserIds.has(item.userId));
     const filled = new Set(logs.map((item) => item.userId));
+    const missingCount = Math.max(reportUsers.length - filled.size, 0);
     const riskCount = logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0);
     days.push({
       date: key,
       filledCount: filled.size,
-      missingCount: Math.max(reportUsers.length - filled.size, 0),
+      missingCount,
+      remindCount: key <= today ? missingCount : 0,
       fillRate: reportUsers.length ? Number(((filled.size / reportUsers.length) * 100).toFixed(1)) : 0,
-      riskCount
+      riskCount,
+      totalHours: Number(logs.reduce((sum, item) => sum + Number(item.hours), 0).toFixed(2))
     });
   }
   return { month, scope: resolveScope(user, url), totalEmployees: reportUsers.length, days };
@@ -1525,6 +1529,7 @@ function calendar(user, url) {
 
 function calendarDay(user, url) {
   const date = url.searchParams.get("date") ?? todayKey;
+  const today = todayKeyInShanghai();
   const visibleUsers = filterUsersByAccess(user, url).filter((item) => item.requiresWorkReport);
   const visibleUserIds = new Set(visibleUsers.map((item) => item.id));
   const logs = workLogs.filter((item) => item.date === date && item.status === "SUBMITTED" && !item.deletedAt && visibleUserIds.has(item.userId));
@@ -1554,6 +1559,7 @@ function calendarDay(user, url) {
       totalEmployees: visibleUsers.length,
       filledCount: filledEmployees.length,
       missingCount: missingEmployees.length,
+      remindCount: date <= today ? missingEmployees.length : 0,
       fillRate: visibleUsers.length ? Number(((filledEmployees.length / visibleUsers.length) * 100).toFixed(1)) : 0,
       totalHours: logs.reduce((sum, item) => sum + Number(item.hours), 0),
       riskCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0)
@@ -2250,7 +2256,7 @@ function getCurrentUser(req) {
   const token = header.slice("Bearer ".length);
   if (token === "local-ops") return OPS_USER;
   if (!token.startsWith("local:")) return null;
-  return users.find((item) => item.id === token.slice("local:".length)) ?? null;
+  return users.find((item) => item.id === token.slice("local:".length) && item.isActive && !item.deletedAt) ?? null;
 }
 
 function lastPath(pathname) {
@@ -2259,6 +2265,11 @@ function lastPath(pathname) {
 
 function dateKey(date) {
   return date.toISOString().slice(0, 10);
+}
+
+function todayKeyInShanghai() {
+  const shanghai = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return dateKey(new Date(Date.UTC(shanghai.getUTCFullYear(), shanghai.getUTCMonth(), shanghai.getUTCDate())));
 }
 
 function addDays(date, days) {

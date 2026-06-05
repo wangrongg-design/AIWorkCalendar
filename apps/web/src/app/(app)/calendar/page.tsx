@@ -89,12 +89,14 @@ const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五
 function monthSummary(days: CalendarDay[]) {
   const filled = days.reduce((sum, day) => sum + day.filledCount, 0);
   const missing = days.reduce((sum, day) => sum + day.missingCount, 0);
+  const remind = days.reduce((sum, day) => sum + (day.remindCount ?? 0), 0);
   const risks = days.reduce((sum, day) => sum + day.riskCount, 0);
   const totalHours = days.reduce((sum, day) => sum + (day.totalHours ?? 0), 0);
   const denominator = filled + missing;
   return {
     filled,
     missing,
+    remind,
     risks,
     totalHours: Number(totalHours.toFixed(1)),
     rate: denominator ? Number(((filled / denominator) * 100).toFixed(1)) : 0
@@ -419,10 +421,11 @@ export default function CalendarPage() {
         secondaryPrompt: "基于今天的风险日报，整理影响项目、负责人和下一步处理建议。"
       };
     }
-    if (todayStats.missingCount > 0) {
+    const remindCount = todayStats.remindCount ?? todayStats.missingCount;
+    if (remindCount > 0) {
       return {
         tone: "warning",
-        title: `${todayStats.missingCount} 位成员未填报`,
+        title: `${remindCount} 位成员未填报`,
         copy: `当前填报率 ${todayStats.fillRate}%，先补齐团队状态，避免日报和复盘失真。`,
         primaryLabel: "查看未填报成员",
         primaryAction: "openToday",
@@ -463,6 +466,17 @@ export default function CalendarPage() {
   const detailLogCount = detailFilledEmployees.reduce((sum, employee) => sum + employee.logs.length, 0);
   const selectedDateKind = selectedDate ? dateKind(selectedDate) : "today";
   const detailTitle = selectedDateKind === "future" ? "团队计划情况" : "今日团队填报情况";
+  const detailRemindCount = detailStats?.remindCount ?? (selectedDateKind === "future" ? 0 : detailMissingEmployees.length);
+  const detailPlanReminderCount = selectedDateKind === "future" ? detailMissingEmployees.length : 0;
+  const detailReminderActionCount = selectedDateKind === "future" ? detailPlanReminderCount : detailRemindCount;
+  const detailReminderNames = detailMissingEmployees
+    .slice(0, 6)
+    .map((item) => item.name)
+    .join("、");
+  const detailReminderMessage =
+    detailReminderNames && detailMissingEmployees.length > 6
+      ? `${detailReminderNames} 等 ${detailMissingEmployees.length} 人`
+      : detailReminderNames;
   const aiObservations = useMemo(() => {
     if (!selectedDate) return [];
     if (dayDetail.isFetching) return ["正在分析团队日报…"];
@@ -471,9 +485,10 @@ export default function CalendarPage() {
     if (stats.filledCount === 0) {
       return [selectedDateKind === "future" ? "这一天还没有团队成员提交计划。" : "今天还没有团队成员提交日报。"];
     }
+    const missingOrRemindCount = selectedDateKind === "future" ? stats.missingCount : stats.remindCount ?? stats.missingCount;
     const observations = [
-      stats.missingCount > 0
-        ? `${stats.missingCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，可优先提醒。`
+      missingOrRemindCount > 0
+        ? `${missingOrRemindCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，可优先提醒。`
         : `团队${selectedDateKind === "future" ? "计划" : "日报"}已全部提交。`,
       stats.riskCount > 0 ? `发现 ${stats.riskCount} 条风险信号，建议先查看异常记录。` : "暂未发现明显风险信号。",
       stats.totalHours > 0 ? `当前记录工时合计 ${stats.totalHours}h，可继续按项目核对投入。` : "当前暂无可分析工时。"
@@ -495,11 +510,11 @@ export default function CalendarPage() {
       return ["当前月历暂无可分析日报或计划。"];
     }
     return [
-      summary.rate < 80 ? `本月填报率为 ${summary.rate}%，建议优先关注未填报人员。` : `本月填报率为 ${summary.rate}%，团队提交节奏稳定。`,
+      summary.remind > 0 ? `本月截至今天还有 ${summary.remind} 人次日报需要提醒补齐。` : `本月填报率为 ${summary.rate}%，团队提交节奏稳定。`,
       summary.risks > 0 ? `本月累计出现 ${summary.risks} 条风险信号，建议查看风险日期和项目。` : "本月暂未出现明显风险信号。",
       summary.filled > 0 ? `当前范围累计 ${summary.filled} 条已提交记录，可继续追问项目进展和人员投入。` : "还没有足够记录支撑深入分析。"
     ];
-  }, [aiObservations, calendar.isFetching, selectedDate, summary.filled, summary.missing, summary.rate, summary.risks]);
+  }, [aiObservations, calendar.isFetching, selectedDate, summary.filled, summary.missing, summary.rate, summary.remind, summary.risks]);
   const copilotContext = useMemo(
     () => [
       selectedDate ? chineseDateLabel(selectedDate) : month.format("YYYY年M月"),
@@ -1007,13 +1022,32 @@ export default function CalendarPage() {
               <div className="workday-empty-state">
                 <div>
                   <div className="workday-empty-title">
-                    {selectedDateKind === "future" ? "这一天还没有团队成员提交计划" : "今天还没有团队成员提交日报"}
+                    {(detailStats?.totalEmployees ?? 0) === 0
+                      ? "当前范围没有需要填报的成员"
+                      : selectedDateKind === "future"
+                        ? "这一天还没有团队成员提交计划"
+                        : "今天还没有团队成员提交日报"}
                   </div>
-                  <div className="workday-empty-copy">提醒员工填写后，系统会生成团队观察和风险提示。</div>
+                  <div className="workday-empty-copy">
+                    {(detailStats?.totalEmployees ?? 0) === 0
+                      ? "如需纳入日报统计，请到组织权限里为成员开启“需要填报”。"
+                      : selectedDateKind === "future"
+                        ? `当前应提醒 ${detailReminderActionCount} 人提交计划。`
+                        : `当前应提醒 ${detailRemindCount} 人补交日报。`}
+                  </div>
                 </div>
-                <Button type="primary" onClick={() => message.success("已生成提醒动作，后续可接入通知发送。")}>
-                  提醒员工填写
-                </Button>
+                {detailReminderActionCount > 0 ? (
+                  <Button
+                    type="primary"
+                    onClick={() =>
+                      message.info(
+                        `${selectedDateKind === "future" ? "应提醒提交计划" : "应提醒补交日报"}：${detailReminderMessage || `${detailReminderActionCount} 人`}`
+                      )
+                    }
+                  >
+                    {selectedDateKind === "future" ? "查看应提醒计划人员" : "查看应提醒日报人员"}
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <div className="workday-detail-data">
@@ -1103,8 +1137,8 @@ export default function CalendarPage() {
                 <div className="workday-ai-subheading">异常 / 风险</div>
                 <strong>{(detailStats?.riskCount ?? 0) > 0 ? `发现 ${detailStats?.riskCount ?? 0} 条风险信号` : "暂未发现明显风险"}</strong>
                 <p>
-                  {(detailStats?.missingCount ?? 0) > 0
-                    ? `${detailStats?.missingCount ?? 0} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
+                  {detailReminderActionCount > 0
+                    ? `${detailReminderActionCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
                     : "团队提交状态正常，可以继续查看具体记录。"}
                 </p>
               </div>

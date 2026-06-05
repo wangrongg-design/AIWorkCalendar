@@ -106,20 +106,20 @@ export default function LoginPage() {
                   <CalendarCheck2 size={22} />
                 </div>
                 <Typography.Title level={1} className="system-login-title">
-                  登录工作台
+                  登录 Work Calendar AI
                 </Typography.Title>
-                <Typography.Text className="system-login-subtitle">已有账号进入 Work Calendar AI 工作台</Typography.Text>
+                <Typography.Text className="system-login-subtitle">进入企业工作台，查看日报、项目、风险和 AI 汇报。</Typography.Text>
 
                 {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
                 <Form className="system-login-form mt-6" layout="vertical" onFinish={(values) => login.mutate(values)}>
-                  <Form.Item name="account" label="邮箱或手机号" rules={[{ required: true }]}>
-                    <Input placeholder="请输入邮箱或手机号" />
+                  <Form.Item name="account" label="手机号或邮箱" rules={[{ required: true }]}>
+                    <Input placeholder="请输入手机号或邮箱" />
                   </Form.Item>
                   <Form.Item name="password" label="密码" rules={[{ required: true }]}>
                     <Input.Password placeholder="请输入密码" />
                   </Form.Item>
                   <Button type="primary" htmlType="submit" block icon={<LogIn size={16} />} loading={login.isPending}>
-                    {login.isPending ? "正在验证身份…" : "进入工作台"}
+                    {login.isPending ? "正在验证身份…" : "登录"}
                   </Button>
                 </Form>
 
@@ -127,15 +127,15 @@ export default function LoginPage() {
                   <Button type="link" onClick={() => setResetModalOpen(true)}>
                     忘记密码
                   </Button>
-                  <button type="button" onClick={() => router.push("/")}>
-                    <span>了解产品与免费试用</span>
+                  <button type="button" onClick={() => router.push("/#signup")}>
+                    <span>注册企业</span>
                     <ArrowRight size={15} />
                   </button>
                 </div>
               </div>
             </Card>
             <div className="system-login-note">
-              系统入口：官网负责产品介绍与免费试用，登录页仅用于已有账号进入工作台。
+              登录后进入工作台。
             </div>
           </div>
         </div>

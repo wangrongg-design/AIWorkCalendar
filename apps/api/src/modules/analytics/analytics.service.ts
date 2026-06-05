@@ -21,6 +21,11 @@ function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function todayKeyInShanghai() {
+  const shanghai = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return dateKey(new Date(Date.UTC(shanghai.getUTCFullYear(), shanghai.getUTCMonth(), shanghai.getUTCDate())));
+}
+
 function addDays(date: Date, days: number) {
   const result = new Date(date);
   result.setUTCDate(result.getUTCDate() + days);
@@ -40,6 +45,7 @@ export class AnalyticsService {
 
   async calendar(user: CurrentUser, query: CalendarQueryDto) {
     const { start, end } = monthRange(query.month);
+    const today = todayKeyInShanghai();
     const scope = this.access.resolveScope(user, query.scope, query.departmentId);
     const users = await this.prisma.user.findMany({
       where: {
@@ -73,12 +79,14 @@ export class AnalyticsService {
       const filledUserIds = new Set(dayLogs.map((log) => log.userId));
       const filledCount = filledUserIds.size;
       const totalCount = users.length;
+      const missingCount = Math.max(totalCount - filledCount, 0);
       const riskTotal = dayLogs.reduce((sum, item) => sum + riskCount(item.aiAnalysis?.risks), 0);
       const totalHours = dayLogs.reduce((sum, item) => sum + Number(item.hours), 0);
       days.push({
         date: key,
         filledCount,
-        missingCount: Math.max(totalCount - filledCount, 0),
+        missingCount,
+        remindCount: key <= today ? missingCount : 0,
         fillRate: totalCount === 0 ? 0 : Number(((filledCount / totalCount) * 100).toFixed(1)),
         riskCount: riskTotal,
         totalHours: Number(totalHours.toFixed(2))
@@ -94,6 +102,7 @@ export class AnalyticsService {
   }
 
   async calendarDay(user: CurrentUser, query: CalendarDayQueryDto) {
+    const today = todayKeyInShanghai();
     const scope = this.access.resolveScope(user, query.scope, query.departmentId);
     const users = await this.prisma.user.findMany({
       where: {
@@ -161,6 +170,7 @@ export class AnalyticsService {
       }));
     const totalHours = logs.reduce((sum, item) => sum + Number(item.hours), 0);
     const riskTotal = logs.reduce((sum, item) => sum + riskCount(item.aiAnalysis?.risks), 0);
+    const remindCount = query.date <= today ? missingEmployees.length : 0;
     return {
       date: query.date,
       scope,
@@ -170,6 +180,7 @@ export class AnalyticsService {
         totalEmployees: users.length,
         filledCount: filledEmployees.length,
         missingCount: missingEmployees.length,
+        remindCount,
         fillRate: users.length === 0 ? 0 : Number(((filledEmployees.length / users.length) * 100).toFixed(1)),
         totalHours,
         riskCount: riskTotal

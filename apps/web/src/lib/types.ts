@@ -296,6 +296,7 @@ export type CalendarDay = {
   date: string;
   filledCount: number;
   missingCount: number;
+  remindCount?: number;
   fillRate: number;
   riskCount: number;
   totalHours?: number;
@@ -328,6 +329,7 @@ export type CalendarDayDetail = {
     totalEmployees: number;
     filledCount: number;
     missingCount: number;
+    remindCount?: number;
     fillRate: number;
     totalHours: number;
     riskCount: number;
