@@ -361,21 +361,21 @@ body {
 
 .surface-panel {
   background: var(--md-surface-bright);
-  border: 1px solid var(--md-outline-variant);
+  border: 0;
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-card);
 }
 
 .toolbar-panel {
   background: rgba(255, 255, 255, 0.76);
-  border: 1px solid var(--md-outline-variant);
+  border: 0;
   border-radius: var(--radius-panel);
   padding: 12px;
 }
 
 .metric-card {
   background: var(--md-surface-bright);
-  border: 1px solid var(--md-outline-variant);
+  border: 0;
   border-radius: var(--radius-card);
   padding: 14px 16px;
   box-shadow: var(--shadow-card);
@@ -421,6 +421,47 @@ body {
   margin-top: 4px;
   color: var(--md-on-surface-variant);
   font-size: 12px;
+}
+
+.team-default-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.team-section {
+  min-width: 0;
+  padding: 18px;
+}
+
+.enterprise-settings-tabs {
+  min-width: 0;
+}
+
+.worklog-entry-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+
+.worklog-entry-copy {
+  max-width: 620px;
+}
+
+.history-section {
+  display: grid;
+  gap: 12px;
+}
+
+.history-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .link-row {
@@ -588,11 +629,16 @@ body {
   min-width: 150px;
 }
 
+.workbench-actions.is-single-action {
+  grid-template-columns: minmax(150px, 1fr);
+  min-width: 150px;
+}
+
 .workbench-action {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--md-outline-variant);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--md-surface-bright);
   min-height: 44px;
@@ -600,18 +646,16 @@ body {
   color: var(--md-on-surface);
   cursor: pointer;
   font-weight: 650;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .workbench-action:hover {
-  border-color: rgba(11, 87, 208, 0.34);
   box-shadow: var(--shadow-card);
   transform: translateY(-1px);
 }
 
 .workbench-action.primary-action-button,
 .primary-action-button {
-  border-color: var(--md-primary);
   background: var(--md-primary);
   color: var(--md-on-primary);
 }
@@ -623,14 +667,12 @@ body {
 
 .workbench-action.primary-action-button:hover,
 .primary-action-button:hover {
-  border-color: var(--color-primary-hover);
   background: var(--color-primary-hover);
   color: var(--md-on-primary);
 }
 
 .workbench-action.ai-action-button,
 .ai-action-button {
-  border-color: var(--color-ai-soft);
   background: var(--color-ai-bg);
   color: var(--color-ai);
 }
@@ -642,9 +684,64 @@ body {
 
 .workbench-action.ai-action-button:hover,
 .ai-action-button:hover {
-  border-color: var(--color-ai-hover);
   background: var(--color-ai-soft);
   color: var(--color-ai-pressed);
+}
+
+.workbench-action.ai-assistant-entry-button {
+  position: relative;
+  isolation: isolate;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  background:
+    linear-gradient(135deg, var(--color-ai-bg) 0%, var(--color-ai-soft) 58%, var(--color-primary-bg) 100%);
+  background-size: 180% 180%;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.11);
+  color: var(--color-ai-pressed);
+  transition:
+    transform var(--motion-standard) var(--ease-out-quart),
+    box-shadow var(--motion-standard) var(--ease-out-quart),
+    background-position var(--motion-emphasis) var(--ease-out-quart);
+}
+
+.workbench-action.ai-assistant-entry-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 0 38%, rgba(255, 255, 255, 0.72) 50%, transparent 62%),
+    linear-gradient(135deg, transparent, rgba(20, 163, 154, 0.12));
+  transform: translateX(-120%);
+  animation: ai-assistant-scan 4.8s var(--ease-out-quart) infinite;
+}
+
+.workbench-action.ai-assistant-entry-button svg,
+.workbench-action.ai-assistant-entry-button span {
+  position: relative;
+  z-index: 1;
+}
+
+.workbench-action.ai-assistant-entry-button svg {
+  color: var(--color-ai-pressed);
+  filter: drop-shadow(0 2px 5px rgba(15, 118, 110, 0.2));
+  animation: ai-assistant-icon 2.8s var(--ease-out-quart) infinite;
+}
+
+.workbench-action.ai-assistant-entry-button:hover {
+  background-position: 100% 50%;
+  box-shadow: 0 16px 30px rgba(15, 118, 110, 0.16);
+  transform: translateY(-2px);
+}
+
+.workbench-action.ai-assistant-entry-button:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.workbench-action.ai-assistant-entry-button:focus-visible {
+  outline: 3px solid rgba(20, 163, 154, 0.24);
+  outline-offset: 3px;
 }
 
 .workbench-metrics {
@@ -1917,6 +2014,30 @@ body {
   }
 }
 
+@keyframes ai-assistant-scan {
+  0%,
+  52% {
+    transform: translateX(-120%);
+  }
+  76%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes ai-assistant-icon {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  46% {
+    transform: translateY(-1px) rotate(-4deg);
+  }
+  70% {
+    transform: translateY(0) rotate(2deg);
+  }
+}
+
 @media (max-width: 900px) {
   .workday-metrics,
   .workday-focus-row {
@@ -1981,6 +2102,19 @@ body {
   }
 
   .toolbar-panel {
+    width: 100%;
+  }
+
+  .team-default-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worklog-entry-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .worklog-entry-panel .ant-btn {
     width: 100%;
   }
 
@@ -2109,6 +2243,28 @@ body {
 .dashboard-calendar-toolbar {
   padding: 6px;
   border-radius: 16px;
+}
+
+.calendar-sync-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 4px;
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-caption);
+  white-space: nowrap;
+}
+
+.dashboard-calendar-toolbar .ant-btn-icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-calendar-toolbar .ant-btn-icon-only svg {
+  display: block;
 }
 
 .calendar-summary-strip {
@@ -3694,9 +3850,10 @@ body {
 
 .ai-soft-button.ant-btn {
   background: var(--color-ai-bg);
-  border-color: var(--color-ai-soft);
+  border: 0 !important;
   color: var(--color-ai);
   font-weight: 700;
+  box-shadow: none !important;
 }
 
 .ai-soft-button.ant-btn .ant-btn-icon,
@@ -3706,7 +3863,7 @@ body {
 
 .ai-soft-button.ant-btn:not(:disabled):hover {
   background: var(--color-ai-soft) !important;
-  border-color: var(--color-ai-hover) !important;
+  border-color: transparent !important;
   color: var(--color-ai-pressed) !important;
 }
 
@@ -3896,7 +4053,7 @@ body {
 .login-ai-status,
 .register-ai-insight,
 .h5-ai-panel {
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 0;
   background:
     linear-gradient(135deg, rgba(236, 253, 249, 0.94), rgba(255, 255, 255, 0.96) 62%),
     radial-gradient(circle at 92% 10%, rgba(204, 251, 241, 0.82), transparent 28%);
@@ -4038,7 +4195,7 @@ body {
 
 .ai-copilot-input {
   background: var(--color-white);
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   box-shadow: var(--shadow-card);
 }
 
@@ -4138,9 +4295,9 @@ body {
 }
 
 .quickfill-draft-item {
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--color-white);
+  background: var(--color-gray-1);
   padding: 12px;
 }
 
@@ -4213,7 +4370,7 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
-  border: 1px solid var(--color-ai-soft);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--color-ai-bg);
   padding: 12px;
@@ -4432,9 +4589,9 @@ body {
   grid-column: 1 / -1;
   grid-row: 3;
   min-height: 360px;
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: 18px;
-  background: var(--color-white);
+  background: var(--color-gray-1);
   padding: 14px;
 }
 
@@ -4467,7 +4624,7 @@ body {
 
 .ai-copilot-waiting {
   margin-top: 8px;
-  border: 1px solid var(--color-ai-soft);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--color-ai-bg);
   padding: 9px 11px;
@@ -4497,7 +4654,7 @@ body {
 .workday-detail-modal .ant-modal-content {
   max-height: calc(100vh - 36px);
   overflow: hidden;
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-xl);
   background: var(--color-white);
   box-shadow: 0 24px 70px rgba(26, 26, 26, 0.18);
@@ -4522,7 +4679,7 @@ body {
   align-items: center;
   gap: 18px;
   padding: 0 44px 8px 0;
-  border-bottom: 1px solid var(--color-gray-2);
+  border-bottom: 0;
 }
 
 .workday-detail-modal .workday-hero-actions {
@@ -4575,7 +4732,7 @@ body {
 
 .workday-detail-modal .workday-metric {
   min-height: 52px;
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--color-white);
   padding: 7px 11px;
@@ -4638,7 +4795,7 @@ body {
 .workday-detail-modal .workday-detail-data,
 .workday-detail-modal .workday-missing-row,
 .workday-detail-modal .workday-empty-state {
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--color-white);
   box-shadow: none;
@@ -4704,7 +4861,7 @@ body {
 
 .workday-detail-modal .workday-ai-title-action {
   height: 32px;
-  border-color: var(--color-ai-soft) !important;
+  border: 0 !important;
   border-radius: 999px;
   padding: 0 11px;
   font-size: 12px;
@@ -4718,9 +4875,9 @@ body {
 }
 
 .workday-detail-modal .workday-ai-stat {
-  border: 1px solid rgba(15, 118, 110, 0.14);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--color-white);
+  background: rgba(236, 253, 249, 0.58);
   padding: 8px 10px;
 }
 
@@ -4759,9 +4916,9 @@ body {
 .workday-detail-modal .workday-ai-risk-summary,
 .workday-detail-modal .workday-ai-missing-summary,
 .workday-detail-modal .workday-ai-observation-block {
-  border: 1px solid rgba(15, 118, 110, 0.14);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--color-white);
+  background: var(--color-gray-1);
   padding: 10px 12px;
 }
 
@@ -4858,7 +5015,7 @@ body {
 
 .workday-detail-modal .workday-ai-copilot-link {
   margin-top: 8px;
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--color-gray-1);
   padding: 8px 10px;
@@ -4917,15 +5074,15 @@ body {
   display: grid;
   grid-template-columns: 124px minmax(0, 1fr);
   gap: 12px;
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-lg);
-  background: var(--color-white);
+  background: var(--color-gray-1);
   padding: 12px;
 }
 
 .workday-detail-modal .workday-employee-meta {
   min-width: 0;
-  border-right: 1px solid var(--color-gray-2);
+  border-right: 0;
   padding-right: 12px;
 }
 
@@ -4953,19 +5110,19 @@ body {
 
 .workday-detail-modal .workday-log-card {
   width: 100%;
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--color-white);
   padding: 12px;
   color: inherit;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .workday-detail-modal .workday-log-card:hover {
-  border-color: var(--color-primary-soft);
   background: var(--color-primary-bg);
+  box-shadow: 0 10px 24px rgba(11, 87, 208, 0.08);
   transform: translateY(-1px);
 }
 
@@ -8824,21 +8981,21 @@ body {
 .ai-copilot-modal .ai-copilot-action-bar,
 .ai-copilot-modal .ai-copilot-prompt-bar {
   background: var(--color-white);
-  border: 1px solid var(--color-gray-2);
+  border: 0;
   box-shadow: none;
 }
 
 .workday-detail-modal .workday-ai-panel {
-  border-color: var(--color-ai-soft);
+  border: 0;
 }
 
 .workday-detail-modal .workday-ai-risk-summary {
-  border-left: 1px solid rgba(15, 118, 110, 0.14);
+  border-left: 0;
 }
 
 .workday-detail-modal .workday-ai-risk-summary.has-risk {
-  border-color: rgba(238, 59, 43, 0.3);
-  border-left-color: rgba(238, 59, 43, 0.3);
+  border-color: transparent;
+  border-left-color: transparent;
 }
 
 .workday-ai-pill:hover,
@@ -9133,6 +9290,11 @@ body {
     animation: none !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+
+  .workbench-action.ai-assistant-entry-button::before,
+  .workbench-action.ai-assistant-entry-button svg {
+    animation: none !important;
   }
 }
 

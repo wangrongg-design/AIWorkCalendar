@@ -192,14 +192,14 @@ export default function ReportsPage() {
           <Typography.Title level={3} className="page-title">
             汇报
           </Typography.Title>
-          <Typography.Text className="page-subtitle">可下载报告入口：把日报、计划、风险和工时整理成 Word 报告，用于汇报和归档。</Typography.Text>
+          <Typography.Text className="page-subtitle">生成可下载的 Word 汇报，用于例会、周会和归档。</Typography.Text>
         </div>
       </div>
 
       <div className="surface-panel report-guide">
         <div className="report-guide-copy">
-          <div className="section-title">生成报告向导</div>
-          <div className="section-subtitle">选择报告类型、时间范围和部门后，系统会生成可下载报告；实时状态请看工作日历，周期复盘请看周期判断。</div>
+          <div className="section-title">生成汇报</div>
+          <div className="section-subtitle">选择类型和时间范围，系统会把日报、计划、风险和工时整理成报告。周报会自动带上周期进展。</div>
         </div>
         <Form
           form={form}
@@ -232,12 +232,9 @@ export default function ReportsPage() {
             </Form.Item>
           ) : null}
           <Button className="ai-soft-button" htmlType="submit" icon={<WandSparkles size={16} />} loading={generate.isPending} disabled={generate.isPending}>
-            生成报告
+            生成汇报
           </Button>
         </Form>
-        <Button icon={<RotateCw size={16} />} onClick={() => reports.refetch()} loading={reports.isFetching}>
-          刷新
-        </Button>
         {generate.isPending ? (
           <Alert
             className="report-generate-waiting"
@@ -249,14 +246,25 @@ export default function ReportsPage() {
         ) : null}
       </div>
 
-      <Table
-        rowKey="id"
-        loading={reports.isFetching}
-        dataSource={reports.data ?? []}
-        columns={columns}
-        locale={{ emptyText: <Empty description="暂无报告，先按上方向导生成一份日报或周报" /> }}
-        pagination={{ pageSize: 6 }}
-      />
+      <section className="history-section">
+        <div className="history-section-head">
+          <div>
+            <div className="section-title">历史下载</div>
+            <div className="section-subtitle">已生成的汇报可直接下载，生成中的记录会自动刷新状态。</div>
+          </div>
+          <Button icon={<RotateCw size={16} />} onClick={() => reports.refetch()} loading={reports.isFetching}>
+            刷新列表
+          </Button>
+        </div>
+        <Table
+          rowKey="id"
+          loading={reports.isFetching}
+          dataSource={reports.data ?? []}
+          columns={columns}
+          locale={{ emptyText: <Empty description="暂无汇报，先生成一份日报或周报" /> }}
+          pagination={{ pageSize: 6 }}
+        />
+      </section>
     </div>
   );
 }

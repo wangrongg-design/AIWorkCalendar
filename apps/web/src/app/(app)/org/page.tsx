@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
-import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, MessageSquare, Plus, ReceiptText, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, MessageSquare, Plus, ReceiptText, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
@@ -999,7 +999,7 @@ export default function OrgPage() {
       <div className="page-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            组织权限
+            团队
           </Typography.Title>
           <Typography.Text className="page-subtitle">
             {org.data?.tenant.name ?? "企业"} · 统一社会信用代码 {org.data?.tenant.code ?? "-"}
@@ -1010,57 +1010,11 @@ export default function OrgPage() {
             刷新
           </Button>
           {isSuperAdmin ? (
-            <Button
-              icon={<CreditCard size={16} />}
-              onClick={() => {
-                const subscription = org.data?.subscription;
-                if (subscription) {
-                  subscriptionForm.setFieldsValue({
-                    plan: subscription.plan,
-                    status: subscription.status,
-                    seatLimit: subscription.seatLimit,
-                    currentPeriodEnd: subscription.currentPeriodEnd ? dayjs(subscription.currentPeriodEnd) : undefined,
-                    trialEndsAt: subscription.trialEndsAt ? dayjs(subscription.trialEndsAt) : undefined,
-                    provider: subscription.provider ?? "manual"
-                  });
-                }
-                setSubscriptionModalOpen(true);
-              }}
-            >
-              调整订阅
-            </Button>
-          ) : null}
-          {isSuperAdmin ? (
             <Button type="primary" icon={<Plus size={16} />} onClick={() => setTenantModalOpen(true)}>
               新增企业
             </Button>
           ) : null}
         </Space>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="metric-card">
-          <div className="metric-label">当前状态</div>
-          <div className="metric-value text-[24px]">{subscriptionTitle}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">{isTrialing ? "试用到期" : "服务到期"}</div>
-          <div className="mt-2">
-            <Tag color={statusColor(subscription?.status)}>{dateText(isTrialing ? subscription?.trialEndsAt : subscription?.currentPeriodEnd)}</Tag>
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">当前启用成员</div>
-          <div className="metric-value">
-            {activeMemberCount} 人
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">{isTrialing ? "试用结束后预计月费" : "当前预计月费"}</div>
-          <div className="mt-2 text-lg font-medium">
-            {activeMemberCount} × ¥{(unitPriceCents / 100).toFixed(0)} = {moneyText(estimatedMonthlyAmountCents)} / 月
-          </div>
-        </div>
       </div>
 
       {org.data?.subscription && !org.data.subscription.isUsable ? (
@@ -1072,25 +1026,6 @@ export default function OrgPage() {
         />
       ) : null}
 
-      <div className="surface-panel p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-secondary-container text-secondary">
-              <ShieldCheck size={20} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-ink">数据保密与导出备份</div>
-              <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
-                企业数据按租户隔离并视为保密数据。导出会在后台生成 ZIP 压缩包并设置下载有效期，避免大数据量请求超时。
-              </div>
-            </div>
-          </div>
-          <Button className="w-full shrink-0 lg:w-auto" icon={<Download size={16} />} loading={createExportTask.isPending} onClick={() => createExportTask.mutate()}>
-            {canManage ? "生成企业备份" : "生成我的备份"}
-          </Button>
-        </div>
-      </div>
-
       {!canManage ? (
         <Alert
           type="info"
@@ -1101,343 +1036,407 @@ export default function OrgPage() {
       ) : null}
 
       <Tabs
+        defaultActiveKey="team"
         items={[
           {
-            key: "departments",
-            label: "部门",
+            key: "team",
+            label: "团队成员",
             children: (
-              <div className="space-y-3">
-                {canManage ? (
-                  <Button
-                    type="primary"
-                    icon={<Plus size={16} />}
-                    onClick={() => {
-                      setEditingDepartment(null);
-                      departmentForm.resetFields();
-                      setDepartmentModalOpen(true);
-                    }}
-                  >
-                    新增部门
-                  </Button>
-                ) : null}
-                <Table
-                  rowKey="id"
-                  loading={org.isFetching}
-                  dataSource={departmentTree}
-                  columns={departmentColumns}
-                  locale={{ emptyText: <Empty description="暂无部门" /> }}
-                  pagination={false}
-                  expandable={{ defaultExpandAllRows: true }}
-                />
-              </div>
-            )
-          },
-          {
-            key: "users",
-            label: "员工与角色",
-            children: (
-              <div className="space-y-3">
-                <Alert
-                  type="info"
-                  showIcon
-                  message="企业成员只选择一个主角色"
-                  description="企业管理员负责组织、成员、项目和订阅；部门经理查看本部门数据；普通员工维护自己的日报。平台超级管理员只用于运维端登录，不属于企业成员角色。"
-                />
-                {canManage ? (
-                  <Button
-                    type="primary"
-                    icon={<Plus size={16} />}
-                    onClick={() => {
-                      setEditingUser(null);
-                      userForm.resetFields();
-                      userForm.setFieldsValue({ role: "EMPLOYEE", isActive: true, requiresWorkReport: true });
-                      setUserModalOpen(true);
-                    }}
-                  >
-                    新增员工
-                  </Button>
-                ) : null}
-                <Table
-                  rowKey="id"
-                  loading={org.isFetching}
-                  dataSource={org.data?.users ?? []}
-                  columns={userColumns}
-                  locale={{ emptyText: <Empty description="暂无员工" /> }}
-                  pagination={{ pageSize: 8 }}
-                />
-              </div>
-            )
-          },
-          {
-            key: "feedback",
-            label: "问题反馈",
-            children: (
-              <div className="space-y-3">
-                <div className="surface-panel p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex min-w-0 gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-primary-container text-primary">
-                        <MessageSquare size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-ink">用户权益与问题反馈</div>
-                        <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
-                          可提交功能异常、账号权限、数据权益、计费订阅、隐私安全等问题。反馈会保留提交人与处理状态，企业管理员可跟进闭环。
-                        </div>
-                      </div>
+              <div className="team-default-grid">
+                <section className="surface-panel team-section">
+                  <div className="section-head">
+                    <div>
+                      <div className="section-title">部门</div>
+                      <div className="section-subtitle">默认组织架构可按实际汇报关系调整。</div>
                     </div>
-                    <Button
-                      type="primary"
-                      className="w-full shrink-0 lg:w-auto"
-                      icon={<MessageSquare size={16} />}
-                      onClick={() => {
-                        feedbackForm.resetFields();
-                        feedbackForm.setFieldsValue({ category: "DATA_RIGHTS", priority: "NORMAL" });
-                        setFeedbackModalOpen(true);
-                      }}
-                    >
-                      提交反馈
-                    </Button>
-                  </div>
-                </div>
-                <Table
-                  rowKey="id"
-                  loading={feedbackRequests.isFetching}
-                  dataSource={feedbackRequests.data ?? []}
-                  columns={feedbackColumns}
-                  locale={{ emptyText: <Empty description="暂无问题反馈" /> }}
-                  pagination={{ pageSize: 6 }}
-                />
-              </div>
-            )
-          },
-          ...(canManage
-            ? [
-                {
-                  key: "billing",
-                  label: "订阅订单",
-                  children: (
-                    <div className="space-y-4">
-                      <div className="surface-panel p-5">
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                          <div>
-                            <div className="text-base font-medium text-ink">订阅与支付</div>
-                            <div className="mt-1 text-sm text-muted">企业免费试用1个月，正式使用 ¥19 / 启用成员 / 月。</div>
-                            </div>
-                            <Space wrap>
-                              <Select
-                                value={checkoutProvider}
-                                style={{ width: 128 }}
-                                options={availablePaymentProviderOptions}
-                                onChange={setCheckoutProvider}
-                              />
-                            </Space>
-                        </div>
-                        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                          <div className="rounded-[8px] border border-line bg-white p-4 shadow-sm">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-base font-semibold text-ink">{freeBillingPlan.name}</div>
-                                <div className="mt-1 min-h-10 text-sm leading-5 text-muted">{freeBillingPlan.description}</div>
-                              </div>
-                              {org.data?.subscription.plan === "TRIAL" ? <Tag color="green">当前</Tag> : null}
-                            </div>
-                            <div className="mt-4 flex items-end gap-2">
-                              <span className="text-3xl font-semibold text-ink">{freeBillingPlan.price}</span>
-                            </div>
-                            <div className="mt-2 text-sm text-muted">注册后自动获得，试用期内不限制成员人数。</div>
-                            <div className="mt-4 space-y-2">
-                              {freeBillingPlan.features.map((feature) => (
-                                <div key={feature} className="flex items-center gap-2 text-sm text-muted">
-                                  <CheckCircle2 size={15} className="text-success" />
-                                  <span>{feature}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <Button className="mt-4 w-full" disabled>
-                              当前试用规则
-                            </Button>
-                          </div>
-                          {(billingPlans.data?.plans ?? []).map((plan) => {
-                            const amount = Math.max(1, activeMemberCount) * planPrice(plan);
-                            const isCurrent = org.data?.subscription.plan === plan.plan;
-                            return (
-                              <div key={plan.plan} className={`rounded-[8px] border bg-white p-4 shadow-sm ${plan.plan === "TEAM" ? "border-primary bg-primary-container/40" : "border-line"}`}>
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <div className="text-base font-semibold text-ink">{plan.name}</div>
-                                    <div className="mt-1 min-h-10 text-sm leading-5 text-muted">{plan.description}</div>
-                                  </div>
-                                  {isCurrent ? <Tag color="green">当前</Tag> : null}
-                                </div>
-                                <div className="mt-4 flex items-end gap-2">
-                                  <span className="text-3xl font-semibold text-ink">¥{(planPrice(plan) / 100).toFixed(0)}</span>
-                                  <span className="pb-1 text-xs text-muted">/ 启用成员 / 月</span>
-                                </div>
-                                <div className="mt-2 text-sm text-muted">
-                                  当前启用成员：{activeMemberCount} 人 · 应付金额：{moneyText(amount)} / 月
-                                </div>
-                                <div className="mt-4 space-y-2">
-                                  {plan.features.map((feature) => (
-                                    <div key={feature} className="flex items-center gap-2 text-sm text-muted">
-                                      <CheckCircle2 size={15} className="text-success" />
-                                      <span>{feature}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                                <Button
-                                  className="mt-4 w-full"
-                                  type={plan.plan === "TEAM" ? "primary" : "default"}
-                                  icon={<ReceiptText size={16} />}
-                                  loading={createBillingOrder.isPending}
-                                  onClick={() => {
-                                    startPlanCheckout(plan);
-                                  }}
-                                >
-                                  {isTrialing ? "试用结束后支付" : "续费专业版"}
-                                </Button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {billingPlans.error ? <Alert className="mt-4" type="error" showIcon message={(billingPlans.error as Error).message} /> : null}
-                      </div>
-                      <Table
-                        rowKey="id"
-                        loading={billingOrders.isFetching}
-                        dataSource={billingOrders.data ?? []}
-                        columns={billingOrderColumns}
-                        locale={{ emptyText: <Empty description="暂无订阅订单" /> }}
-                        pagination={{ pageSize: 6 }}
-                      />
-                    </div>
-                  )
-                },
-                {
-                  key: "audit",
-                  label: "安全审计",
-                  children: (
-                    <div className="space-y-3">
-                      <Alert
-                        type="success"
-                        showIcon
-                        message="关键操作已进入审计日志"
-                        description="登录、注册、密码、订阅、数据删除申请等关键操作会记录到租户内审计日志，便于企业追溯。"
-                      />
-                      <Table
-                        rowKey="id"
-                        loading={auditLogs.isFetching}
-                        dataSource={auditLogs.data ?? []}
-                        columns={auditColumns}
-                        locale={{ emptyText: <Empty description="暂无审计日志" /> }}
-                        pagination={{ pageSize: 8 }}
-                      />
-                    </div>
-                  )
-                }
-              ]
-            : []),
-          {
-            key: "privacy",
-            label: "数据治理",
-            children: (
-              <div className="space-y-3">
-                <div className="surface-panel p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex min-w-0 gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-error-container text-error">
-                        <FileLock2 size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-ink">数据可携带与退出机制</div>
-                        <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
-                          企业停用系统前可以先导出完整备份，再提交数据删除申请。全企业删除需要企业管理员发起；个人可申请删除自己的账号相关数据。
-                        </div>
-                      </div>
-                    </div>
-                    <Space className="w-full shrink-0 lg:w-auto">
-                      <Button icon={<Download size={16} />} loading={createExportTask.isPending} onClick={() => createExportTask.mutate()}>
-                        {canManage ? "生成企业备份" : "生成我的备份"}
-                      </Button>
+                    {canManage ? (
                       <Button
-                        danger
-                        icon={<Trash2 size={16} />}
+                        type="primary"
+                        icon={<Plus size={16} />}
                         onClick={() => {
-                          dataDeletionForm.setFieldsValue({ scope: canManage ? "TENANT" : "SELF" });
-                          setDataDeletionModalOpen(true);
+                          setEditingDepartment(null);
+                          departmentForm.resetFields();
+                          setDepartmentModalOpen(true);
                         }}
                       >
-                        申请删除数据
+                        新增部门
                       </Button>
-                    </Space>
-                  </div>
-                </div>
-                <div className="surface-panel p-5">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-ink">导出任务</div>
-                      <div className="mt-1 text-xs text-muted">生成完成后请在有效期内下载，过期后需重新生成。</div>
-                    </div>
-                    <Button icon={<RotateCw size={16} />} onClick={() => exportTasks.refetch()} loading={exportTasks.isFetching}>
-                      刷新任务
-                    </Button>
+                    ) : null}
                   </div>
                   <Table
                     rowKey="id"
-                    loading={exportTasks.isFetching}
-                    dataSource={exportTasks.data ?? []}
-                    columns={exportTaskColumns}
-                    locale={{ emptyText: <Empty description="暂无导出任务" /> }}
-                    pagination={{ pageSize: 5 }}
+                    loading={org.isFetching}
+                    dataSource={departmentTree}
+                    columns={departmentColumns}
+                    locale={{ emptyText: <Empty description="暂无部门" /> }}
+                    pagination={false}
+                    expandable={{ defaultExpandAllRows: true }}
                   />
-                </div>
-                <Table
-                  rowKey="id"
-                  loading={deletionRequests.isFetching}
-                  dataSource={deletionRequests.data ?? []}
-                  columns={deletionColumns}
-                  locale={{ emptyText: <Empty description="暂无数据删除申请" /> }}
-                  pagination={{ pageSize: 6 }}
-                />
+                </section>
+
+                <section className="surface-panel team-section">
+                  <div className="section-head">
+                    <div>
+                      <div className="section-title">员工</div>
+                      <div className="section-subtitle">角色只决定可见范围：管理员看全公司，部门经理看本部门，员工只看自己。</div>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        type="primary"
+                        icon={<Plus size={16} />}
+                        onClick={() => {
+                          setEditingUser(null);
+                          userForm.resetFields();
+                          userForm.setFieldsValue({ role: "EMPLOYEE", isActive: true, requiresWorkReport: true });
+                          setUserModalOpen(true);
+                        }}
+                      >
+                        新增员工
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Table
+                    rowKey="id"
+                    loading={org.isFetching}
+                    dataSource={org.data?.users ?? []}
+                    columns={userColumns}
+                    locale={{ emptyText: <Empty description="暂无员工" /> }}
+                    pagination={{ pageSize: 8 }}
+                    scroll={{ x: 920 }}
+                  />
+                </section>
               </div>
             )
           },
           {
-            key: "security",
-            label: "账号安全",
+            key: "settings",
+            label: "企业设置",
             children: (
-              <div className="grid gap-3 lg:grid-cols-[420px_1fr]">
-                <div className="surface-panel p-5">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-primary-container text-primary">
-                      <KeyRound size={20} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-ink">修改登录密码</div>
-                      <div className="text-xs text-muted">发布前已加入登录限流、失败锁定和密码重置接口。</div>
-                    </div>
-                  </div>
-                  {changePassword.error ? <Alert className="mb-4" type="error" showIcon message={(changePassword.error as Error).message} /> : null}
-                  <Form form={changePasswordForm} layout="vertical" onFinish={(values) => changePassword.mutate(values)}>
-                    <Form.Item name="currentPassword" label="当前密码" rules={[{ required: true }]}>
-                      <Input.Password />
-                    </Form.Item>
-                    <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 6 }]}>
-                      <Input.Password />
-                    </Form.Item>
-                    <Button type="primary" htmlType="submit" icon={<KeyRound size={16} />} loading={changePassword.isPending}>
-                      更新密码
-                    </Button>
-                  </Form>
-                </div>
-                <Alert
-                  type="info"
-                  showIcon
-                  icon={<History size={18} />}
-                  message="账号安全策略"
-                  description="连续登录失败会临时锁定账号；密码重置令牌和邮箱验证令牌只保存哈希值；生产环境可开启 REQUIRE_EMAIL_VERIFICATION=true 强制邮箱验证。"
-                />
-              </div>
+              <Tabs
+                className="enterprise-settings-tabs"
+                items={[
+                  ...(canManage
+                    ? [
+                        {
+                          key: "billing",
+                          label: "订阅",
+                          children: (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                                <div className="metric-card">
+                                  <div className="metric-label">当前状态</div>
+                                  <div className="metric-value text-[24px]">{subscriptionTitle}</div>
+                                </div>
+                                <div className="metric-card">
+                                  <div className="metric-label">{isTrialing ? "试用到期" : "服务到期"}</div>
+                                  <div className="mt-2">
+                                    <Tag color={statusColor(subscription?.status)}>{dateText(isTrialing ? subscription?.trialEndsAt : subscription?.currentPeriodEnd)}</Tag>
+                                  </div>
+                                </div>
+                                <div className="metric-card">
+                                  <div className="metric-label">当前启用成员</div>
+                                  <div className="metric-value">{activeMemberCount} 人</div>
+                                </div>
+                                <div className="metric-card">
+                                  <div className="metric-label">{isTrialing ? "试用结束后预计月费" : "当前预计月费"}</div>
+                                  <div className="mt-2 text-lg font-medium">
+                                    {activeMemberCount} × ¥{(unitPriceCents / 100).toFixed(0)} = {moneyText(estimatedMonthlyAmountCents)} / 月
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="surface-panel p-5">
+                                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                                  <div>
+                                    <div className="text-base font-medium text-ink">订阅与支付</div>
+                                    <div className="mt-1 text-sm text-muted">企业免费试用 1 个月，正式使用 ¥19 / 启用成员 / 月。</div>
+                                  </div>
+                                  <Space wrap>
+                                    <Select
+                                      value={checkoutProvider}
+                                      style={{ width: 128 }}
+                                      options={availablePaymentProviderOptions}
+                                      onChange={setCheckoutProvider}
+                                    />
+                                    {isSuperAdmin ? (
+                                      <Button
+                                        icon={<CreditCard size={16} />}
+                                        onClick={() => {
+                                          const subscription = org.data?.subscription;
+                                          if (subscription) {
+                                            subscriptionForm.setFieldsValue({
+                                              plan: subscription.plan,
+                                              status: subscription.status,
+                                              seatLimit: subscription.seatLimit,
+                                              currentPeriodEnd: subscription.currentPeriodEnd ? dayjs(subscription.currentPeriodEnd) : undefined,
+                                              trialEndsAt: subscription.trialEndsAt ? dayjs(subscription.trialEndsAt) : undefined,
+                                              provider: subscription.provider ?? "manual"
+                                            });
+                                          }
+                                          setSubscriptionModalOpen(true);
+                                        }}
+                                      >
+                                        调整订阅
+                                      </Button>
+                                    ) : null}
+                                  </Space>
+                                </div>
+                                <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                                  <div className="rounded-[8px] bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="text-base font-semibold text-ink">{freeBillingPlan.name}</div>
+                                        <div className="mt-1 min-h-10 text-sm leading-5 text-muted">{freeBillingPlan.description}</div>
+                                      </div>
+                                      {org.data?.subscription.plan === "TRIAL" ? <Tag color="green">当前</Tag> : null}
+                                    </div>
+                                    <div className="mt-4 flex items-end gap-2">
+                                      <span className="text-3xl font-semibold text-ink">{freeBillingPlan.price}</span>
+                                    </div>
+                                    <div className="mt-2 text-sm text-muted">注册后自动获得，试用期内不限制成员人数。</div>
+                                    <div className="mt-4 space-y-2">
+                                      {freeBillingPlan.features.map((feature) => (
+                                        <div key={feature} className="flex items-center gap-2 text-sm text-muted">
+                                          <CheckCircle2 size={15} className="text-success" />
+                                          <span>{feature}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <Button className="mt-4 w-full" disabled>
+                                      当前试用规则
+                                    </Button>
+                                  </div>
+                                  {(billingPlans.data?.plans ?? []).map((plan) => {
+                                    const amount = Math.max(1, activeMemberCount) * planPrice(plan);
+                                    const isCurrent = org.data?.subscription.plan === plan.plan;
+                                    return (
+                                      <div key={plan.plan} className={`rounded-[8px] p-4 shadow-sm ${plan.plan === "TEAM" ? "bg-primary-container/40" : "bg-white"}`}>
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                            <div className="text-base font-semibold text-ink">{plan.name}</div>
+                                            <div className="mt-1 min-h-10 text-sm leading-5 text-muted">{plan.description}</div>
+                                          </div>
+                                          {isCurrent ? <Tag color="green">当前</Tag> : null}
+                                        </div>
+                                        <div className="mt-4 flex items-end gap-2">
+                                          <span className="text-3xl font-semibold text-ink">¥{(planPrice(plan) / 100).toFixed(0)}</span>
+                                          <span className="pb-1 text-xs text-muted">/ 启用成员 / 月</span>
+                                        </div>
+                                        <div className="mt-2 text-sm text-muted">
+                                          当前启用成员：{activeMemberCount} 人 · 应付金额：{moneyText(amount)} / 月
+                                        </div>
+                                        <div className="mt-4 space-y-2">
+                                          {plan.features.map((feature) => (
+                                            <div key={feature} className="flex items-center gap-2 text-sm text-muted">
+                                              <CheckCircle2 size={15} className="text-success" />
+                                              <span>{feature}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <Button
+                                          className="mt-4 w-full"
+                                          type={plan.plan === "TEAM" ? "primary" : "default"}
+                                          icon={<ReceiptText size={16} />}
+                                          loading={createBillingOrder.isPending}
+                                          onClick={() => {
+                                            startPlanCheckout(plan);
+                                          }}
+                                        >
+                                          {isTrialing ? "试用结束后支付" : "续费专业版"}
+                                        </Button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {billingPlans.error ? <Alert className="mt-4" type="error" showIcon message={(billingPlans.error as Error).message} /> : null}
+                              </div>
+                              <Table
+                                rowKey="id"
+                                loading={billingOrders.isFetching}
+                                dataSource={billingOrders.data ?? []}
+                                columns={billingOrderColumns}
+                                locale={{ emptyText: <Empty description="暂无订阅订单" /> }}
+                                pagination={{ pageSize: 6 }}
+                              />
+                            </div>
+                          )
+                        }
+                      ]
+                    : []),
+                  {
+                    key: "privacy",
+                    label: "备份与数据",
+                    children: (
+                      <div className="space-y-3">
+                        <div className="surface-panel p-5">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex min-w-0 gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-error-container text-error">
+                                <FileLock2 size={20} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-ink">数据备份与退出</div>
+                                <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
+                                  企业数据按租户隔离。停用系统前可以先导出完整备份，再提交数据删除申请。
+                                </div>
+                              </div>
+                            </div>
+                            <Space className="w-full shrink-0 lg:w-auto">
+                              <Button icon={<Download size={16} />} loading={createExportTask.isPending} onClick={() => createExportTask.mutate()}>
+                                {canManage ? "生成企业备份" : "生成我的备份"}
+                              </Button>
+                              <Button
+                                danger
+                                icon={<Trash2 size={16} />}
+                                onClick={() => {
+                                  dataDeletionForm.setFieldsValue({ scope: canManage ? "TENANT" : "SELF" });
+                                  setDataDeletionModalOpen(true);
+                                }}
+                              >
+                                申请删除数据
+                              </Button>
+                            </Space>
+                          </div>
+                        </div>
+                        <div className="surface-panel p-5">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-ink">导出任务</div>
+                              <div className="mt-1 text-xs text-muted">生成完成后请在有效期内下载，过期后需重新生成。</div>
+                            </div>
+                            <Button icon={<RotateCw size={16} />} onClick={() => exportTasks.refetch()} loading={exportTasks.isFetching}>
+                              刷新任务
+                            </Button>
+                          </div>
+                          <Table
+                            rowKey="id"
+                            loading={exportTasks.isFetching}
+                            dataSource={exportTasks.data ?? []}
+                            columns={exportTaskColumns}
+                            locale={{ emptyText: <Empty description="暂无导出任务" /> }}
+                            pagination={{ pageSize: 5 }}
+                          />
+                        </div>
+                        <Table
+                          rowKey="id"
+                          loading={deletionRequests.isFetching}
+                          dataSource={deletionRequests.data ?? []}
+                          columns={deletionColumns}
+                          locale={{ emptyText: <Empty description="暂无数据删除申请" /> }}
+                          pagination={{ pageSize: 6 }}
+                        />
+                      </div>
+                    )
+                  },
+                  ...(canManage
+                    ? [
+                        {
+                          key: "audit",
+                          label: "安全审计",
+                          children: (
+                            <div className="space-y-3">
+                              <Alert
+                                type="success"
+                                showIcon
+                                message="关键操作已进入审计日志"
+                                description="登录、注册、密码、订阅、数据删除申请等关键操作会记录到租户内审计日志，便于企业追溯。"
+                              />
+                              <Table
+                                rowKey="id"
+                                loading={auditLogs.isFetching}
+                                dataSource={auditLogs.data ?? []}
+                                columns={auditColumns}
+                                locale={{ emptyText: <Empty description="暂无审计日志" /> }}
+                                pagination={{ pageSize: 8 }}
+                              />
+                            </div>
+                          )
+                        }
+                      ]
+                    : []),
+                  {
+                    key: "security",
+                    label: "账号安全",
+                    children: (
+                      <div className="grid gap-3 lg:grid-cols-[420px_1fr]">
+                        <div className="surface-panel p-5">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-primary-container text-primary">
+                              <KeyRound size={20} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-ink">修改登录密码</div>
+                              <div className="text-xs text-muted">发布前已加入登录限流、失败锁定和密码重置接口。</div>
+                            </div>
+                          </div>
+                          {changePassword.error ? <Alert className="mb-4" type="error" showIcon message={(changePassword.error as Error).message} /> : null}
+                          <Form form={changePasswordForm} layout="vertical" onFinish={(values) => changePassword.mutate(values)}>
+                            <Form.Item name="currentPassword" label="当前密码" rules={[{ required: true }]}>
+                              <Input.Password />
+                            </Form.Item>
+                            <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 6 }]}>
+                              <Input.Password />
+                            </Form.Item>
+                            <Button type="primary" htmlType="submit" icon={<KeyRound size={16} />} loading={changePassword.isPending}>
+                              更新密码
+                            </Button>
+                          </Form>
+                        </div>
+                        <Alert
+                          type="info"
+                          showIcon
+                          icon={<History size={18} />}
+                          message="账号安全策略"
+                          description="连续登录失败会临时锁定账号；密码重置令牌和邮箱验证令牌只保存哈希值；生产环境可开启 REQUIRE_EMAIL_VERIFICATION=true 强制邮箱验证。"
+                        />
+                      </div>
+                    )
+                  },
+                  {
+                    key: "feedback",
+                    label: "反馈",
+                    children: (
+                      <div className="space-y-3">
+                        <div className="surface-panel p-5">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex min-w-0 gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-primary-container text-primary">
+                                <MessageSquare size={20} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-ink">用户权益与问题反馈</div>
+                                <div className="mt-1 max-w-4xl text-sm leading-6 text-muted">
+                                  可提交功能异常、账号权限、数据权益、计费订阅、隐私安全等问题，并查看处理状态。
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              type="primary"
+                              className="w-full shrink-0 lg:w-auto"
+                              icon={<MessageSquare size={16} />}
+                              onClick={() => {
+                                feedbackForm.resetFields();
+                                feedbackForm.setFieldsValue({ category: "DATA_RIGHTS", priority: "NORMAL" });
+                                setFeedbackModalOpen(true);
+                              }}
+                            >
+                              提交反馈
+                            </Button>
+                          </div>
+                        </div>
+                        <Table
+                          rowKey="id"
+                          loading={feedbackRequests.isFetching}
+                          dataSource={feedbackRequests.data ?? []}
+                          columns={feedbackColumns}
+                          locale={{ emptyText: <Empty description="暂无问题反馈" /> }}
+                          pagination={{ pageSize: 6 }}
+                        />
+                      </div>
+                    )
+                  }
+                ]}
+              />
             )
           }
         ]}
@@ -1640,8 +1639,8 @@ export default function OrgPage() {
                 {subscriptionPeriodText(checkout.subscriptionPeriod)}
               </div>
             </div>
-              <div className="flex flex-col items-center rounded-[8px] border border-line bg-white p-5 text-center">
-                <div className="flex min-h-44 w-44 items-center justify-center rounded-[8px] border border-line bg-white p-2">
+              <div className="flex flex-col items-center rounded-[8px] bg-white p-5 text-center shadow-sm">
+                <div className="flex min-h-44 w-44 items-center justify-center rounded-[8px] bg-surface-container-low p-2">
                   {checkoutPaymentCode ? (
                     <QRCode value={checkoutPaymentCode} size={160} bordered={false} />
                   ) : (
@@ -1725,7 +1724,7 @@ export default function OrgPage() {
         width={640}
       >
         {handlingFeedback ? (
-          <div className="mb-4 rounded-[8px] border border-line bg-surface-container p-4">
+          <div className="mb-4 rounded-[8px] bg-surface-container p-4">
             <div className="text-sm font-medium text-ink">{handlingFeedback.title}</div>
             <div className="mt-2 text-sm leading-6 text-muted">{handlingFeedback.content}</div>
           </div>

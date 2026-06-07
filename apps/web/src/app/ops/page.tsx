@@ -354,7 +354,7 @@ export default function OpsPage() {
 
   return (
     <Layout className="min-h-screen bg-surface">
-      <header className="flex items-center justify-between border-b border-line bg-white px-6 py-4">
+      <header className="flex items-center justify-between bg-white px-6 py-4 shadow-[0_12px_30px_rgba(26,26,26,0.04)]">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-[142px] items-center rounded-[16px] bg-surface-container-low px-3">
             <img src="/seven-ai-logo.png" alt="七数AI" className="h-10 w-full object-contain" />

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Badge, Button, Drawer, Dropdown, Layout, Menu, Tooltip } from "antd";
 import type { MenuProps } from "antd";
-import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Sparkles, Users } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, FileText, FolderKanban, LogOut, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -14,7 +14,6 @@ const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
   { key: "/calendar", icon: <CalendarDays size={19} />, label: "工作日历" },
-  { key: "/ai-analysis", icon: <Sparkles size={19} />, label: "周期判断" },
   { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报记录" },
   { key: "/reports", icon: <FileText size={19} />, label: "汇报" }
 ];
@@ -147,7 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         collapsedWidth={72}
         collapsed={collapsed}
         trigger={null}
-        className="app-sidebar border-r border-line bg-surface"
+        className="app-sidebar bg-surface"
       >
         <div className="flex h-screen min-h-0 flex-col">
           <div className={`flex h-[76px] shrink-0 items-center gap-3 ${collapsed ? "justify-center px-3" : "px-4"}`}>
@@ -160,7 +159,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Tooltip title={collapsed ? (user.departmentName ?? "全公司") : undefined} placement="right">
               <div className={`mb-3 rounded-[18px] bg-surface-container ${collapsed ? "px-2 py-2 text-center" : "flex items-center justify-between gap-2 px-4 py-3"}`}>
                 <div className="min-w-0">
-                  {!collapsed ? <div className="text-xs font-medium text-muted">可见范围</div> : null}
+                  {!collapsed ? <div className="text-xs font-medium text-muted">当前范围</div> : null}
                   <div className="truncate text-sm font-medium text-ink">{collapsed ? (user.departmentName ? user.departmentName.slice(0, 1) : "全") : (user.departmentName ?? "全公司")}</div>
                 </div>
                 {collapseControl}

@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Typography, Upload, message } from "antd";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Tooltip, Typography, Upload, message } from "antd";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, Paperclip, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
+import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, Paperclip, RefreshCw, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
@@ -390,35 +390,42 @@ export default function CalendarPage() {
     () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
     [todayDetail.data?.filledEmployees]
   );
+  const isCalendarSyncing = calendar.isFetching || todayDetail.isFetching || dayDetail.isFetching;
+  const calendarSyncError = calendar.error ?? todayDetail.error;
+  const calendarSyncErrorMessage = calendarSyncError instanceof Error ? calendarSyncError.message : "请稍后重试。";
+  const lastCalendarUpdatedAt = useMemo(() => {
+    const timestamps = [calendar.dataUpdatedAt, todayDetail.dataUpdatedAt, selectedDate ? dayDetail.dataUpdatedAt : 0].filter((value) => value > 0);
+    return timestamps.length ? dayjs(Math.max(...timestamps)).format("HH:mm:ss") : null;
+  }, [calendar.dataUpdatedAt, dayDetail.dataUpdatedAt, selectedDate, todayDetail.dataUpdatedAt]);
+
+  const refreshCalendarStatus = () => {
+    void calendar.refetch();
+    void todayDetail.refetch();
+    if (selectedDate) {
+      void dayDetail.refetch();
+    }
+  };
+
   const todayPriority = useMemo(() => {
     if (todayDetail.isFetching || calendar.isFetching) {
       return {
         tone: "neutral",
         title: "正在同步今日团队状态",
-        copy: "稍后会给出风险、缺填和填报覆盖情况。",
-        primaryLabel: "刷新状态",
-        primaryAction: "refresh",
-        secondaryPrompt: "基于今天的团队日报，整理管理者需要优先关注的事项。"
+        copy: "稍后会给出风险、缺填和填报覆盖情况。"
       };
     }
     if (!todayStats || todayStats.totalEmployees === 0) {
       return {
         tone: "neutral",
         title: "等待团队数据",
-        copy: "当前范围暂无可分析成员，先确认团队、部门和日报要求配置。",
-        primaryLabel: "刷新状态",
-        primaryAction: "refresh",
-        secondaryPrompt: "当前范围没有团队数据，帮我列出需要检查的配置项。"
+        copy: "当前范围暂无可分析成员，先确认团队、部门和日报要求配置。"
       };
     }
     if (todayStats.riskCount > 0) {
       return {
         tone: "danger",
         title: `${todayStats.riskCount} 条风险待确认`,
-        copy: "先确认影响项目和负责人，再决定是否提醒或升级。",
-        primaryLabel: "查看今日风险",
-        primaryAction: "openToday",
-        secondaryPrompt: "基于今天的风险日报，整理影响项目、负责人和下一步处理建议。"
+        copy: "先确认影响项目和负责人，再决定是否提醒或升级。"
       };
     }
     const remindCount = todayStats.remindCount ?? todayStats.missingCount;
@@ -426,40 +433,23 @@ export default function CalendarPage() {
       return {
         tone: "warning",
         title: `${remindCount} 位成员未填报`,
-        copy: `当前填报率 ${todayStats.fillRate}%，先补齐团队状态，避免日报和复盘失真。`,
-        primaryLabel: "查看未填报成员",
-        primaryAction: "openToday",
-        secondaryPrompt: "帮我整理今天未填报成员，并给出适合管理者发送的提醒话术。"
+        copy: `当前填报率 ${todayStats.fillRate}%，先补齐团队状态，避免日报和复盘失真。`
       };
     }
     if (todayStats.filledCount === 0) {
       return {
         tone: "warning",
         title: "今天还没有提交记录",
-        copy: "建议先提醒团队提交日报或计划，避免今日状态缺失。",
-        primaryLabel: "查看今日详情",
-        primaryAction: "openToday",
-        secondaryPrompt: "今天还没有提交记录，帮我整理提醒团队填报的简短话术。"
+        copy: "建议先提醒团队提交日报或计划，避免今日状态缺失。"
       };
     }
     return {
       tone: "success",
       title: "今日团队状态正常",
-      copy: `团队合计 ${todayStats.totalHours}h，暂无风险和缺填，可继续查看本周节奏。`,
-      primaryLabel: "查看今日详情",
-      primaryAction: "openToday",
-      secondaryPrompt: "基于今天的日报，生成一段管理者可以使用的今日简报。"
+      copy: `团队合计 ${todayStats.totalHours}h，暂无风险和缺填，可继续查看本周节奏。`
     };
   }, [calendar.isFetching, todayDetail.isFetching, todayStats]);
 
-  const handleTodayPrimaryAction = () => {
-    if (todayPriority.primaryAction === "refresh") {
-      calendar.refetch();
-      todayDetail.refetch();
-      return;
-    }
-    setSelectedDate(today);
-  };
   const detailStats = dayDetail.data?.stats;
   const detailFilledEmployees = dayDetail.data?.filledEmployees ?? [];
   const detailMissingEmployees = dayDetail.data?.missingEmployees ?? [];
@@ -656,17 +646,26 @@ export default function CalendarPage() {
               options={org.data?.departments.map((item) => ({ value: item.id, label: item.name }))}
             />
           ) : null}
-          <Button
-            onClick={() => {
-              calendar.refetch();
-              todayDetail.refetch();
-            }}
-            loading={calendar.isFetching || todayDetail.isFetching}
-          >
-            刷新
-          </Button>
+          <span className="calendar-sync-status">{isCalendarSyncing ? "正在同步" : lastCalendarUpdatedAt ? `已更新 ${lastCalendarUpdatedAt}` : "等待同步"}</span>
+          <Tooltip title="刷新数据">
+            <Button aria-label="刷新数据" icon={<RefreshCw size={16} />} onClick={refreshCalendarStatus} loading={isCalendarSyncing} />
+          </Tooltip>
         </Space>
       </div>
+
+      {calendarSyncError ? (
+        <Alert
+          showIcon
+          type="warning"
+          message="工作日历数据同步失败"
+          description={calendarSyncErrorMessage}
+          action={
+            <Button size="small" onClick={refreshCalendarStatus}>
+              重试同步
+            </Button>
+          }
+        />
+      ) : null}
 
       <section className="calendar-main-panel calendar-main-panel-full">
           <div className="workbench-hero">
@@ -683,25 +682,17 @@ export default function CalendarPage() {
                 <span>参考：{todayReferenceCount} 条记录</span>
               </div>
             </div>
-            <div className="workbench-actions">
-              <button type="button" onClick={handleTodayPrimaryAction} className="workbench-action primary-action-button">
-                {todayPriority.tone === "danger" ? <AlertTriangle size={18} /> : <UsersRound size={18} />}
-                <span>{todayPriority.primaryLabel}</span>
-              </button>
-              <button type="button" onClick={() => runCopilotPrompt(todayPriority.secondaryPrompt)} className="workbench-action">
-                <WandSparkles size={18} />
-                <span>生成今日简报</span>
-              </button>
-              <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button">
+            <div className="workbench-actions is-single-action">
+              <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button ai-assistant-entry-button">
                 <Bot size={18} />
-                <span>打开助手</span>
+                <span>AI工作助手</span>
               </button>
             </div>
           </div>
 
           <div className="surface-panel dashboard-calendar-grid calendar-board-scroll">
             {weekLabels.map((label) => (
-              <div key={label} className="dashboard-week-label border-b border-line bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
+              <div key={label} className="dashboard-week-label bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
                 周{label}
               </div>
             ))}
@@ -770,7 +761,7 @@ export default function CalendarPage() {
           onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, quickFillForm.setFieldsValue)}
           onFinish={(values) => createWorkLog.mutate(values)}
         >
-          <div className="mb-5 rounded-[18px] border border-line bg-surface-container-low p-4">
+          <div className="mb-5 rounded-[18px] bg-surface-container-low p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
               <Bot size={17} className="text-secondary" />
               智能草稿
@@ -1206,18 +1197,18 @@ export default function CalendarPage() {
                 </div>
               </div>
             </div>
-            <div className="rounded-[8px] border border-line p-4">
+            <div className="rounded-[8px] bg-surface-container-low p-4">
               <div className="mb-2 text-sm font-medium text-ink">内容</div>
               <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{selectedWorkLog.content}</div>
             </div>
             {selectedWorkLog.attachments?.length ? (
-              <div className="rounded-[8px] border border-line p-4">
+              <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-2 text-sm font-medium text-ink">附件</div>
                 <WorkLogAttachmentViewer workLogId={selectedWorkLog.id} attachments={selectedWorkLog.attachments} />
               </div>
             ) : null}
             {selectedWorkLog.aiAnalysis ? (
-              <div className="rounded-[8px] border border-line p-4">
+              <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
                   <Bot size={16} />
                   智能分析
@@ -1230,7 +1221,7 @@ export default function CalendarPage() {
                 </Space>
               </div>
             ) : selectedWorkLog.status === "SUBMITTED" ? (
-              <div className="rounded-[8px] border border-line p-4">
+              <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
                   <Bot size={16} />
                   分析生成中

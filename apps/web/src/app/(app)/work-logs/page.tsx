@@ -431,12 +431,32 @@ export default function WorkLogsPage() {
           <Typography.Title level={3} className="page-title">
             填报记录
           </Typography.Title>
-          <Typography.Text className="page-subtitle">每天可填写多条工作记录，提交后自动进入分析队列。</Typography.Text>
+          <Typography.Text className="page-subtitle">直接开始填写，提交后系统会自动进入分析队列。</Typography.Text>
         </div>
       </div>
 
-      <div className="toolbar-panel flex flex-wrap items-center justify-between gap-3">
-        <Space wrap>
+      <div className="surface-panel worklog-entry-panel">
+        <div className="worklog-entry-copy">
+          <div className="section-title">写日报/计划</div>
+          <div className="section-subtitle">直接写一句话，AI 会识别日期、工时和工作内容，多条日程也可以一次填报。</div>
+        </div>
+        <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
+          写日报/计划
+        </Button>
+      </div>
+
+      <section className="history-section">
+        <div className="history-section-head">
+          <div>
+            <div className="section-title">历史记录</div>
+            <div className="section-subtitle">用于回看、补交和修改已填写的记录。</div>
+          </div>
+          <Button icon={<RotateCw size={16} />} onClick={() => logs.refetch()} loading={logs.isFetching}>
+            刷新记录
+          </Button>
+        </div>
+
+        <div className="toolbar-panel flex flex-wrap items-center gap-3">
           <DatePicker value={dateFilter} onChange={setDateFilter} placeholder="按日期筛选" />
           <Select
             value={statusFilter}
@@ -457,20 +477,17 @@ export default function WorkLogsPage() {
             options={projectOptions}
             onChange={setProjectFilter}
           />
-        </Space>
-        <Button icon={<RotateCw size={16} />} onClick={() => logs.refetch()} loading={logs.isFetching}>
-          刷新
-        </Button>
-      </div>
+        </div>
 
-      <Table
-        rowKey="id"
-        loading={logs.isFetching}
-        dataSource={filteredLogs}
-        columns={columns}
-        locale={{ emptyText: <Empty description="暂无填报记录" /> }}
-        pagination={{ pageSize: 8 }}
-      />
+        <Table
+          rowKey="id"
+          loading={logs.isFetching}
+          dataSource={filteredLogs}
+          columns={columns}
+          locale={{ emptyText: <Empty description="暂无填报记录，先写一条日报或计划" /> }}
+          pagination={{ pageSize: 8 }}
+        />
+      </section>
 
       <Modal
         title={editing ? "编辑填报" : "新增填报"}
@@ -497,7 +514,7 @@ export default function WorkLogsPage() {
             }
           }}
         >
-          <div className="mb-5 rounded-[18px] border border-line bg-surface-container-low p-4">
+          <div className="mb-5 rounded-[18px] bg-surface-container-low p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
               <Bot size={17} className="text-secondary" />
               AI 对话填报
@@ -572,7 +589,7 @@ export default function WorkLogsPage() {
             {editing?.attachments?.length ? (
               <div className="mb-3 space-y-2">
                 {editing.attachments.map((attachment) => (
-                  <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-line px-3 py-2">
+                  <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-[12px] bg-surface-container-low px-3 py-2">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-ink">{attachment.fileName}</div>
                       <div className="text-xs text-muted">
@@ -643,18 +660,18 @@ export default function WorkLogsPage() {
                 </Tag>
               </div>
             </div>
-            <div className="rounded-[8px] border border-line p-4">
+            <div className="rounded-[8px] bg-surface-container-low p-4">
               <div className="mb-2 text-sm font-medium text-ink">工作内容 / 计划</div>
               <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{detailRecord.content}</div>
             </div>
             {detailRecord.attachments?.length ? (
-              <div className="rounded-[8px] border border-line p-4">
+              <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-2 text-sm font-medium text-ink">附件</div>
                 <WorkLogAttachmentViewer workLogId={detailRecord.id} attachments={detailRecord.attachments} />
               </div>
             ) : null}
             {detailRecord.aiAnalysis ? (
-              <div className="rounded-[8px] border border-line p-4">
+              <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
                   <Bot size={16} />
                   分析结果
@@ -680,7 +697,7 @@ export default function WorkLogsPage() {
                 </Space>
               </div>
             ) : detailRecord.status === "SUBMITTED" ? (
-              <div className="rounded-[8px] border border-line p-4">
+              <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
                   <Bot size={16} />
                   分析生成中
