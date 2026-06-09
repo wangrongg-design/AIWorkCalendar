@@ -77,7 +77,7 @@ function normalizeTiming(startTime: Date | null, endTime: Date | null, hours: nu
   }
 
   if (normalizedHours === null || !Number.isFinite(normalizedHours)) {
-    throw new BadRequestException("Hours or two timing fields are required");
+    normalizedHours = 0;
   }
   if (normalizedHours < 0 || normalizedHours > 24) {
     throw new BadRequestException("Hours must be between 0 and 24");

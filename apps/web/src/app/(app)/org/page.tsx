@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, QRCode, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound, MessageSquare, Plus, ReceiptText, RotateCw, Trash2 } from "lucide-react";
@@ -360,6 +360,24 @@ export default function OrgPage() {
     return roots.map(trimEmptyChildren);
   }, [org.data?.departments]);
 
+  const departmentChildCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const department of org.data?.departments ?? []) {
+      if (!department.parentId) continue;
+      counts.set(department.parentId, (counts.get(department.parentId) ?? 0) + 1);
+    }
+    return counts;
+  }, [org.data?.departments]);
+
+  const departmentMemberCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const member of org.data?.users ?? []) {
+      if (!member.departmentId) continue;
+      counts.set(member.departmentId, (counts.get(member.departmentId) ?? 0) + 1);
+    }
+    return counts;
+  }, [org.data?.users]);
+
   const departmentPathIds = (departmentId?: string | null) => {
     const ids: string[] = [];
     const visited = new Set<string>();
@@ -523,6 +541,17 @@ export default function OrgPage() {
     }
   });
 
+  const deleteDepartment = useMutation({
+    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/org/departments/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      message.success("部门已删除");
+      queryClient.invalidateQueries({ queryKey: ["org"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "删除部门失败，请稍后重试。");
+    }
+  });
+
   const createTenant = useMutation({
     mutationFn: (values: { name: string; code: string; adminEmail: string; adminName: string; adminPassword?: string }) =>
       apiFetch("/org/tenants", { method: "POST", body: JSON.stringify({ ...values, code: normalizeUnifiedSocialCreditCode(values.code) }) }),
@@ -558,6 +587,9 @@ export default function OrgPage() {
       setUserModalOpen(false);
       setEditingUser(null);
       queryClient.invalidateQueries({ queryKey: ["org"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "员工保存失败，请检查信息后重试。");
     }
   });
 
@@ -743,24 +775,22 @@ export default function OrgPage() {
   const checkoutIsLive = checkout?.payment?.mode === "live";
   const checkoutIsMock = checkout?.payment?.mode === "mock" || !checkout?.payment?.mode;
 
-  const departmentColumns: ColumnsType<DepartmentTreeNode> = [
-    {
-      title: "部门",
-      dataIndex: "name",
-      width: 420,
-      render: (value: string, record) => (
-        <div>
-          <div className="font-medium text-ink">{value}</div>
-          <div className="mt-1 text-xs text-muted">完整路径：{departmentFullPath(record.id)}</div>
-        </div>
-      )
-    },
-    {
-      title: "操作",
-      width: 110,
-      render: (_, record) =>
-        canManage ? (
+  const renderDepartmentActions = (record: Department) => {
+    if (!canManage) return null;
+    const childCount = departmentChildCount.get(record.id) ?? 0;
+    const memberCount = departmentMemberCount.get(record.id) ?? 0;
+    const deleteDisabled = childCount > 0 || memberCount > 0;
+    const deleteTip = childCount
+      ? `还有 ${childCount} 个下级部门，先调整组织架构`
+      : memberCount
+        ? `还有 ${memberCount} 名员工，先移动员工`
+        : "删除部门";
+    return (
+      <Space size={4} className="shrink-0">
+        <Tooltip title="编辑部门">
           <Button
+            type="text"
+            aria-label="编辑部门"
             icon={<Edit2 size={15} />}
             onClick={() => {
               setEditingDepartment(record);
@@ -768,9 +798,45 @@ export default function OrgPage() {
               setDepartmentModalOpen(true);
             }}
           />
-        ) : null
-    }
-  ];
+        </Tooltip>
+        <Tooltip title={deleteTip}>
+          <span>
+            <Popconfirm
+              title="删除部门"
+              description="删除后不会影响历史日报，但不能恢复。"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              disabled={deleteDisabled}
+              onConfirm={() => deleteDepartment.mutate(record.id)}
+            >
+              <Button
+                danger
+                type="text"
+                aria-label="删除部门"
+                disabled={deleteDisabled}
+                icon={<Trash2 size={15} />}
+                loading={deleteDepartment.isPending && deleteDepartment.variables === record.id}
+              />
+            </Popconfirm>
+          </span>
+        </Tooltip>
+      </Space>
+    );
+  };
+
+  const renderDepartmentNode = (record: DepartmentTreeNode, depth = 0) => (
+    <div key={record.id}>
+      <div className="department-tree-row" style={{ paddingLeft: 12 + depth * 18 }}>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-ink">{record.name}</div>
+          <div className="mt-1 truncate text-xs text-muted">完整路径：{departmentFullPath(record.id)}</div>
+        </div>
+        {renderDepartmentActions(record)}
+      </div>
+      {record.children?.map((child) => renderDepartmentNode(child, depth + 1))}
+    </div>
+  );
 
   const userColumns: ColumnsType<OrgUser> = [
     { title: "姓名", dataIndex: "name", width: 140 },
@@ -1047,7 +1113,7 @@ export default function OrgPage() {
                   <div className="section-head">
                     <div>
                       <div className="section-title">部门</div>
-                      <div className="section-subtitle">默认组织架构可按实际汇报关系调整。</div>
+                      <div className="section-subtitle">可新增、编辑和删除；有员工或下级部门时需先迁移。</div>
                     </div>
                     {canManage ? (
                       <Button
@@ -1063,15 +1129,9 @@ export default function OrgPage() {
                       </Button>
                     ) : null}
                   </div>
-                  <Table
-                    rowKey="id"
-                    loading={org.isFetching}
-                    dataSource={departmentTree}
-                    columns={departmentColumns}
-                    locale={{ emptyText: <Empty description="暂无部门" /> }}
-                    pagination={false}
-                    expandable={{ defaultExpandAllRows: true }}
-                  />
+                  <div className="department-tree-list" aria-busy={org.isFetching}>
+                    {departmentTree.length ? departmentTree.map((item) => renderDepartmentNode(item)) : <Empty description="暂无部门" />}
+                  </div>
                 </section>
 
                 <section className="surface-panel team-section">
@@ -1505,7 +1565,16 @@ export default function OrgPage() {
         confirmLoading={saveUser.isPending}
         width={680}
       >
-        <Form form={userForm} layout="vertical" onFinish={(values) => saveUser.mutate(values)}>
+        <Form
+          form={userForm}
+          layout="vertical"
+          onFinish={(values) => saveUser.mutate(values)}
+          onFinishFailed={(errorInfo) => {
+            const firstField = errorInfo.errorFields[0]?.name;
+            if (firstField) userForm.scrollToField(firstField, { block: "center" });
+            message.warning("请先补全员工信息");
+          }}
+        >
           <div className="grid grid-cols-2 gap-3">
             <Form.Item name="name" label="姓名" rules={[{ required: true, min: 2 }]}>
               <Input />
@@ -1525,8 +1594,19 @@ export default function OrgPage() {
               placeholder="选择部门"
             />
             </Form.Item>
-            <Form.Item name="password" label={editingUser ? "重置密码" : "初始密码"} rules={editingUser ? undefined : [{ required: true, min: 8 }]}>
-              <Input.Password placeholder={editingUser ? "留空不修改" : "至少 8 位，建议包含大小写字母和数字"} />
+            <Form.Item
+              name="password"
+              label={editingUser ? "重置密码" : "初始密码"}
+              rules={
+                editingUser
+                  ? [{ min: 6, message: "重置密码至少 6 位" }]
+                  : [
+                      { required: true, message: "请设置员工初始密码" },
+                      { min: 6, message: "初始密码至少 6 位" }
+                    ]
+              }
+            >
+              <Input.Password placeholder={editingUser ? "留空不修改，填写时至少 6 位" : "例如：123456，至少 6 位"} />
             </Form.Item>
           </div>
           <Alert

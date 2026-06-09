@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { RoleCode } from "@prisma/client";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
@@ -40,6 +40,12 @@ export class OrgController {
     @Body() dto: UpdateDepartmentDto
   ) {
     return this.orgService.updateDepartment(user, id, dto);
+  }
+
+  @Roles(RoleCode.COMPANY_ADMIN)
+  @Delete("departments/:id")
+  deleteDepartment(@CurrentUserParam() user: CurrentUser, @Param("id") id: string) {
+    return this.orgService.deleteDepartment(user, id);
   }
 
   @Roles(RoleCode.COMPANY_ADMIN)

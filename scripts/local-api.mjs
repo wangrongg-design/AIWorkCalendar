@@ -216,6 +216,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "PATCH" && url.pathname.startsWith("/org/departments/")) {
       return json(res, updateDepartment(requireUser(currentUser), lastPath(url.pathname), body));
     }
+    if (req.method === "DELETE" && url.pathname.startsWith("/org/departments/")) {
+      return json(res, deleteDepartment(requireUser(currentUser), lastPath(url.pathname)));
+    }
     if (route === "POST /org/users") return json(res, createOrgUser(requireUser(currentUser), body));
     if (req.method === "PATCH" && url.pathname.startsWith("/org/users/")) {
       return json(res, updateOrgUser(requireUser(currentUser), lastPath(url.pathname), body));
@@ -700,7 +703,7 @@ function tenantSelectionOption(user) {
 function getOrg(user) {
   const visibleUsers = filterUsersByAccess(user, new URL("http://localhost/?scope=company"));
   const ownerTenant = tenants.find((item) => item.id === user.tenantId) ?? tenant;
-  const visibleDepartments = departments.filter((item) => item.tenantId === user.tenantId);
+  const visibleDepartments = departments.filter((item) => item.tenantId === user.tenantId && !item.deletedAt);
   return {
     tenant: ownerTenant,
     subscription: subscriptionSummary(user.tenantId),
@@ -785,18 +788,39 @@ function createTenant(user, body) {
 
 function createDepartment(user, body) {
   requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
-  const item = { id: `dept-${Date.now()}`, tenantId: user.tenantId, name: body.name, parentId: body.parentId ?? null };
+  if (body.parentId && !departments.some((dept) => dept.id === body.parentId && dept.tenantId === user.tenantId && !dept.deletedAt)) {
+    throw httpError(404, "Department not found");
+  }
+  const item = { id: `dept-${Date.now()}`, tenantId: user.tenantId, name: body.name, parentId: body.parentId ?? null, deletedAt: null };
   departments.push(item);
   return item;
 }
 
 function updateDepartment(user, id, body) {
   requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
-  const item = departments.find((dept) => dept.id === id && dept.tenantId === user.tenantId);
+  const item = departments.find((dept) => dept.id === id && dept.tenantId === user.tenantId && !dept.deletedAt);
   if (!item) throw httpError(404, "Department not found");
+  if (body.parentId === id) throw httpError(400, "Department cannot be its own parent");
+  if (body.parentId && !departments.some((dept) => dept.id === body.parentId && dept.tenantId === user.tenantId && !dept.deletedAt)) {
+    throw httpError(404, "Department not found");
+  }
   if (body.name !== undefined) item.name = body.name;
   if (body.parentId !== undefined) item.parentId = body.parentId;
   return item;
+}
+
+function deleteDepartment(user, id) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const item = departments.find((dept) => dept.id === id && dept.tenantId === user.tenantId && !dept.deletedAt);
+  if (!item) throw httpError(404, "Department not found");
+  const childCount = departments.filter((dept) => dept.tenantId === user.tenantId && dept.parentId === id && !dept.deletedAt).length;
+  if (childCount) throw httpError(400, "请先删除或移动下级部门，再删除该部门");
+  const memberCount = users.filter((member) => member.tenantId === user.tenantId && member.departmentId === id && !member.deletedAt).length;
+  if (memberCount) throw httpError(400, "请先将部门成员移到其他部门，再删除该部门");
+  item.deletedAt = new Date().toISOString();
+  item.updatedAt = item.deletedAt;
+  audit(user, "DEPARTMENT_DELETED", "Department", item.id, { name: item.name, parentId: item.parentId });
+  return { ok: true };
 }
 
 function createOrgUser(currentUser, body) {
@@ -1068,7 +1092,7 @@ function opsOverview(user) {
       subscription: subscriptionSummary(item.id),
       counts: {
         users: businessUsers.filter((candidate) => candidate.tenantId === item.id).length,
-        departments: departments.filter((candidate) => candidate.tenantId === item.id).length,
+        departments: departments.filter((candidate) => candidate.tenantId === item.id && !candidate.deletedAt).length,
         projects: projects.filter((candidate) => candidate.tenantId === item.id && !candidate.deletedAt).length,
         workLogs: workLogs.filter((candidate) => candidate.tenantId === item.id && !candidate.deletedAt).length,
         reports: reports.filter((candidate) => candidate.tenantId === item.id).length
@@ -1215,7 +1239,7 @@ function exportData(user, url) {
       metadata: exportMetadata("tenant"),
       tenant: tenants.find((item) => item.id === user.tenantId) ?? tenant,
       subscription: subscriptionSummary(user.tenantId),
-      departments: departments.filter((item) => item.tenantId === user.tenantId),
+      departments: departments.filter((item) => item.tenantId === user.tenantId && !item.deletedAt),
       projects: projects.filter((item) => item.tenantId === user.tenantId && !item.deletedAt).map(projectWithOwner),
       users: tenantUsers,
       workLogs: tenantWorkLogs,
@@ -1258,7 +1282,7 @@ function publicUser(user) {
   const { password, ...safeUser } = user;
   return {
     ...safeUser,
-    departmentName: departments.find((dept) => dept.id === user.departmentId && dept.tenantId === user.tenantId)?.name ?? null
+    departmentName: departments.find((dept) => dept.id === user.departmentId && dept.tenantId === user.tenantId && !dept.deletedAt)?.name ?? null
   };
 }
 
@@ -1290,7 +1314,7 @@ function updateOrgUser(user, id, body) {
 }
 
 function orgUser(item) {
-  const visibleDepartments = departments.filter((dept) => dept.tenantId === item.tenantId);
+  const visibleDepartments = departments.filter((dept) => dept.tenantId === item.tenantId && !dept.deletedAt);
   return {
     id: item.id,
     email: item.email,

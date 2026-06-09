@@ -39,7 +39,7 @@ type WorkLogForm = {
   content: string;
   startTime?: dayjs.Dayjs;
   endTime?: dayjs.Dayjs;
-  hours: number;
+  hours?: number | null;
   projectId?: string;
 };
 
@@ -128,6 +128,7 @@ function fileToBase64(file: File) {
 
 function toWorkLogPayload(values: WorkLogForm) {
   const date = values.date;
+  const hours = typeof values.hours === "number" && Number.isFinite(values.hours) ? values.hours : null;
   return {
     date: date.format("YYYY-MM-DD"),
     title: values.title,
@@ -138,7 +139,7 @@ function toWorkLogPayload(values: WorkLogForm) {
     endTime: values.endTime
       ? date.hour(values.endTime.hour()).minute(values.endTime.minute()).second(0).millisecond(0).toISOString()
       : undefined,
-    hours: values.hours,
+    hours,
     projectId: values.projectId || undefined
   };
 }
@@ -155,7 +156,7 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
     date: safeDate,
     title: item.title || "工作填报",
     content: item.content || item.title || "工作填报",
-    hours: Number.isFinite(hours) ? hours : 1,
+    hours: Number.isFinite(hours) ? hours : null,
     startTime: parseWorkLogTime(item.startTime, safeDate),
     endTime: parseWorkLogTime(item.endTime, safeDate)
   };
@@ -573,7 +574,7 @@ export default function CalendarPage() {
       date: dateValue,
       title: isFuture ? "工作计划" : "工作日报",
       content: "",
-      hours: isFuture ? 0 : 1
+      hours: null
     });
     setQuickFillAiInput("");
     setQuickFillAiMessages([
@@ -846,8 +847,8 @@ export default function CalendarPage() {
             <Form.Item name="date" label="日期" rules={[{ required: true }]}>
               <DatePicker className="w-full" />
             </Form.Item>
-            <Form.Item name="hours" label="工时" rules={[{ required: true }]}>
-              <InputNumber className="w-full" min={0} max={24} step={0.5} />
+            <Form.Item name="hours" label="工时">
+              <InputNumber className="w-full" min={0} max={24} step={0.5} placeholder="可不填" />
             </Form.Item>
             <Form.Item name="startTime" label="开始时间">
               <TimePicker className="w-full" format="HH:mm" />

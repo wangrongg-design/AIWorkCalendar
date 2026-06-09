@@ -19,7 +19,7 @@ export class CreateUserDto {
   departmentId?: string | null;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(6, { message: "初始密码至少 6 位" })
   password: string;
 
   @IsArray()
@@ -51,7 +51,7 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  @MinLength(6)
+  @MinLength(6, { message: "重置密码至少 6 位" })
   password?: string;
 
   @IsOptional()

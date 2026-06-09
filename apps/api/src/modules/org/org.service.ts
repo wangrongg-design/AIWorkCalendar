@@ -228,6 +228,38 @@ export class OrgService {
     return department;
   }
 
+  async deleteDepartment(user: CurrentUser, id: string) {
+    this.access.assertCanManageOrg(user);
+    const department = await this.ensureDepartment(user.tenantId, id);
+    const [childCount, memberCount] = await this.prisma.$transaction([
+      this.prisma.department.count({
+        where: { tenantId: user.tenantId, parentId: id, deletedAt: null }
+      }),
+      this.prisma.user.count({
+        where: { tenantId: user.tenantId, departmentId: id, deletedAt: null }
+      })
+    ]);
+    if (childCount > 0) {
+      throw new BadRequestException("请先删除或移动下级部门，再删除该部门");
+    }
+    if (memberCount > 0) {
+      throw new BadRequestException("请先将部门成员移到其他部门，再删除该部门");
+    }
+    await this.prisma.department.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+    await this.audit.log({
+      tenantId: user.tenantId,
+      actorUserId: user.id,
+      action: "DEPARTMENT_DELETED",
+      targetType: "Department",
+      targetId: id,
+      metadata: { name: department.name, parentId: department.parentId }
+    });
+    return { ok: true };
+  }
+
   async createUser(user: CurrentUser, dto: CreateUserDto) {
     this.access.assertCanManageOrg(user);
     if (dto.departmentId) {

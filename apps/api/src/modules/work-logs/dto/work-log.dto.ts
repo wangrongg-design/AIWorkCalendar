@@ -48,7 +48,7 @@ export class CreateWorkLogDto {
   @IsNumber()
   @Min(0)
   @Max(24)
-  hours?: number;
+  hours?: number | null;
 
   @IsOptional()
   @IsString()
@@ -87,7 +87,7 @@ export class UpdateWorkLogDto {
   @IsNumber()
   @Min(0)
   @Max(24)
-  hours?: number;
+  hours?: number | null;
 
   @IsOptional()
   @IsString()

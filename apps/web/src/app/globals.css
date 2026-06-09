@@ -435,6 +435,32 @@ body {
   padding: 18px;
 }
 
+.department-tree-list {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--md-surface-container-low);
+}
+
+.department-tree-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  box-shadow: inset 0 -1px 0 var(--md-outline-variant);
+}
+
+.department-tree-list > div:last-child .department-tree-row:last-child {
+  box-shadow: none;
+}
+
+.department-tree-row:hover {
+  background: var(--md-surface-container);
+}
+
 .enterprise-settings-tabs {
   min-width: 0;
 }
@@ -462,6 +488,210 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.project-analysis-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.project-analysis-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.project-list-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.project-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-list-item {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: var(--md-surface-container-low);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.project-list-item:hover,
+.project-list-item.is-active {
+  background: var(--md-primary-container);
+}
+
+.project-list-item:hover {
+  transform: translateY(-1px);
+}
+
+.project-list-title,
+.project-list-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.project-list-title strong {
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.project-list-owner {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+}
+
+.project-analysis-main {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.project-analysis-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+
+.project-hero-actions {
+  justify-content: flex-end;
+}
+
+.project-focus-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.project-focus-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.project-focus-stats {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.project-focus-stats span {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--md-surface-container-low);
+  padding: 4px 10px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.project-focus-stats strong {
+  color: var(--md-on-surface);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.project-focus-summary {
+  max-width: 880px;
+  margin: 0;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.project-focus-summary.is-risk {
+  border-radius: var(--radius-card);
+  background: var(--md-error-container);
+  padding: 10px 12px;
+  color: var(--md-on-error-container);
+}
+
+.project-focus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.project-focus-title {
+  margin-bottom: 8px;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.project-focus-empty {
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.project-log-section {
+  display: grid;
+  gap: 12px;
+}
+
+.project-log-section .ant-table-wrapper {
+  min-width: 0;
+  overflow: auto;
+}
+
+.project-insight-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-insight-list li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.project-insight-list li::before {
+  position: absolute;
+  top: 0.72em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--md-primary);
+  content: "";
+}
+
+.project-insight-list.is-risk li {
+  color: var(--md-on-error-container);
+}
+
+.project-insight-list.is-risk li::before {
+  background: var(--md-error);
 }
 
 .link-row {
@@ -2116,6 +2346,21 @@ body {
 
   .worklog-entry-panel .ant-btn {
     width: 100%;
+  }
+
+  .project-analysis-toolbar,
+  .project-analysis-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-analysis-layout,
+  .project-focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-focus-stats {
+    justify-content: flex-start;
   }
 
   .workbench-hero,
