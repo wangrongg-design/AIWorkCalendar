@@ -30,6 +30,11 @@ export class OpsController {
     return this.opsService.resetAccountPassword(user, id);
   }
 
+  @Post("accounts/:id/company-admin")
+  restoreCompanyAdmin(@CurrentUserParam() user: CurrentUser, @Param("id") id: string) {
+    return this.opsService.restoreCompanyAdmin(user, id);
+  }
+
   @Delete("accounts/:id")
   deleteAccount(@CurrentUserParam() user: CurrentUser, @Param("id") id: string) {
     return this.opsService.deleteAccount(user, id);

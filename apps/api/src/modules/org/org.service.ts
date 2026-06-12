@@ -323,6 +323,8 @@ export class OrgService {
   async updateUser(user: CurrentUser, id: string, dto: UpdateUserDto) {
     this.access.assertCanManageOrg(user);
     const existing = await this.ensureUser(user.tenantId, id);
+    const nextRoles = dto.roles ? this.normalizeTenantRoleCodes(dto.roles) : null;
+    await this.assertCompanyAdminRetained(user, id, nextRoles, dto.isActive);
     if (dto.departmentId) {
       await this.ensureDepartment(user.tenantId, dto.departmentId);
     }
@@ -359,7 +361,7 @@ export class OrgService {
         requiresWorkReport: dto.requiresWorkReport
       }
     });
-    const assignedRoles = dto.roles ? await this.replaceRoles(user.tenantId, id, dto.roles) : null;
+    const assignedRoles = nextRoles ? await this.replaceRoles(user.tenantId, id, nextRoles) : null;
     await this.audit.log({
       tenantId: user.tenantId,
       actorUserId: user.id,
@@ -378,7 +380,7 @@ export class OrgService {
     return this.getUser(user.tenantId, id);
   }
 
-  private async replaceRoles(tenantId: string, userId: string, roleCodes: RoleCode[]) {
+  private normalizeTenantRoleCodes(roleCodes: RoleCode[]) {
     const normalizedRoleCodes = [...new Set(roleCodes)];
     if (normalizedRoleCodes.length !== 1) {
       throw new BadRequestException("请为成员选择一个企业内角色");
@@ -387,6 +389,58 @@ export class OrgService {
     if (!tenantRoleCodes.has(roleCode)) {
       throw new BadRequestException("平台超级管理员不能分配给企业成员");
     }
+    return normalizedRoleCodes;
+  }
+
+  private async assertCompanyAdminRetained(actor: CurrentUser, targetUserId: string, nextRoles: RoleCode[] | null, nextIsActive?: boolean) {
+    const removesCompanyAdmin = Boolean(nextRoles && !nextRoles.includes(RoleCode.COMPANY_ADMIN));
+    const deactivatesUser = nextIsActive === false;
+    if (!removesCompanyAdmin && !deactivatesUser) {
+      return;
+    }
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetUserId, tenantId: actor.tenantId, deletedAt: null },
+      select: {
+        id: true,
+        isActive: true,
+        roles: {
+          where: { deletedAt: null, role: { deletedAt: null } },
+          include: { role: true }
+        }
+      }
+    });
+    const targetIsActiveCompanyAdmin = Boolean(
+      target?.isActive && target.roles.some((userRole) => userRole.role.code === RoleCode.COMPANY_ADMIN)
+    );
+    if (!targetIsActiveCompanyAdmin) {
+      return;
+    }
+    if (actor.id === targetUserId) {
+      throw new BadRequestException("不能移除当前登录账号的企业管理员权限，请先指定另一个企业管理员后再操作");
+    }
+
+    const activeCompanyAdminCount = await this.prisma.user.count({
+      where: {
+        tenantId: actor.tenantId,
+        isActive: true,
+        deletedAt: null,
+        roles: {
+          some: {
+            deletedAt: null,
+            role: { code: RoleCode.COMPANY_ADMIN, deletedAt: null }
+          }
+        }
+      }
+    });
+    if (activeCompanyAdminCount <= 1) {
+      throw new BadRequestException("至少保留一个可登录的企业管理员，请先新增或指定另一个企业管理员后再修改");
+    }
+  }
+
+  private async replaceRoles(tenantId: string, userId: string, roleCodes: RoleCode[]) {
+    const normalizedRoleCodes = this.normalizeTenantRoleCodes(roleCodes);
+    const [roleCode] = normalizedRoleCodes;
     const roles = await this.prisma.role.findMany({
       where: { tenantId, code: roleCode, deletedAt: null }
     });

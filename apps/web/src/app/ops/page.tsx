@@ -5,7 +5,7 @@ import { Alert, Avatar, Button, Layout, Modal, Popconfirm, Space, Switch, Table,
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -100,6 +100,16 @@ function moneyText(amountCents?: number) {
   }).format(amountCents / 100);
 }
 
+function roleLabel(role: RoleCode) {
+  const labels: Record<RoleCode, string> = {
+    SUPER_ADMIN: "平台超管",
+    COMPANY_ADMIN: "企业管理员",
+    DEPARTMENT_MANAGER: "部门经理",
+    EMPLOYEE: "普通员工"
+  };
+  return labels[role];
+}
+
 export default function OpsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -157,6 +167,17 @@ export default function OpsPage() {
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "密码重置失败，请刷新账号列表后重试。");
+    }
+  });
+
+  const restoreCompanyAdmin = useMutation({
+    mutationFn: (id: string) => apiFetch<OpsAccount>(`/ops/accounts/${id}/company-admin`, { method: "POST" }),
+    onSuccess: (account) => {
+      message.success(`${account.name} 已设为企业管理员`);
+      queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "企业管理员维护失败，请刷新账号列表后重试。");
     }
   });
 
@@ -286,7 +307,7 @@ export default function OpsPage() {
         <Space wrap size={[4, 4]}>
           {record.roles.map((role) => (
             <Tag key={role} color={role === "SUPER_ADMIN" ? "purple" : role === "COMPANY_ADMIN" ? "blue" : "default"}>
-              {role}
+              {roleLabel(role)}
             </Tag>
           ))}
         </Space>
@@ -301,40 +322,59 @@ export default function OpsPage() {
     { title: "最近登录", width: 150, render: (_, record) => (record.lastLoginAt ? dayjs(record.lastLoginAt).format("YYYY-MM-DD HH:mm") : "-") },
     {
       title: "操作",
-      width: 280,
-      render: (_, record) => (
-        <Space wrap size={[8, 8]}>
-          <Switch
-            checked={record.isActive}
-            disabled={record.id === user?.id}
-            loading={updateAccount.isPending}
-            onChange={(checked) => updateAccount.mutate({ id: record.id, isActive: checked })}
-          />
-          <Popconfirm
-            title="确认重置这个账号的密码？"
-            description="系统会生成一次性临时密码，请通过安全渠道发送给本人。"
-            okText="确认重置"
-            cancelText="取消"
-            onConfirm={() => resetAccountPassword.mutate(record.id)}
-          >
-            <Button size="small" icon={<KeyRound size={14} />} loading={resetAccountPassword.isPending}>
-              重置密码
-            </Button>
-          </Popconfirm>
-          <Popconfirm
-            title="确认删除这个账号？"
-            description="删除后该账号不能登录，账号列表不再显示；历史填报、报告和审计记录会保留。"
-            okText="确认删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true, loading: deleteAccount.isPending }}
-            onConfirm={() => deleteAccount.mutate(record.id)}
-          >
-            <Button size="small" danger icon={<Trash2 size={14} />} loading={deleteAccount.isPending}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      )
+      width: 390,
+      render: (_, record) => {
+        const isHealthyCompanyAdmin = record.isActive && record.roles.length === 1 && record.roles.includes("COMPANY_ADMIN");
+        return (
+          <Space wrap size={[8, 8]}>
+            <Switch
+              checked={record.isActive}
+              disabled={record.id === user?.id}
+              loading={updateAccount.isPending}
+              onChange={(checked) => updateAccount.mutate({ id: record.id, isActive: checked })}
+            />
+            <Popconfirm
+              title="设为企业管理员？"
+              description="系统会启用该账号，清除登录锁定，并把角色调整为企业管理员。"
+              okText="设为企业管理员"
+              cancelText="取消"
+              onConfirm={() => restoreCompanyAdmin.mutate(record.id)}
+            >
+              <Button
+                size="small"
+                icon={<UserCog size={14} />}
+                disabled={isHealthyCompanyAdmin}
+                loading={restoreCompanyAdmin.isPending}
+              >
+                {isHealthyCompanyAdmin ? "企管正常" : "设为企管"}
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="确认重置这个账号的密码？"
+              description="系统会生成一次性临时密码，请通过安全渠道发送给本人。"
+              okText="确认重置"
+              cancelText="取消"
+              onConfirm={() => resetAccountPassword.mutate(record.id)}
+            >
+              <Button size="small" icon={<KeyRound size={14} />} loading={resetAccountPassword.isPending}>
+                重置密码
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="确认删除这个账号？"
+              description="删除后该账号不能登录，账号列表不再显示；历史填报、报告和审计记录会保留。"
+              okText="确认删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true, loading: deleteAccount.isPending }}
+              onConfirm={() => deleteAccount.mutate(record.id)}
+            >
+              <Button size="small" danger icon={<Trash2 size={14} />} loading={deleteAccount.isPending}>
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      }
     }
   ];
 
@@ -425,9 +465,14 @@ export default function OpsPage() {
 
         <section className="surface-panel bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <Typography.Title level={4} className="!m-0 !font-medium">
-              账号管理
-            </Typography.Title>
+            <div>
+              <Typography.Title level={4} className="!m-0 !font-medium">
+                账号管理
+              </Typography.Title>
+              <Typography.Text className="text-muted">
+                运维可恢复企业管理员权限、重置密码、启停账号；角色恢复会写入审计日志。
+              </Typography.Text>
+            </div>
             <Tag>最近 300 个账号</Tag>
           </div>
           <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.accounts ?? []} columns={accountColumns} pagination={{ pageSize: 10 }} />

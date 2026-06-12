@@ -4,7 +4,7 @@ const { dateKey } = require("../../utils/date");
 
 let chatMessageId = 0;
 
-const INITIAL_ASSISTANT_MESSAGE = "告诉我今天做了什么、花了多久，或明天计划做什么。我会整理成日报或计划草稿。";
+const INITIAL_ASSISTANT_MESSAGE = "今天你完成了什么？告诉我任务、项目、风险或工时，我会整理成可提交的日报。";
 
 function chatMessage(role, content) {
   chatMessageId += 1;
@@ -40,7 +40,7 @@ Page({
     todayRiskCount: 0,
     todayStatusIcon: "AI",
     todayConclusion: "今天还未完成填报",
-    todayRiskText: "先用一句话描述今天完成的事，AI 会整理标题、内容和工时。",
+    todayRiskText: "先用一句话描述今天完成的事，系统会整理标题、内容和工时。",
     savedDraftId: "",
     hasDraftContent: false,
     drafting: false,
@@ -124,15 +124,22 @@ Page({
       todayStatusIcon: riskCount > 0 ? "!" : "AI",
       todayConclusion: submitted > 0 ? `今天已提交 ${submitted} 条日报` : hasDraftContent ? "日报草稿已准备，等待确认提交" : "今天还未完成填报",
       todayRiskText: riskCount > 0
-        ? `AI 发现 ${riskCount} 个风险或阻塞，提交前建议补充处理动作。`
+        ? `发现 ${riskCount} 个风险或阻塞，提交前建议补充处理动作。`
         : submitted > 0
           ? "暂无明显风险，今日工作信号已进入团队看板。"
-          : "先用一句话描述今天完成的事，AI 会整理标题、内容和工时。"
+          : "先用一句话描述今天完成的事，系统会整理标题、内容和工时。"
     });
   },
 
   onChatInput(event) {
     this.setData({ chatInput: event.detail.value });
+  },
+
+  toggleVoiceInput() {
+    wx.showToast({
+      title: "语音转文字插件未启用，请先输入文字",
+      icon: "none"
+    });
   },
 
   async sendChatMessage(text) {

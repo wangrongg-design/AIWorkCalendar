@@ -20,7 +20,7 @@
 
   <view class="ios-card ai-card">
     <view class="section-title">今天你完成了什么？</view>
-    <view class="section-desc">一句话即可，AI 会整理成日报。</view>
+    <view class="section-desc">可以输入，也可以语音描述。</view>
 
     <view wx:if="{{chatMessages.length > 1}}" class="chat-list">
       <view wx:for="{{chatMessages}}" wx:key="id" class="chat-message {{item.role}}">
@@ -28,16 +28,28 @@
       </view>
     </view>
 
-    <textarea class="chat-input" value="{{chatInput}}" maxlength="2000" placeholder="例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时" bindinput="onChatInput" />
+    <view class="voice-input-row">
+      <textarea
+        class="chat-input"
+        value="{{chatInput}}"
+        maxlength="2000"
+        auto-height
+        placeholder="例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时"
+        bindinput="onChatInput"
+      />
+      <button class="voice-toggle" bindtap="toggleVoiceInput">
+        <view class="mic-icon"></view>
+      </button>
+    </view>
 
     <view class="chat-actions">
-      <button class="primary-button send-ai-button" loading="{{drafting}}" bindtap="sendChatMessage">AI 帮我整理日报</button>
+      <button class="primary-button send-ai-button" loading="{{drafting}}" disabled="{{!chatInput || drafting}}" bindtap="sendChatMessage">生成日报草稿</button>
     </view>
   </view>
 
   <view wx:if="{{hasDraftContent}}" class="ios-card draft-card">
     <view class="section-title">日报草稿</view>
-    <view class="section-desc">AI 生成后仍可手动校正，提交前请确认工时和项目。</view>
+    <view class="section-desc">生成后不会自动提交，请确认日期、工时、项目和内容。</view>
 
     <view class="editor-stack">
       <view class="field">
@@ -72,7 +84,7 @@
   </view>
 
   <view class="report-actions">
-    <button class="primary-button" loading="{{submitting}}" bindtap="submit">提交今日工作</button>
+    <button class="primary-button" loading="{{submitting}}" bindtap="submit">确认提交今日工作</button>
     <button class="secondary-button" loading="{{savingDraft}}" bindtap="saveDraft">保存为草稿</button>
     <button class="tertiary-button" bindtap="clearForm">清空</button>
   </view>

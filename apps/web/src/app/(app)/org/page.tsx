@@ -415,6 +415,18 @@ export default function OrgPage() {
       .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
   }, [org.data?.departments, departmentById]);
 
+  const activeCompanyAdminCount = useMemo(() => {
+    return (org.data?.users ?? []).filter((member) => member.isActive && member.roles.includes("COMPANY_ADMIN")).length;
+  }, [org.data?.users]);
+
+  const editingUserIsCompanyAdmin = Boolean(editingUser?.roles.includes("COMPANY_ADMIN"));
+  const editingUserIsCurrentUser = Boolean(editingUser && user?.id === editingUser.id);
+  const editingUserIsLastCompanyAdmin = Boolean(editingUser?.isActive && editingUserIsCompanyAdmin && activeCompanyAdminCount <= 1);
+  const adminRoleLocked = editingUserIsCompanyAdmin && (editingUserIsCurrentUser || editingUserIsLastCompanyAdmin);
+  const adminRoleLockMessage = editingUserIsCurrentUser
+    ? "不能修改当前登录账号的企业管理员角色或停用状态。请先指定另一个企业管理员，再由另一个管理员操作。"
+    : "这是当前企业唯一可登录的企业管理员，不能改为其他角色或停用。请先新增或指定另一个企业管理员。";
+
   const parentDepartmentSelectOptions = useMemo(() => {
     const disabledIds = new Set<string>();
     if (editingDepartment) {
@@ -1616,8 +1628,18 @@ export default function OrgPage() {
             message="邮箱和手机号至少填写一个。管理员等无需日报统计的账号，可关闭“需要填报”。"
             description={memberBillingHint}
           />
+          {adminRoleLocked ? (
+            <Alert
+              className="mb-4"
+              type="warning"
+              showIcon
+              message="企业管理员保护"
+              description={adminRoleLockMessage}
+            />
+          ) : null}
           <Form.Item name="role" label="主角色" rules={[{ required: true, message: "请选择一个企业内角色" }]}>
             <Select
+              disabled={adminRoleLocked}
               options={roleOptions.map(({ value, label }) => ({ value, label }))}
             />
           </Form.Item>
@@ -1634,7 +1656,7 @@ export default function OrgPage() {
           </Form.Item>
           {editingUser ? (
             <Form.Item name="isActive" label="账号启用" valuePropName="checked">
-              <Switch />
+              <Switch disabled={adminRoleLocked} />
             </Form.Item>
           ) : null}
         </Form>

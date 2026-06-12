@@ -188,6 +188,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/ops/accounts/") && url.pathname.endsWith("/reset-password")) {
       return json(res, resetOpsAccountPassword(requireUser(currentUser), url.pathname.split("/")[3]));
     }
+    if (req.method === "POST" && url.pathname.startsWith("/ops/accounts/") && url.pathname.endsWith("/company-admin")) {
+      return json(res, restoreOpsCompanyAdmin(requireUser(currentUser), url.pathname.split("/")[3]));
+    }
     if (req.method === "DELETE" && url.pathname.startsWith("/ops/accounts/")) {
       return json(res, deleteOpsAccount(requireUser(currentUser), lastPath(url.pathname)));
     }
@@ -1194,6 +1197,40 @@ function resetOpsAccountPassword(user, accountId) {
   };
 }
 
+function restoreOpsCompanyAdmin(user, accountId) {
+  requireRole(user, ["SUPER_ADMIN"]);
+  const target = users.find((item) => item.id === accountId && isOpsBusinessAccount(item));
+  if (!target) throw httpError(404, "Account not found");
+  target.roles = ["COMPANY_ADMIN"];
+  target.isActive = true;
+  target.failedLoginCount = 0;
+  target.lockedUntil = null;
+  target.updatedAt = new Date().toISOString();
+  audit(user, "OPS_ACCOUNT_COMPANY_ADMIN_RESTORED", "User", target.id, {
+    targetTenantId: target.tenantId,
+    email: target.email,
+    phone: target.phone,
+    name: target.name
+  });
+  const ownerTenant = tenants.find((candidate) => candidate.id === target.tenantId) ?? tenant;
+  return {
+    id: target.id,
+    tenantId: target.tenantId,
+    tenantName: ownerTenant.name,
+    tenantCode: ownerTenant.code,
+    tenantLogoUrl: ownerTenant.logoUrl ?? null,
+    email: target.email,
+    phone: target.phone ?? null,
+    name: target.name,
+    departmentName: departments.find((dept) => dept.id === target.departmentId && dept.tenantId === target.tenantId)?.name ?? null,
+    isActive: target.isActive,
+    requiresWorkReport: target.requiresWorkReport ?? true,
+    roles: target.roles,
+    lastLoginAt: target.lastLoginAt ?? null,
+    createdAt: target.createdAt
+  };
+}
+
 function deleteOpsAccount(user, accountId) {
   requireRole(user, ["SUPER_ADMIN"]);
   const target = users.find((item) => item.id === accountId && isOpsBusinessAccount(item));
@@ -1291,10 +1328,33 @@ function assertSeatAvailable(tenantId) {
   if (!summary.isUsable) throw httpError(400, "当前企业订阅不可用，请续费或联系平台管理员。");
 }
 
+function isActiveCompanyAdmin(item) {
+  return Boolean(item?.isActive && !item.deletedAt && item.roles?.includes("COMPANY_ADMIN"));
+}
+
+function activeCompanyAdminCount(tenantId) {
+  return users.filter((item) => item.tenantId === tenantId && isActiveCompanyAdmin(item)).length;
+}
+
+function assertCompanyAdminRetained(actor, target, nextRoles, nextIsActive) {
+  const removesCompanyAdmin = Boolean(nextRoles && !nextRoles.includes("COMPANY_ADMIN"));
+  const deactivatesUser = nextIsActive === false;
+  if (!removesCompanyAdmin && !deactivatesUser) return;
+  if (!isActiveCompanyAdmin(target)) return;
+  if (actor.id === target.id) {
+    throw httpError(400, "不能移除当前登录账号的企业管理员权限，请先指定另一个企业管理员后再操作");
+  }
+  if (activeCompanyAdminCount(actor.tenantId) <= 1) {
+    throw httpError(400, "至少保留一个可登录的企业管理员，请先新增或指定另一个企业管理员后再修改");
+  }
+}
+
 function updateOrgUser(user, id, body) {
   requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
   const item = users.find((candidate) => candidate.id === id && candidate.tenantId === user.tenantId);
   if (!item) throw httpError(404, "User not found");
+  const nextRoles = body.roles === undefined ? null : normalizeTenantRoleCodes(body.roles);
+  assertCompanyAdminRetained(user, item, nextRoles, body.isActive);
   if (body.isActive === true && !item.isActive) assertSeatAvailable(user.tenantId);
   const nextEmail = body.email === undefined ? item.email : normalizeEmail(body.email);
   const nextPhone = body.phone === undefined ? item.phone : normalizePhone(body.phone);
@@ -1306,7 +1366,7 @@ function updateOrgUser(user, id, body) {
   if (body.phone !== undefined) item.phone = nextPhone;
   if (body.name !== undefined) item.name = body.name;
   if (body.departmentId !== undefined) item.departmentId = body.departmentId;
-  if (body.roles !== undefined) item.roles = normalizeTenantRoleCodes(body.roles);
+  if (nextRoles) item.roles = nextRoles;
   if (body.isActive !== undefined) item.isActive = body.isActive;
   if (body.requiresWorkReport !== undefined) item.requiresWorkReport = Boolean(body.requiresWorkReport);
   if (body.password) item.password = body.password;

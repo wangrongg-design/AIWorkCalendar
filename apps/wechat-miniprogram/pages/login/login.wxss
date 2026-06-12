@@ -83,48 +83,86 @@
 
 .password-toggle {
   position: relative;
+  width: 88rpx;
   flex: 0 0 88rpx;
   height: 88rpx;
+  min-width: 88rpx;
+  border: 0 !important;
+  border-radius: 18rpx;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.58);
   line-height: 88rpx;
+  padding: 0;
 }
 
-.eye-icon {
+.password-toggle::after {
+  border: 0;
+}
+
+.password-toggle.button-hover {
+  background: transparent !important;
+}
+
+.visibility-icon {
   position: relative;
-  width: 40rpx;
-  height: 26rpx;
-  border: 3rpx solid rgba(255, 255, 255, 0.52);
-  border-radius: 50%;
-  transform: rotate(-8deg);
+  width: 42rpx;
+  height: 42rpx;
+  color: rgba(255, 255, 255, 0.58);
 }
 
-.eye-icon.visible {
-  border-color: rgba(255, 255, 255, 0.72);
+.visibility-icon.shown {
+  color: rgba(255, 255, 255, 0.84);
 }
 
-.eye-pupil {
+.visibility-eye {
+  position: absolute;
+  left: 3rpx;
+  right: 3rpx;
+  top: 11rpx;
+  height: 20rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 50% / 58%;
+}
+
+.visibility-dot {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 10rpx;
   height: 10rpx;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.62);
+  background: currentColor;
   transform: translate(-50%, -50%);
 }
 
-.eye-icon.visible .eye-pupil {
-  background: #FFFFFF;
+.visibility-lid {
+  position: absolute;
+  left: 5rpx;
+  right: 5rpx;
+  top: 20rpx;
+  height: 4rpx;
+  border-radius: 999rpx;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: center;
 }
 
-.eye-slash {
-  position: absolute;
-  left: 18rpx;
-  top: -11rpx;
-  width: 4rpx;
-  height: 48rpx;
-  border-radius: 4rpx;
-  background: rgba(255, 255, 255, 0.62);
-  transform: rotate(52deg);
+.visibility-icon.hidden .visibility-eye {
+  height: 0;
+  top: 21rpx;
+  border-top: 4rpx solid currentColor;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 999rpx;
+}
+
+.visibility-icon.hidden .visibility-dot {
+  opacity: 0;
+}
+
+.visibility-icon.hidden .visibility-lid {
+  transform: scaleX(1);
 }
 
 .login-button {
@@ -146,6 +184,9 @@
 }
 
 .login-button[disabled] {
+  border-color: #424242 !important;
+  background: #2E2E2E !important;
+  color: #A3A3A3 !important;
   opacity: 1;
 }
 

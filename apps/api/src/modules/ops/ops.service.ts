@@ -246,6 +246,74 @@ export class OpsService {
     };
   }
 
+  async restoreCompanyAdmin(actor: CurrentUser, accountId: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { id: accountId, ...businessAccountWhere },
+      select: { id: true, tenantId: true, name: true, email: true, phone: true }
+    });
+    if (!existing) {
+      throw new NotFoundException("Account not found");
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const adminRole = await tx.role.upsert({
+        where: { tenantId_code: { tenantId: existing.tenantId, code: RoleCode.COMPANY_ADMIN } },
+        update: { name: "企业管理员", deletedAt: null },
+        create: { tenantId: existing.tenantId, code: RoleCode.COMPANY_ADMIN, name: "企业管理员" }
+      });
+      await tx.userRole.updateMany({
+        where: { tenantId: existing.tenantId, userId: accountId, roleId: { not: adminRole.id }, deletedAt: null },
+        data: { deletedAt: new Date() }
+      });
+      await tx.userRole.upsert({
+        where: { userId_roleId: { userId: accountId, roleId: adminRole.id } },
+        update: { tenantId: existing.tenantId, deletedAt: null },
+        create: { tenantId: existing.tenantId, userId: accountId, roleId: adminRole.id }
+      });
+      return tx.user.update({
+        where: { id: accountId },
+        data: {
+          isActive: true,
+          failedLoginCount: 0,
+          lockedUntil: null
+        },
+        include: {
+          tenant: { select: { id: true, name: true, code: true, logoUrl: true } },
+          department: { select: { id: true, name: true } },
+          roles: { where: { deletedAt: null }, include: { role: true } }
+        }
+      });
+    });
+    await this.audit.log({
+      tenantId: existing.tenantId,
+      actorUserId: actor.isPlatformOps ? null : actor.id,
+      action: "OPS_ACCOUNT_COMPANY_ADMIN_RESTORED",
+      targetType: "User",
+      targetId: accountId,
+      metadata: {
+        targetTenantId: existing.tenantId,
+        email: existing.email,
+        phone: existing.phone,
+        name: existing.name
+      }
+    });
+    return {
+      id: updated.id,
+      tenantId: updated.tenantId,
+      tenantName: updated.tenant.name,
+      tenantCode: updated.tenant.code,
+      tenantLogoUrl: updated.tenant.logoUrl,
+      email: updated.email,
+      phone: updated.phone,
+      name: updated.name,
+      departmentName: updated.department?.name ?? null,
+      isActive: updated.isActive,
+      requiresWorkReport: updated.requiresWorkReport,
+      roles: updated.roles.map((item) => item.role.code),
+      lastLoginAt: updated.lastLoginAt,
+      createdAt: updated.createdAt
+    };
+  }
+
   async deleteAccount(actor: CurrentUser, accountId: string) {
     const existing = await this.prisma.user.findFirst({
       where: { id: accountId, ...businessAccountWhere },

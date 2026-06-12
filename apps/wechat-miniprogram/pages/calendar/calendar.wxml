@@ -9,206 +9,63 @@
         <view class="refresh-icon"></view>
       </button>
     </view>
+  </view>
 
-    <view wx:if="{{supportsTeamMode}}" class="segmented-control mode-switch">
+  <view class="daily-status-card">
+    <view class="status-main">
+      <view class="status-icon {{todayBrief.tone}}"></view>
+      <view class="status-copy">
+        <view class="status-title">{{todayBrief.title}}</view>
+        <view class="status-summary">{{todayBrief.summary}}</view>
+      </view>
+    </view>
+    <view class="status-message {{todayBrief.tone}}">{{todayBrief.message}}</view>
+  </view>
+
+  <view class="week-overview">
+    <view class="section-title">本周概览</view>
+    <view class="brief-metrics">
+      <view wx:for="{{weekMetrics}}" wx:key="label" class="brief-metric {{item.tone}}">
+        <view class="brief-value">{{item.value}}</view>
+        <view class="brief-label">{{item.label}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="attention-section">
+    <view class="section-title">需要关注</view>
+    <view class="brief-list">
+      <view wx:if="{{!hasAttention}}" class="empty-row">
+        <view class="empty-icon success"></view>
+        <view class="empty-text">暂无需要关注的问题</view>
+      </view>
       <view
-        wx:for="{{homeModeOptions}}"
-        wx:key="value"
-        class="segmented-item {{homeModeIndex === index ? 'active' : ''}}"
-        data-index="{{index}}"
-        bindtap="onHomeModeTap"
-      >
-        {{item.label}}
-      </view>
-    </view>
-  </view>
-
-  <view class="hero-card">
-    <view class="hero-topline">
-      <view class="hero-kicker {{hero.kickerTone}}">{{hero.kicker}}</view>
-      <button class="ai-pill" data-action="openAIInsight" bindtap="onActionTap">
-        <view class="spark-icon"></view>
-        <text>AI洞察</text>
-      </button>
-    </view>
-    <view class="hero-title">{{hero.title}}</view>
-    <view class="hero-subtitle">{{hero.subtitle}}</view>
-
-    <view class="hero-metrics">
-      <view wx:for="{{heroMetrics}}" wx:key="title" class="hero-metric">
-        <text>{{item.title}}</text>
-        <text class="{{item.tone}}">{{item.value}}</text>
-      </view>
-    </view>
-
-    <button class="hero-primary" data-action="{{hero.primaryAction}}" bindtap="onActionTap">
-      {{hero.primaryTitle}}
-    </button>
-  </view>
-
-  <view class="assistant-card">
-    <view class="assistant-label">
-      <view class="spark-icon"></view>
-      <text>AI 快捷处理</text>
-    </view>
-    <view class="assistant-input-row">
-      <input
-        class="assistant-input"
-        value="{{assistantInput}}"
-        placeholder="问 AI 今天有什么需要处理？"
-        bindinput="onAssistantInput"
-        confirm-type="send"
-        bindconfirm="submitAssistant"
-      />
-      <button class="assistant-send {{canSubmitAssistant ? 'enabled' : ''}}" disabled="{{!canSubmitAssistant}}" bindtap="submitAssistant">
-        ↑
-      </button>
-    </view>
-    <view class="quick-command-row">
-      <button
-        wx:for="{{quickCommands}}"
+        wx:for="{{attentionItems}}"
         wx:key="id"
-        class="quick-command {{item.tone}}"
-        data-command="{{item.title}}"
-        bindtap="quickCommand"
-      >
-        {{item.title}}
-      </button>
-    </view>
-
-    <view wx:if="{{hasAssistantReply}}" class="assistant-reply">
-      <view class="reply-head">
-        <view class="reply-icon"></view>
-        <view>
-          <view class="reply-title">{{assistantReplyTitle}}</view>
-          <view class="reply-text">{{assistantReplyText}}</view>
-        </view>
-      </view>
-      <view class="reply-actions">
-        <view
-          wx:for="{{assistantReplyActions}}"
-          wx:key="id"
-          class="reply-action"
-          data-action="{{item.id}}"
-          bindtap="onActionTap"
-        >
-          <text class="{{item.tone}}">{{item.title}}</text>
-          <view class="chevron">›</view>
-        </view>
-      </view>
-    </view>
-  </view>
-
-  <view class="week-card">
-    <view class="week-header">
-      <view>
-        <view class="section-title">本周节奏</view>
-        <view class="section-desc">{{weekRangeTitle}}</view>
-      </view>
-      <view class="week-nav">
-        <button bindtap="previousWeek">‹</button>
-        <button class="current" bindtap="currentWeek">本周</button>
-        <button bindtap="nextWeek">›</button>
-      </view>
-    </view>
-    <scroll-view scroll-x class="week-strip">
-      <view class="week-strip-inner">
-        <view
-          wx:for="{{weekItems}}"
-          wx:key="id"
-          class="day-chip {{item.isSelected ? 'selected' : ''}} {{item.isToday ? 'today' : ''}}"
-          data-date="{{item.dateKey}}"
-          bindtap="selectWeekDay"
-        >
-          <view class="weekday">{{item.weekdayShort}}</view>
-          <view class="day-number">
-            <text>{{item.dayNumber}}</text>
-            <view wx:if="{{item.riskCount > 0}}" class="risk-dot">{{item.riskCount}}</view>
-          </view>
-          <view class="status-dot {{item.statusTone}}"></view>
-        </view>
-      </view>
-    </scroll-view>
-  </view>
-
-  <view class="priority-section">
-    <view class="section-row">
-      <view>
-        <view class="section-title">{{isManagerHome ? '重点日期' : '本周重点'}}</view>
-        <view class="section-desc">{{isManagerHome ? '只展示风险最高或缺填最多的日期' : '默认只显示今天、选中日期和有风险的日期'}}</view>
-      </view>
-      <button wx:if="{{weekItems.length > priorityDays.length || showAllPriorityDays}}" class="small-link" bindtap="togglePriorityDays">
-        {{priorityToggleText}}
-      </button>
-    </view>
-
-    <view wx:if="{{!priorityDays.length}}" class="week-empty">
-      {{isManagerHome ? '本周暂无风险或缺填，继续关注每日填报节奏。' : '本周暂无风险，今天完成填报即可。'}}
-    </view>
-
-    <view wx:for="{{priorityDays}}" wx:key="id" class="date-card {{item.emphasized ? 'emphasized' : ''}} {{item.isSelected ? 'selected' : ''}}">
-      <view class="date-card-main" data-date="{{item.dateKey}}" bindtap="openDay">
-        <view class="date-card-copy">
-          <view class="date-title">
-            <text>{{item.fullDateText}}</text>
-            <view wx:if="{{item.isToday}}" class="today-badge">今天</view>
-          </view>
-          <view class="date-summary">{{item.summaryText}}</view>
-          <view class="progress-track">
-            <view class="progress-bar {{item.statusTone}}" style="width: {{item.progressPercent}}%;"></view>
-          </view>
-        </view>
-        <view class="date-status">
-          <view class="status-badge {{item.statusTone}}">{{item.statusTitle}}</view>
-          <view class="date-link">{{item.riskCount > 0 ? '风险' : '查看'}} ›</view>
-        </view>
-      </view>
-      <button
-        wx:if="{{item.canCreatePlan}}"
-        class="plan-button"
-        data-action="createReport"
+        class="attention-row"
         data-date="{{item.dateKey}}"
-        bindtap="onActionTap"
+        bindtap="openAttention"
       >
-        填写计划
-      </button>
+        <view class="row-icon {{item.tone}}"></view>
+        <view class="row-copy">
+          <view class="row-title">{{item.title}}</view>
+          <view class="row-subtitle">{{item.subtitle}}</view>
+        </view>
+        <view class="chevron">›</view>
+      </view>
     </view>
   </view>
 
-  <view wx:if="{{riskSignals.length}}" class="risk-section">
-    <view class="section-row">
-      <view>
-        <view class="section-title">最近风险记录</view>
-        <view class="section-desc">按本周风险日期聚合，点击进入当天详情。</view>
-      </view>
-      <view class="risk-count">{{riskSignals.length}} 天</view>
+  <view class="recent-section">
+    <view class="section-head">
+      <view class="section-title">最近记录</view>
+      <button class="text-link" bindtap="openLogs">查看全部</button>
     </view>
-    <view
-      wx:for="{{riskSignals}}"
-      wx:key="id"
-      class="risk-row"
-      data-date="{{item.dateKey}}"
-      bindtap="openDay"
-    >
-      <view class="risk-accent"></view>
-      <view class="risk-copy">
-        <view class="risk-title">{{item.fullDateText}}</view>
-        <view class="risk-desc">{{item.summaryText}}</view>
+    <view class="brief-list">
+      <view wx:if="{{!hasRecentLogs}}" class="empty-row">
+        <view class="empty-icon document"></view>
+        <view class="empty-text">提交日报后，这里会显示最近 3 条记录。</view>
       </view>
-      <view class="risk-badge">风险 {{item.riskCount}}</view>
-    </view>
-  </view>
-
-  <view wx:if="{{!isManagerHome}}" class="recent-section">
-    <view class="section-row">
-      <view>
-        <view class="section-title">最近记录</view>
-        <view class="section-desc">只保留最近 3 条，完整记录去填报记录查看。</view>
-      </view>
-      <button class="small-link" data-action="openLogs" bindtap="onActionTap">查看全部</button>
-    </view>
-    <view class="recent-list">
-      <view wx:if="{{!recentLogs.length}}" class="recent-empty">提交日报后，这里会显示最近记录。</view>
       <view
         wx:for="{{recentLogs}}"
         wx:key="id"
@@ -216,11 +73,12 @@
         data-id="{{item.id}}"
         bindtap="openLogDetail"
       >
-        <view class="recent-copy">
-          <view class="recent-title">{{item.title}}</view>
-          <view class="recent-meta">{{item.meta}}</view>
+        <view class="row-copy">
+          <view class="row-title">{{item.title}}</view>
+          <view class="row-subtitle">{{item.meta}}</view>
         </view>
-        <view class="status-badge {{item.statusTone}}">{{item.statusTitle}}</view>
+        <view wx:if="{{item.hasRisk}}" class="risk-badge">风险</view>
+        <view wx:else class="chevron">›</view>
       </view>
     </view>
   </view>

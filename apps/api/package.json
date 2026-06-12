@@ -12,6 +12,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "report-requirements:backfill": "tsx prisma/backfill-report-requirements.ts",
+    "account:restore-admin": "tsx prisma/restore-company-admin.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "prisma": {

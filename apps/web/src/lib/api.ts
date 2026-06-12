@@ -52,6 +52,12 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   if (normalized.includes("user not found")) {
     return "没有找到这个账号，可能账号不存在或已停用。请检查账号，或联系企业管理员。";
   }
+  if (normalized.includes("account not found")) {
+    return "没有找到这个账号，可能账号已删除或不属于当前运维范围。请刷新账号列表后重试。";
+  }
+  if (normalized.includes("cannot deactivate your own ops account")) {
+    return "不能停用当前登录的运维账号。";
+  }
   if (normalized.includes("tenant not found")) {
     return "没有找到对应企业，请检查统一社会信用代码或企业信息后重试。";
   }
@@ -72,6 +78,24 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   }
   if (normalized.includes("当前密码不正确")) {
     return "当前密码不正确，请重新输入旧密码后再更新。";
+  }
+  if (normalized.includes("邮箱或手机号已被当前企业其他账号使用")) {
+    return "邮箱或手机号已被当前企业其他账号使用，请更换联系方式后再保存。";
+  }
+  if (normalized.includes("手机号格式不正确")) {
+    return "手机号格式不正确，请输入 6 到 20 位数字，国际号码可加 +。";
+  }
+  if (normalized.includes("请为成员选择一个企业内角色")) {
+    return "请选择一个有效的企业内角色后再保存。";
+  }
+  if (normalized.includes("不能移除当前登录账号的企业管理员权限")) {
+    return "不能移除当前登录账号的企业管理员权限。请先指定另一个企业管理员后再操作。";
+  }
+  if (normalized.includes("至少保留一个可登录的企业管理员")) {
+    return "至少保留一个可登录的企业管理员。请先新增或指定另一个企业管理员后再修改。";
+  }
+  if (normalized.includes("当前企业订阅不可用")) {
+    return "当前企业订阅不可用，请续费或联系平台管理员后再新增或启用员工。";
   }
   if (normalized.includes("live payments must be confirmed") || normalized.includes("provider callback")) {
     return "生产支付需要等待支付平台回调确认，请完成扫码支付后稍等几秒并刷新支付状态。";

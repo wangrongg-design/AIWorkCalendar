@@ -95,16 +95,66 @@
   color: #1A1A1A;
 }
 
-.chat-input {
-  width: 100%;
-  min-height: 132rpx;
+.voice-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12rpx;
   margin-top: 24rpx;
+}
+
+.chat-input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  min-height: 104rpx;
+  max-height: 196rpx;
+  border: 1rpx solid #E6E6E6;
   border-radius: 16rpx;
-  background: #F6F6F6;
+  background: #FFFFFF;
   padding: 20rpx 22rpx;
   color: #1A1A1A;
   font-size: 27rpx;
   line-height: 1.5;
+}
+
+.voice-toggle {
+  width: 104rpx;
+  height: 104rpx;
+  flex: 0 0 104rpx;
+  border: 1rpx solid #E6E6E6;
+  border-radius: 24rpx;
+  background: #FFFFFF;
+  color: #2E2E2E;
+}
+
+.mic-icon {
+  position: relative;
+  width: 42rpx;
+  height: 54rpx;
+}
+
+.mic-icon::before {
+  position: absolute;
+  left: 12rpx;
+  top: 0;
+  width: 18rpx;
+  height: 30rpx;
+  border: 5rpx solid currentColor;
+  border-radius: 18rpx;
+  content: "";
+}
+
+.mic-icon::after {
+  position: absolute;
+  left: 6rpx;
+  top: 28rpx;
+  width: 30rpx;
+  height: 20rpx;
+  border: 5rpx solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 20rpx 20rpx;
+  box-shadow: 12rpx 20rpx 0 -10rpx currentColor;
+  content: "";
 }
 
 .chat-actions {
@@ -114,6 +164,12 @@
 .send-ai-button {
   background: #0B57D0;
   color: #FFFFFF;
+}
+
+.send-ai-button[disabled] {
+  background: #F6F6F6;
+  color: #A3A3A3;
+  opacity: 1;
 }
 
 .editor-stack {
