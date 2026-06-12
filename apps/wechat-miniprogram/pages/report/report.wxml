@@ -20,7 +20,7 @@
 
   <view class="ios-card ai-card">
     <view class="section-title">今天你完成了什么？</view>
-    <view class="section-desc">可以输入，也可以语音描述。</view>
+    <view class="section-desc">用一句话描述今天完成的事，系统会整理成日报草稿。</view>
 
     <view wx:if="{{chatMessages.length > 1}}" class="chat-list">
       <view wx:for="{{chatMessages}}" wx:key="id" class="chat-message {{item.role}}">
@@ -28,7 +28,7 @@
       </view>
     </view>
 
-    <view class="voice-input-row">
+    <view class="report-input-row">
       <textarea
         class="chat-input"
         value="{{chatInput}}"
@@ -37,9 +37,6 @@
         placeholder="例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时"
         bindinput="onChatInput"
       />
-      <button class="voice-toggle" bindtap="toggleVoiceInput">
-        <view class="mic-icon"></view>
-      </button>
     </view>
 
     <view class="chat-actions">
@@ -83,7 +80,7 @@
     </view>
   </view>
 
-  <view class="report-actions">
+  <view wx:if="{{hasDraftContent}}" class="report-actions">
     <button class="primary-button" loading="{{submitting}}" bindtap="submit">确认提交今日工作</button>
     <button class="secondary-button" loading="{{savingDraft}}" bindtap="saveDraft">保存为草稿</button>
     <button class="tertiary-button" bindtap="clearForm">清空</button>

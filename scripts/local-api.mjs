@@ -185,6 +185,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "PATCH" && url.pathname.startsWith("/ops/tenants/") && url.pathname.endsWith("/logo")) {
       return json(res, updateOpsTenantLogo(requireUser(currentUser), url.pathname.split("/")[3], body));
     }
+    if (route === "POST /ops/accounts/company-admin") {
+      return json(res, createOpsCompanyAdmin(requireUser(currentUser), body));
+    }
     if (req.method === "POST" && url.pathname.startsWith("/ops/accounts/") && url.pathname.endsWith("/reset-password")) {
       return json(res, resetOpsAccountPassword(requireUser(currentUser), url.pathname.split("/")[3]));
     }
@@ -1164,6 +1167,65 @@ function updateOpsAccount(user, accountId, body) {
     roles: target.roles,
     lastLoginAt: target.lastLoginAt ?? null,
     createdAt: target.createdAt
+  };
+}
+
+function createOpsCompanyAdmin(user, body) {
+  requireRole(user, ["SUPER_ADMIN"]);
+  const targetTenant = tenants.find((item) => item.id === body.tenantId && !item.deletedAt);
+  if (!targetTenant) throw httpError(404, "Tenant not found");
+  const name = String(body.name ?? "").trim();
+  if (name.length < 2) throw httpError(400, "姓名至少 2 个字符");
+  const email = normalizeEmail(body.email);
+  const phone = normalizePhone(body.phone);
+  assertContact(email, phone);
+  const matchingUsers = users.filter((item) => item.tenantId === targetTenant.id && matchesContact(item, email, phone));
+  const activeConflict = matchingUsers.find((item) => !item.deletedAt);
+  if (activeConflict) throw httpError(400, "邮箱或手机号已被当前企业其他账号使用");
+  const deletedMatches = Array.from(new Set(matchingUsers.map((item) => item.id)));
+  if (deletedMatches.length > 1) throw httpError(400, "邮箱和手机号分别匹配到不同的已删除账号，请更换联系方式或联系运维处理");
+  const temporaryPassword = generateTemporaryPassword();
+  const target = deletedMatches[0]
+    ? users.find((item) => item.id === deletedMatches[0])
+    : makeUser(`user-${Date.now()}`, email, name, null, ["COMPANY_ADMIN"], targetTenant.id, temporaryPassword, phone, false);
+  if (!target) throw httpError(404, "Account not found");
+  target.tenantId = targetTenant.id;
+  target.email = email;
+  target.phone = phone;
+  target.name = name;
+  target.departmentId = null;
+  target.roles = ["COMPANY_ADMIN"];
+  target.password = temporaryPassword;
+  target.isActive = true;
+  target.requiresWorkReport = false;
+  target.failedLoginCount = 0;
+  target.lockedUntil = null;
+  target.deletedAt = null;
+  target.updatedAt = new Date().toISOString();
+  if (!deletedMatches[0]) users.push(target);
+  audit(user, "OPS_COMPANY_ADMIN_CREATED", "User", target.id, {
+    targetTenantId: targetTenant.id,
+    tenantCode: targetTenant.code,
+    email,
+    phone,
+    name: target.name
+  });
+  return {
+    id: target.id,
+    tenantId: target.tenantId,
+    tenantName: targetTenant.name,
+    tenantCode: targetTenant.code,
+    tenantLogoUrl: targetTenant.logoUrl ?? null,
+    email: target.email,
+    phone: target.phone ?? null,
+    name: target.name,
+    departmentName: null,
+    isActive: target.isActive,
+    requiresWorkReport: target.requiresWorkReport ?? true,
+    roles: target.roles,
+    lastLoginAt: target.lastLoginAt ?? null,
+    createdAt: target.createdAt,
+    temporaryPassword
   };
 }
 

@@ -135,13 +135,6 @@ Page({
     this.setData({ chatInput: event.detail.value });
   },
 
-  toggleVoiceInput() {
-    wx.showToast({
-      title: "语音转文字插件未启用，请先输入文字",
-      icon: "none"
-    });
-  },
-
   async sendChatMessage(text) {
     const content = (typeof text === "string" ? text : this.data.chatInput).trim();
     if (!content) {

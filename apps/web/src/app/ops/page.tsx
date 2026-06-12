@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Avatar, Button, Layout, Modal, Popconfirm, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
+import { Alert, Avatar, Button, Form, Input, Layout, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
@@ -57,6 +57,13 @@ type OpsAccount = {
 
 type OpsPasswordResetResult = OpsAccount & {
   temporaryPassword: string;
+};
+
+type OpsCompanyAdminForm = {
+  tenantId: string;
+  name: string;
+  email?: string;
+  phone?: string;
 };
 
 type OpsOverview = {
@@ -117,9 +124,11 @@ export default function OpsPage() {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
   const isOps = Boolean(user?.roles.includes("SUPER_ADMIN"));
+  const [companyAdminForm] = Form.useForm<OpsCompanyAdminForm>();
   const [logoTenant, setLogoTenant] = useState<OpsTenant | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
+  const [companyAdminModalOpen, setCompanyAdminModalOpen] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -167,6 +176,41 @@ export default function OpsPage() {
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "密码重置失败，请刷新账号列表后重试。");
+    }
+  });
+
+  const createCompanyAdmin = useMutation({
+    mutationFn: (values: OpsCompanyAdminForm) =>
+      apiFetch<OpsPasswordResetResult>("/ops/accounts/company-admin", {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: values.tenantId,
+          name: values.name.trim(),
+          email: values.email?.trim() || undefined,
+          phone: values.phone?.trim() || undefined
+        })
+      }),
+    onSuccess: (data) => {
+      setCompanyAdminModalOpen(false);
+      companyAdminForm.resetFields();
+      Modal.info({
+        title: `${data.name} 的企业管理员账号已创建`,
+        content: (
+          <Space direction="vertical" size={8}>
+            <Typography.Text>
+              {data.tenantName} · {[data.phone, data.email].filter(Boolean).join(" / ")}
+            </Typography.Text>
+            <Typography.Text>请仅通过安全渠道发送临时密码，并提醒对方登录后立即修改。</Typography.Text>
+            <Typography.Text code copyable>
+              {data.temporaryPassword}
+            </Typography.Text>
+          </Space>
+        )
+      });
+      queryClient.invalidateQueries({ queryKey: ["ops-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "企业管理员账号创建失败，请检查企业和联系方式后重试。");
     }
   });
 
@@ -231,6 +275,19 @@ export default function OpsPage() {
       message.error(error instanceof Error ? error.message : "企业 Logo 不符合规格，请使用 512 x 512px PNG 文件。");
     }
     return false;
+  };
+
+  const submitCompanyAdminForm = (values: OpsCompanyAdminForm) => {
+    const email = values.email?.trim();
+    const phone = values.phone?.trim();
+    if (!email && !phone) {
+      companyAdminForm.setFields([
+        { name: "email", errors: ["邮箱和手机号至少填写一个"] },
+        { name: "phone", errors: ["邮箱和手机号至少填写一个"] }
+      ]);
+      return;
+    }
+    createCompanyAdmin.mutate(values);
   };
 
   const tenantColumns: ColumnsType<OpsTenant> = [
@@ -470,14 +527,83 @@ export default function OpsPage() {
                 账号管理
               </Typography.Title>
               <Typography.Text className="text-muted">
-                运维可恢复企业管理员权限、重置密码、启停账号；角色恢复会写入审计日志。
+                运维可新增和恢复企业管理员权限、重置密码、启停账号；关键操作会写入审计日志。
               </Typography.Text>
             </div>
-            <Tag>最近 300 个账号</Tag>
+            <Space>
+              <Tag>最近 300 个账号</Tag>
+              <Button
+                type="primary"
+                icon={<UserCog size={16} />}
+                onClick={() => {
+                  companyAdminForm.resetFields();
+                  setCompanyAdminModalOpen(true);
+                }}
+              >
+                新增企管
+              </Button>
+            </Space>
           </div>
           <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.accounts ?? []} columns={accountColumns} pagination={{ pageSize: 10 }} />
         </section>
       </main>
+
+      <Modal
+        title="新增企业管理员账号"
+        open={companyAdminModalOpen}
+        onCancel={() => {
+          setCompanyAdminModalOpen(false);
+          companyAdminForm.resetFields();
+        }}
+        onOk={() => companyAdminForm.submit()}
+        confirmLoading={createCompanyAdmin.isPending}
+        okText="创建账号"
+      >
+        <Alert
+          className="mb-4"
+          type="info"
+          showIcon
+          message="系统会自动生成临时密码"
+          description="新账号会被设为启用状态，并只分配企业管理员角色。创建后请通过安全渠道发送临时密码。"
+        />
+        <Form form={companyAdminForm} layout="vertical" onFinish={submitCompanyAdminForm}>
+          <Form.Item name="tenantId" label="企业" rules={[{ required: true, message: "请选择企业" }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择企业"
+              options={(overview.data?.tenants ?? []).map((tenant) => ({
+                value: tenant.id,
+                label: `${tenant.name} · ${tenant.code}`
+              }))}
+            />
+          </Form.Item>
+          <Form.Item name="name" label="姓名" rules={[{ required: true, min: 2, message: "请输入至少 2 个字符的姓名" }]}>
+            <Input placeholder="例如：齐鹏飞" />
+          </Form.Item>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Form.Item
+              name="phone"
+              label="手机号"
+              rules={[
+                {
+                  validator: async (_, value?: string) => {
+                    const phone = value?.trim().replace(/[\s-]/g, "");
+                    if (phone && !/^\+?\d{6,20}$/.test(phone)) {
+                      throw new Error("请输入 6 到 20 位数字，国际号码可加 +");
+                    }
+                  }
+                }
+              ]}
+            >
+              <Input placeholder="13900000000" />
+            </Form.Item>
+            <Form.Item name="email" label="邮箱" rules={[{ type: "email", message: "请输入有效邮箱" }]}>
+              <Input placeholder="name@example.com" />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
 
       <Modal
         title="修改企业 Logo"
