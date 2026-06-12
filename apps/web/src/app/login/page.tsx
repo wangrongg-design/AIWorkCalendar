@@ -245,7 +245,7 @@ export default function LoginPage() {
           <Form.Item name="token" label="重置令牌" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 6 }]}>
+          <Form.Item name="newPassword" label="新密码" rules={[{ required: true }, { min: 6, message: "新密码至少 6 位" }]}>
             <Input.Password />
           </Form.Item>
           <Button type="primary" htmlType="submit" block loading={confirmPasswordReset.isPending}>

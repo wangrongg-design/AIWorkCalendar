@@ -18,7 +18,7 @@ export class PasswordResetConfirmDto {
   token: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(6)
   newPassword: string;
 }
 
@@ -27,7 +27,7 @@ export class ChangePasswordDto {
   currentPassword: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(6)
   newPassword: string;
 }
 

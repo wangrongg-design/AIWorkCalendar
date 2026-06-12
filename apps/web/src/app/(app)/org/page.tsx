@@ -1446,7 +1446,7 @@ export default function OrgPage() {
                             <Form.Item name="currentPassword" label="当前密码" rules={[{ required: true }]}>
                               <Input.Password />
                             </Form.Item>
-                            <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 6 }]}>
+                            <Form.Item name="newPassword" label="新密码" rules={[{ required: true }, { min: 6, message: "新密码至少 6 位" }]}>
                               <Input.Password />
                             </Form.Item>
                             <Button type="primary" htmlType="submit" icon={<KeyRound size={16} />} loading={changePassword.isPending}>

@@ -79,6 +79,12 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   if (normalized.includes("当前密码不正确")) {
     return "当前密码不正确，请重新输入旧密码后再更新。";
   }
+  if (
+    normalized.includes("newpassword") &&
+    (normalized.includes("6") || normalized.includes("longer than or equal"))
+  ) {
+    return "新密码至少 6 位，请重新设置。";
+  }
   if (normalized.includes("请至少填写邮箱或手机号")) {
     return "邮箱和手机号至少填写一个，请补充联系方式后再保存。";
   }
