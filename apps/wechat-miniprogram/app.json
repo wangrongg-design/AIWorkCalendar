@@ -18,6 +18,17 @@
     "backgroundColor": "#F6F6F6",
     "backgroundTextStyle": "dark"
   },
+  "plugins": {
+    "WechatSI": {
+      "version": "0.3.5",
+      "provider": "wx069ba97219f66d99"
+    }
+  },
+  "permission": {
+    "scope.record": {
+      "desc": "用于语音输入并转换为日报文字"
+    }
+  },
   "tabBar": {
     "custom": true,
     "color": "#737373",

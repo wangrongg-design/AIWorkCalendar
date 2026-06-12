@@ -237,6 +237,8 @@ export type WorkLog = {
   hours: string | number;
   status: WorkLogStatus;
   submittedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   projectId?: string | null;
   project?: Project | null;
   attachments?: WorkLogAttachment[];

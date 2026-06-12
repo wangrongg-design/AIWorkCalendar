@@ -36,7 +36,8 @@
     </view>
 
     <view wx:if="{{log.hasAnalysis}}" class="surface ai-detail-section">
-      <view class="ai-kicker">AI 分析</view>
+      <view class="ai-generated-disclosure">人工智能生成分析</view>
+      <view class="ai-kicker">结构化分析</view>
       <view wx:if="{{log.aiSummary}}" class="ai-summary">{{log.aiSummary}}</view>
       <view wx:if="{{log.achievements.length}}" class="analysis-block">
         <view class="analysis-title">成果</view>

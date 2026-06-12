@@ -220,12 +220,12 @@ struct ReportEntryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                    if let user = auth.user {
-                        WorkContextHeader(user: user)
-                    }
-
-                    TodayStatusPanel(viewModel: viewModel)
+                VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
+                    ReportEntryBriefHeader(
+                        selectedDate: viewModel.selectedDate,
+                        hasDraft: viewModel.hasDraftContent,
+                        isRecording: voiceInput.isRecording
+                    )
 
                     AIDraftComposer(
                         viewModel: viewModel,
@@ -239,14 +239,13 @@ struct ReportEntryView: View {
 
                     if viewModel.hasDraftContent {
                         DailyDraftEditor(viewModel: viewModel)
-                    }
-
-                    ReportActionPanel(viewModel: viewModel) {
-                        Task { await viewModel.saveDraft(auth: auth) }
-                    } onSubmit: {
-                        Task { await viewModel.submit(auth: auth) }
-                    } onClear: {
-                        viewModel.clearForm()
+                        ReportActionPanel(viewModel: viewModel) {
+                            Task { await viewModel.saveDraft(auth: auth) }
+                        } onSubmit: {
+                            Task { await viewModel.submit(auth: auth) }
+                        } onClear: {
+                            viewModel.clearForm()
+                        }
                     }
                 }
                 .padding(AITheme.Spacing.lg)
@@ -254,19 +253,8 @@ struct ReportEntryView: View {
             }
             .background(AITheme.ColorToken.appBackground)
             .appTabBarContentInset(AITheme.Spacing.lg)
-            .navigationTitle("今日")
+            .navigationTitle("填报")
             .compactNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await viewModel.load(auth: auth) }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(viewModel.isLoadingProjects)
-                    .accessibilityLabel("刷新项目")
-                }
-            }
             .task {
                 applyPrefillDate()
                 await viewModel.load(auth: auth)
@@ -346,6 +334,78 @@ struct ReportEntryView: View {
     }
 }
 
+private struct ReportEntryBriefHeader: View {
+    let selectedDate: Date
+    let hasDraft: Bool
+    let isRecording: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("今日填报")
+                        .font(AITheme.Typography.pageTitle)
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text("写一句，AI 整理成可提交日报。")
+                        .font(AITheme.Typography.support)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(dateText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.primary)
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .background(AITheme.ColorToken.primarySurface)
+                    .clipShape(Capsule())
+            }
+
+            HStack(spacing: AITheme.Spacing.xs) {
+                ReportEntryStepPill(
+                    title: "描述",
+                    systemImage: isRecording ? "waveform" : "text.cursor",
+                    tint: isRecording ? AITheme.ColorToken.ai : AITheme.ColorToken.primary,
+                    isActive: !hasDraft
+                )
+                ReportEntryStepPill(
+                    title: "确认",
+                    systemImage: "checkmark.seal",
+                    tint: hasDraft ? AITheme.ColorToken.success : AITheme.ColorToken.ink500,
+                    isActive: hasDraft
+                )
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var dateText: String {
+        let components = Calendar(identifier: .gregorian).dateComponents([.month, .day], from: selectedDate)
+        return "\(components.month ?? 0)月\(components.day ?? 0)日"
+    }
+}
+
+private struct ReportEntryStepPill: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let isActive: Bool
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isActive ? tint : AITheme.ColorToken.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .background(isActive ? tint.opacity(0.1) : AITheme.ColorToken.cardBackground)
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isActive ? tint.opacity(0.22) : AITheme.ColorToken.separator, lineWidth: 0.7)
+            }
+    }
+}
+
 private struct WorkContextHeader: View {
     let user: AuthUser
 
@@ -380,22 +440,32 @@ private struct AIDraftComposer: View {
     let onGenerate: () -> Void
 
     var body: some View {
-        BrandedCard {
-            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                SectionTitle("今天你完成了什么？", subtitle: "可以输入，也可以语音描述。")
+        VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                    Image(systemName: "sparkles")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.ai)
+                        .frame(width: 38, height: 38)
+                        .background(AITheme.ColorToken.aiSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
 
-                if viewModel.messages.count > 1 {
-                    VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
-                        ForEach(viewModel.messages.suffix(3)) { message in
-                            Text(message.content)
-                                .font(AITheme.Typography.support)
-                                .foregroundStyle(message.role == .user ? AITheme.ColorToken.ink700 : AITheme.ColorToken.textSecondary)
-                                .padding(AITheme.Spacing.sm)
-                                .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
-                                .background(message.role == .user ? AITheme.ColorToken.primarySurface : AITheme.ColorToken.activeBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
-                        }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("今天做了什么？")
+                            .font(AITheme.Typography.title2)
+                            .foregroundStyle(AITheme.ColorToken.ink900)
+                        Text("任务、工时、风险，讲清楚即可。")
+                            .font(AITheme.Typography.support)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
                     }
+
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: AITheme.Spacing.xs) {
+                    ReportHintChip(title: "任务", systemImage: "checklist")
+                    ReportHintChip(title: "工时", systemImage: "clock")
+                    ReportHintChip(title: "风险", systemImage: "exclamationmark.triangle")
                 }
 
                 VoiceTextInputRow(
@@ -419,10 +489,31 @@ private struct AIDraftComposer: View {
                         .transition(.opacity)
                 }
 
-                PrimaryActionButton(title: "生成日报草稿", systemImage: "sparkles", isLoading: viewModel.isDrafting, action: onGenerate)
+                PrimaryActionButton(title: "生成草稿", systemImage: "sparkles", isLoading: viewModel.isDrafting, action: onGenerate)
                     .disabled(viewModel.isDrafting || voiceInput.isRecording || viewModel.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.xl, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.xl, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.6)
+        }
+    }
+}
+
+private struct ReportHintChip: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AITheme.ColorToken.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .background(AITheme.ColorToken.surface)
+            .clipShape(Capsule())
     }
 }
 
@@ -432,34 +523,32 @@ private struct VoiceTextInputRow: View {
     let onToggleVoice: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: AITheme.Spacing.xs) {
-            TextField("例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时", text: $text, axis: .vertical)
+        ZStack(alignment: .bottomTrailing) {
+            TextField("例如：完成登录页优化，修复构建问题，耗时 4 小时", text: $text, axis: .vertical)
                 .font(AITheme.Typography.body)
-                .lineLimit(2...4)
+                .lineLimit(5...8)
                 .submitLabel(.send)
                 .padding(.horizontal, AITheme.Spacing.md)
-                .padding(.vertical, AITheme.Spacing.sm)
-                .frame(minHeight: AITheme.Layout.minTouchTarget + 8)
-                .background(AITheme.ColorToken.activeBackground)
-                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                .padding(.top, AITheme.Spacing.md)
+                .padding(.bottom, AITheme.Spacing.xl + 10)
+                .frame(minHeight: 150, alignment: .topLeading)
+                .background(isRecording ? AITheme.ColorToken.aiSurface : AITheme.ColorToken.surface)
+                .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                        .stroke(AITheme.ColorToken.separator, lineWidth: 0.8)
+                    RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                        .stroke(isRecording ? AITheme.ColorToken.aiSoft : AITheme.ColorToken.separator, lineWidth: 0.9)
                 }
 
             Button(action: onToggleVoice) {
-                Image(systemName: isRecording ? "stop.circle.fill" : "mic")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(isRecording ? AITheme.ColorToken.ai : AITheme.ColorToken.ink800)
-                    .frame(width: AITheme.Layout.minTouchTarget + 8, height: AITheme.Layout.minTouchTarget + 8)
-                    .background(isRecording ? AITheme.ColorToken.aiSurface : AITheme.ColorToken.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
-                            .stroke(isRecording ? AITheme.ColorToken.aiSoft : AITheme.ColorToken.separator, lineWidth: 0.8)
-                    }
+                Label(isRecording ? "停止" : "语音", systemImage: isRecording ? "stop.circle.fill" : "mic")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(isRecording ? .white : AITheme.ColorToken.ai)
+                    .frame(minWidth: 82, minHeight: 38)
+                    .background(isRecording ? AITheme.ColorToken.ai : AITheme.ColorToken.aiSurface)
+                    .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .padding(AITheme.Spacing.sm)
             .accessibilityLabel(isRecording ? "停止语音输入" : "开始语音输入")
         }
         .animation(.snappy, value: isRecording)
@@ -470,10 +559,26 @@ private struct DailyDraftEditor: View {
     @ObservedObject var viewModel: ReportEntryViewModel
 
     var body: some View {
-        BrandedCard {
-            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                SectionTitle("日报草稿", subtitle: "生成后不会自动提交，请确认日期、工时、项目和内容。")
+        VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+            HStack(alignment: .center, spacing: AITheme.Spacing.sm) {
+                Image(systemName: "doc.text.fill")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.primary)
+                    .frame(width: 38, height: 38)
+                    .background(AITheme.ColorToken.primarySurface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
 
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("确认草稿")
+                        .font(AITheme.Typography.section)
+                        .foregroundStyle(AITheme.ColorToken.ink900)
+                    Text("不会自动提交，改完再确认。")
+                        .font(AITheme.Typography.footnote)
+                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
                 DatePicker("日期", selection: $viewModel.selectedDate, displayedComponents: .date)
 
                 Picker("项目", selection: $viewModel.selectedProjectId) {
@@ -492,12 +597,23 @@ private struct DailyDraftEditor: View {
 
                 TextEditor(text: $viewModel.content)
                     .font(AITheme.Typography.body)
-                    .frame(minHeight: 132)
+                    .frame(minHeight: 150)
                     .padding(AITheme.Spacing.xs)
-                    .background(AITheme.ColorToken.activeBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+                    .background(AITheme.ColorToken.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous)
+                            .stroke(AITheme.ColorToken.separator, lineWidth: 0.8)
+                    }
                     .accessibilityLabel("日报内容")
             }
+        }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.xl, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.xl, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.6)
         }
     }
 }
@@ -510,22 +626,30 @@ private struct ReportActionPanel: View {
 
     var body: some View {
         VStack(spacing: AITheme.Spacing.sm) {
-            PrimaryActionButton(title: "确认提交今日工作", systemImage: "paperplane.fill", isLoading: viewModel.isSubmitting, action: onSubmit)
+            PrimaryActionButton(title: "提交", systemImage: "paperplane.fill", isLoading: viewModel.isSubmitting, action: onSubmit)
                 .disabled(viewModel.isSubmitting || viewModel.isSavingDraft)
 
-            SecondaryActionButton(
-                title: "保存为草稿",
-                systemImage: "tray.and.arrow.down",
-                isLoading: viewModel.isSavingDraft,
-                action: onSave
-            )
-            .disabled(viewModel.isSavingDraft || viewModel.isSubmitting)
+            HStack(spacing: AITheme.Spacing.sm) {
+                SecondaryActionButton(
+                    title: "保存",
+                    systemImage: "tray.and.arrow.down",
+                    isLoading: viewModel.isSavingDraft,
+                    action: onSave
+                )
+                .disabled(viewModel.isSavingDraft || viewModel.isSubmitting)
 
-            Button("清空") {
-                onClear()
+                Button {
+                    onClear()
+                } label: {
+                    Label("清空", systemImage: "trash")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.danger)
+                        .frame(maxWidth: .infinity, minHeight: AITheme.Layout.minTouchTarget)
+                        .background(AITheme.ColorToken.dangerSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.md, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
-            .font(.footnote)
-            .foregroundStyle(AITheme.ColorToken.danger)
         }
     }
 }

@@ -48,29 +48,9 @@
   color: #EE3B2B;
 }
 
-.ai-section,
 .detail-section {
   margin-top: 20rpx;
   padding: 32rpx;
-}
-
-.ai-section {
-  border-color: #CCFBF1;
-  background: #ECFDF9;
-}
-
-.ai-kicker {
-  color: #0F766E;
-  font-size: 24rpx;
-  font-weight: 900;
-}
-
-.ai-title {
-  margin-top: 10rpx;
-  color: #1A1A1A;
-  font-size: 29rpx;
-  font-weight: 800;
-  line-height: 1.45;
 }
 
 .info-row {
@@ -94,6 +74,10 @@
   min-width: 0;
   text-align: right;
   word-break: break-all;
+}
+
+.info-row text.risk {
+  color: #D97706;
 }
 
 .description {

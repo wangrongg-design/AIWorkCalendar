@@ -96,50 +96,36 @@ private enum AppTab: Hashable {
 
 struct ProfileView: View {
     @EnvironmentObject private var auth: AuthStore
-    @StateObject private var viewModel = ProfileViewModel()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: AITheme.Spacing.lg) {
+                VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
                     if let user = auth.user {
                         ProfileHeader(user: user)
 
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: AITheme.Spacing.sm) {
-                            MetricTile(title: "今日填报", value: "\(viewModel.todayLogs.count)", systemImage: "doc.text", tint: AITheme.ColorToken.success)
-                            MetricTile(title: "今日工时", value: "\(viewModel.todayHoursText)h", systemImage: "clock", tint: AITheme.ColorToken.ink500)
-                            MetricTile(title: "风险信号", value: "\(viewModel.todayRiskCount)", systemImage: "exclamationmark.triangle", tint: viewModel.todayRiskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success)
-                            MetricTile(title: "近 7 日", value: "\(viewModel.weeklyHoursText)h", systemImage: "chart.line.uptrend.xyaxis", tint: AITheme.ColorToken.ink500)
-                        }
-
-                        CompactAIActionPanel(
-                            conclusion: viewModel.profileConclusion,
-                            risk: viewModel.profileRiskText,
-                            systemImage: "person.text.rectangle"
-                        )
-
                         BrandedCard {
                             VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                                SectionTitle("企业与权限", subtitle: "用于日报归属、团队范围和管理权限。")
-                                LabeledContent("企业", value: user.tenantName)
-                                LabeledContent("企业代码", value: user.tenantCode)
-                                if let departmentName = user.departmentName {
-                                    LabeledContent("部门", value: departmentName)
-                                }
+                                SectionTitle("账号")
+                                LabeledContent("姓名", value: user.name)
                                 if let email = user.email {
                                     LabeledContent("邮箱", value: email)
+                                }
+                                if let phone = user.phone {
+                                    LabeledContent("手机", value: phone)
                                 }
                                 LabeledContent("角色", value: user.roles.map(\.title).joined(separator: "、"))
                             }
                         }
-                    }
 
-                    BrandedCard {
-                        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                            SectionTitle("账号安全")
-                            LabeledContent("登录状态", value: "已登录")
-                            LabeledContent("通知设置", value: "跟随系统")
-                            LabeledContent("API", value: auth.apiBaseURL)
+                        BrandedCard {
+                            VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+                                SectionTitle("组织")
+                                LabeledContent("企业", value: user.tenantName)
+                                if let departmentName = user.departmentName {
+                                    LabeledContent("部门", value: departmentName)
+                                }
+                            }
                         }
                     }
 
@@ -155,17 +141,6 @@ struct ProfileView: View {
             .appTabBarContentInset(AITheme.Spacing.lg)
             .navigationTitle("我的")
             .compactNavigationTitle()
-            .overlay {
-                if viewModel.isLoading {
-                    ProgressView()
-                }
-            }
-            .task {
-                await viewModel.load(auth: auth)
-            }
-            .refreshable {
-                await viewModel.load(auth: auth)
-            }
         }
     }
 }

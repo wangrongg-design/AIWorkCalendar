@@ -25,6 +25,10 @@
   min-width: 0;
 }
 
+.calendar-disclosure {
+  margin-top: 12rpx;
+}
+
 .refresh-button {
   position: relative;
   width: 80rpx;
@@ -64,6 +68,10 @@
   border-radius: 32rpx;
   background: #FFFFFF;
   padding: 32rpx;
+}
+
+.daily-status-card .ai-generated-disclosure {
+  margin-bottom: 22rpx;
 }
 
 .status-main {
@@ -200,14 +208,6 @@
   color: #EE3B2B;
 }
 
-.week-overview,
-.attention-section,
-.recent-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
 .section-title {
   color: #1A1A1A;
   font-size: 32rpx;
@@ -215,10 +215,32 @@
   line-height: 1.3;
 }
 
+.weekly-digest-card {
+  border: 1rpx solid #E6E6E6;
+  border-radius: 32rpx;
+  background: #FFFFFF;
+  padding: 32rpx;
+}
+
+.digest-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.digest-range {
+  flex-shrink: 0;
+  color: #737373;
+  font-size: 22rpx;
+  line-height: 1.3;
+}
+
 .brief-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14rpx;
+  margin-top: 24rpx;
 }
 
 .brief-metric {
@@ -269,27 +291,29 @@
   font-size: 22rpx;
 }
 
-.brief-list {
+.digest-divider {
+  height: 1rpx;
+  margin: 28rpx 0;
+  background: #E6E6E6;
+}
+
+.digest-attention {
   overflow: hidden;
-  border: 1rpx solid #E6E6E6;
-  border-radius: 32rpx;
-  background: #FFFFFF;
 }
 
 .attention-row,
-.recent-row,
 .empty-row {
   display: flex;
   min-height: 104rpx;
   align-items: center;
   gap: 20rpx;
-  background: #FFFFFF;
-  padding: 24rpx;
+  padding: 0;
 }
 
-.attention-row + .attention-row,
-.recent-row + .recent-row {
+.attention-row + .attention-row {
   border-top: 1rpx solid #E6E6E6;
+  margin-top: 22rpx;
+  padding-top: 22rpx;
 }
 
 .row-title {
@@ -311,23 +335,18 @@
 }
 
 .empty-text {
-  margin-top: 0;
+  margin-top: 4rpx;
 }
 
-.empty-icon.document {
-  background: #F6F6F6;
-  color: #737373;
+.empty-copy {
+  min-width: 0;
 }
 
-.empty-icon.document::before {
-  position: absolute;
-  left: 19rpx;
-  top: 13rpx;
-  width: 23rpx;
-  height: 34rpx;
-  border: 5rpx solid currentColor;
-  border-radius: 5rpx;
-  content: "";
+.empty-title {
+  color: #1A1A1A;
+  font-size: 27rpx;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .chevron {

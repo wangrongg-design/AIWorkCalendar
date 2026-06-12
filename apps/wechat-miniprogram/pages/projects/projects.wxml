@@ -1,17 +1,17 @@
 <view class="page projects-page bottom-safe">
+  <view class="list-header">
+    <view>
+      <view class="page-title">项目</view>
+      <view class="page-subtitle">搜索项目、负责人，或只看需要关注的项目。</view>
+    </view>
+    <button class="risk-filter-button {{riskToggleClass}}" bindtap="toggleRiskOnly">
+      <view class="risk-filter-icon"></view>
+    </button>
+  </view>
+
   <view class="search-shell">
     <view class="search-leading"></view>
     <input class="search-input" value="{{searchText}}" placeholder="搜索项目、负责人" bindinput="onSearchInput" />
-  </view>
-
-  <view class="ai-action-card project-ai-panel">
-    <view class="ai-action-icon">AI</view>
-    <view class="ai-action-copy">
-      <view class="ai-action-kicker">AI 项目判断</view>
-      <view class="ai-action-title">{{aiConclusion}}</view>
-      <view class="ai-action-desc">{{aiRiskText}}</view>
-      <button class="project-ai-action {{riskToggleClass}}" bindtap="toggleRiskOnly">{{riskToggleText}}</button>
-    </view>
   </view>
 
   <view wx:if="{{!filteredProjects.length && !loading}}" class="empty-state">

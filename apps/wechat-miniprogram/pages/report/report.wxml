@@ -1,26 +1,40 @@
 <view class="page report-page bottom-safe">
-  <view class="report-header">
-    <view>
-      <view class="report-greeting">你好，{{user.name || "同事"}}</view>
-      <view class="page-subtitle">{{user.tenantName || ""}}</view>
+  <view class="report-brief-header">
+    <view class="report-title-row">
+      <view class="report-title-copy">
+        <view class="page-title">今日填报</view>
+        <view class="page-subtitle">写一句，AI 整理成可提交日报。</view>
+      </view>
+      <view class="date-pill">{{datePill}}</view>
     </view>
-    <button class="refresh-button" bindtap="refreshPage">
-      <view class="refresh-icon"></view>
-    </button>
+    <view class="step-row">
+      <view class="step-pill {{hasDraftContent ? '' : 'active'}} {{voiceRecognizing ? 'recording' : ''}}">
+        <view class="step-icon text-cursor"></view>
+        <text>描述</text>
+      </view>
+      <view class="step-pill {{hasDraftContent ? 'active success' : ''}}">
+        <view class="step-icon check-seal"></view>
+        <text>确认</text>
+      </view>
+    </view>
   </view>
 
-  <view class="ai-action-card today-status-panel">
-    <view class="ai-action-icon">{{todayStatusIcon}}</view>
-    <view class="ai-action-copy">
-      <view class="ai-action-kicker">AI 洞察</view>
-      <view class="ai-action-title">{{todayConclusion}}</view>
-      <view class="ai-action-desc">{{todayRiskText}}</view>
+  <view class="ios-card composer-card">
+    <view class="composer-head">
+      <view class="composer-icon"></view>
+      <view class="composer-copy">
+        <view class="section-title">今天做了什么？</view>
+        <view class="section-desc">任务、工时、风险，讲清楚即可。</view>
+      </view>
     </view>
-  </view>
 
-  <view class="ios-card ai-card">
-    <view class="section-title">今天你完成了什么？</view>
-    <view class="section-desc">用一句话描述今天完成的事，系统会整理成日报草稿。</view>
+    <view class="hint-chip-row">
+      <view class="hint-chip">任务</view>
+      <view class="hint-chip">工时</view>
+      <view class="hint-chip">风险</view>
+    </view>
+
+    <view class="ai-generated-note">日报草稿由人工智能生成，请核验后提交。</view>
 
     <view wx:if="{{chatMessages.length > 1}}" class="chat-list">
       <view wx:for="{{chatMessages}}" wx:key="id" class="chat-message {{item.role}}">
@@ -28,25 +42,39 @@
       </view>
     </view>
 
-    <view class="report-input-row">
+    <view class="voice-input-box {{voiceRecognizing ? 'recording' : ''}}">
       <textarea
         class="chat-input"
         value="{{chatInput}}"
         maxlength="2000"
         auto-height
-        placeholder="例如：完成登录页重构，修复构建问题，推进项目日历风险提示，耗时 4 小时"
+        placeholder="例如：完成登录页优化，修复构建问题，耗时 4 小时"
         bindinput="onChatInput"
       />
+      <button class="voice-pill {{voiceRecognizing ? 'recording' : ''}}" bindtap="toggleVoiceInput">
+        <view class="voice-icon {{voiceRecognizing ? 'stop' : 'mic'}}"></view>
+        <text wx:if="{{voiceRecognizing}}">停止</text>
+        <text wx:else>语音</text>
+      </button>
     </view>
 
+    <view wx:if="{{voiceRecognizing}}" class="voice-status">正在听你说... 最长 60 秒</view>
+    <view wx:if="{{voiceError}}" class="voice-error">{{voiceError}}</view>
+
     <view class="chat-actions">
-      <button class="primary-button send-ai-button" loading="{{drafting}}" disabled="{{!chatInput || drafting}}" bindtap="sendChatMessage">生成日报草稿</button>
+      <button class="primary-button send-ai-button" loading="{{drafting}}" disabled="{{!chatInput || drafting || voiceRecognizing}}" bindtap="sendChatMessage">生成草稿</button>
     </view>
   </view>
 
   <view wx:if="{{hasDraftContent}}" class="ios-card draft-card">
-    <view class="section-title">日报草稿</view>
-    <view class="section-desc">生成后不会自动提交，请确认日期、工时、项目和内容。</view>
+    <view class="draft-head">
+      <view class="draft-icon"></view>
+      <view>
+        <view class="section-title">确认草稿</view>
+        <view class="section-desc">不会自动提交，改完再确认。</view>
+      </view>
+    </view>
+    <view class="ai-generated-disclosure draft-disclosure">人工智能生成内容</view>
 
     <view class="editor-stack">
       <view class="field">
@@ -75,14 +103,16 @@
 
       <view class="field">
         <text class="field-label">日报内容</text>
-        <textarea class="textarea" value="{{content}}" maxlength="3000" placeholder="AI 生成后可继续手动补充。" bindinput="onContentInput" />
+        <textarea class="textarea" value="{{content}}" maxlength="3000" placeholder="人工智能生成后可继续手动补充。" bindinput="onContentInput" />
       </view>
     </view>
   </view>
 
   <view wx:if="{{hasDraftContent}}" class="report-actions">
-    <button class="primary-button" loading="{{submitting}}" bindtap="submit">确认提交今日工作</button>
-    <button class="secondary-button" loading="{{savingDraft}}" bindtap="saveDraft">保存为草稿</button>
-    <button class="tertiary-button" bindtap="clearForm">清空</button>
+    <button class="primary-button" loading="{{submitting}}" bindtap="submit">提交</button>
+    <view class="secondary-action-row">
+      <button class="secondary-button" loading="{{savingDraft}}" bindtap="saveDraft">保存</button>
+      <button class="danger-soft-button" bindtap="clearForm">清空</button>
+    </view>
   </view>
 </view>

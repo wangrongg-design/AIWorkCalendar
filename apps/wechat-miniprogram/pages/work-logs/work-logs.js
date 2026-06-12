@@ -1,5 +1,5 @@
 const { request } = require("../../utils/request");
-const { getToken } = require("../../utils/storage");
+const { getToken, getUser } = require("../../utils/storage");
 
 const filters = [
   { value: "all", label: "全部" },
@@ -23,9 +23,10 @@ function riskCount(log) {
   return risks + blockers;
 }
 
-function normalizeLog(log) {
+function normalizeLog(log, currentUserId) {
   const projectName = log.project ? (log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name) : "";
   const hasRisk = riskCount(log) > 0;
+  const userId = String(log.userId || (log.user && log.user.id) || "");
   return {
     ...log,
     dateText: String(log.date || "").slice(0, 10),
@@ -34,7 +35,8 @@ function normalizeLog(log) {
     statusTone: log.status === "SUBMITTED" ? "success" : "neutral",
     projectName,
     hasRisk,
-    riskHint: hasRisk ? "AI 发现风险或阻塞" : "",
+    riskHint: hasRisk ? "人工智能生成风险提示" : "",
+    canDelete: Boolean(currentUserId && userId === currentUserId),
     contentPreview: String(log.content || "").slice(0, 72)
   };
 }
@@ -71,7 +73,9 @@ Page({
     this.setData({ loading: true });
     try {
       const result = await request("/work-logs");
-      const logs = (result || []).map(normalizeLog);
+      const currentUser = getUser() || {};
+      const currentUserId = String(currentUser.id || "");
+      const logs = (result || []).map((item) => normalizeLog(item, currentUserId));
       this.setData({ logs }, () => {
         this.applyFilter();
       });
@@ -137,6 +141,11 @@ Page({
   deleteLog(event) {
     const id = event.currentTarget.dataset.id;
     if (!id || this.data.operatingId) return;
+    const log = this.data.logs.find((item) => item.id === id);
+    if (!log || !log.canDelete) {
+      wx.showToast({ title: "只能删除自己的填报", icon: "none" });
+      return;
+    }
     wx.showModal({
       title: "删除记录",
       content: "删除后无法恢复，确认删除这条填报记录？",

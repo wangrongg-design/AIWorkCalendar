@@ -169,6 +169,12 @@
   line-height: 1.5;
 }
 
+.analysis-disclosure {
+  margin-bottom: 8rpx;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
 .analysis-risk {
   margin-top: 8rpx;
   color: #EE3B2B;

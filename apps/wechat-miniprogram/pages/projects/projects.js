@@ -19,11 +19,28 @@ function dueText(endDate) {
   return `${diff} 天后截止`;
 }
 
+function dueDays(endDate) {
+  if (!endDate) return null;
+  const target = new Date(String(endDate).slice(0, 10));
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.ceil((target.getTime() - start.getTime()) / 86400000);
+}
+
 function normalizeProject(project) {
   const paused = project.status === "PAUSED";
   const missingOwner = !project.owner;
-  const overdue = project.endDate && dueText(project.endDate).startsWith("已逾期");
-  const hasRisk = paused || missingOwner || overdue;
+  const days = dueDays(project.endDate);
+  const nearDue = Number.isFinite(days) && days <= 7 && project.status === "ACTIVE";
+  const hasRisk = paused || missingOwner || nearDue;
+  const aiRiskHint = paused
+    ? "推进暂停，建议确认阻塞原因。"
+    : missingOwner
+      ? "负责人缺失，风险归属不清晰。"
+      : nearDue
+        ? (days < 0 ? "项目已过结束日期，建议复核交付状态。" : "交付窗口临近，建议关注延期风险。")
+        : "暂未发现明显项目风险。";
   return {
     ...project,
     displayName: project.code ? `${project.code} · ${project.name}` : project.name,
@@ -34,7 +51,7 @@ function normalizeProject(project) {
     dueText: dueText(project.endDate),
     hasRisk,
     riskClass: hasRisk ? "risk" : "",
-    aiRiskHint: hasRisk ? "项目需要关注，包含暂停、临期或负责人缺失。" : "项目状态整体稳定。",
+    aiRiskHint,
     timelineText: project.startDate || project.endDate
       ? `${project.startDate ? String(project.startDate).slice(0, 10) : "未设置"} - ${project.endDate ? String(project.endDate).slice(0, 10) : "未设置"}`
       : "周期未设置"

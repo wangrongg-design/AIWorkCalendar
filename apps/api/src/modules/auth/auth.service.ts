@@ -186,6 +186,7 @@ export class AuthService {
     const normalizedEmail = account.toLowerCase();
     const normalizedPhone = normalizePhone(account);
     const tenantId = dto.tenantId?.trim() || undefined;
+    const hasTenantScope = Boolean(tenantId || dto.tenantCode);
     this.rateLimit.consume(`login:${tenantId ?? dto.tenantCode ?? "any"}:${normalizedEmail}`, 10, 15 * 60 * 1000);
     const where: Prisma.UserWhereInput = {
       OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
@@ -246,7 +247,7 @@ export class AuthService {
     if (!businessUsers.length) {
       throw new UnauthorizedException("Use platform ops login");
     }
-    if (businessUsers.length > 1 && !tenantId && !dto.tenantCode) {
+    if (businessUsers.length > 1 && !hasTenantScope) {
       return {
         requiresTenantSelection: true,
         options: businessUsers.map((user) => this.buildTenantSelectionOption(user))

@@ -117,7 +117,7 @@ function summarize(days, projects, totalEmployees) {
     riskReminder: risks > 0
       ? `有 ${riskDays.length} 天出现风险，建议先进入风险日期查看具体日报。`
       : missing > 0
-        ? "缺填会影响 AI 对团队状态的判断，建议优先提醒未填成员。"
+        ? "缺填会影响人工智能对团队状态的判断，建议优先提醒未填成员。"
         : "暂无明显风险，继续关注临近截止日期和低覆盖日期。",
     peopleStatus: totalEmployees > 0
       ? `当前范围约 ${totalEmployees} 名成员，周期填报率 ${fillRate}%，缺填 ${missing} 条。`

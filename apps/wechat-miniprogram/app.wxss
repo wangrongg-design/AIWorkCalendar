@@ -246,6 +246,32 @@ button::after {
   line-height: 1.2;
 }
 
+.ai-generated-disclosure {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1rpx solid #99F6E4;
+  border-radius: 16rpx;
+  background: #CCFBF1;
+  padding: 8rpx 14rpx;
+  color: #0F766E;
+  font-size: 22rpx;
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-generated-note {
+  margin-top: 10rpx;
+  color: #0F766E;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .ai-action-title {
   margin-top: 8rpx;
   color: #1A1A1A;

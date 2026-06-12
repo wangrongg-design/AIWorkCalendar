@@ -41,6 +41,22 @@ function formatFileSize(value: number) {
   return `${Math.max(1, Math.round(value / 1024))}KB`;
 }
 
+function dateTimeText(value?: string | null) {
+  if (!value) return "-";
+  const date = dayjs(value);
+  return date.isValid() ? date.format("YYYY-MM-DD HH:mm") : "-";
+}
+
+function workLogTimeInfo(record: WorkLog) {
+  if (record.submittedAt && dayjs(record.submittedAt).isValid()) {
+    return { label: "提交", value: dateTimeText(record.submittedAt) };
+  }
+  if (record.createdAt && dayjs(record.createdAt).isValid()) {
+    return { label: record.status === "DRAFT" ? "草稿创建" : "创建", value: dateTimeText(record.createdAt) };
+  }
+  return { label: "未记录", value: "-" };
+}
+
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -371,6 +387,19 @@ export default function WorkLogsPage() {
   const columns: ColumnsType<WorkLog> = [
     { title: "日期", dataIndex: "date", width: 110, render: (value: string) => dayjs(value).format("YYYY-MM-DD") },
     {
+      title: "填报时间",
+      width: 170,
+      render: (_, record) => {
+        const time = workLogTimeInfo(record);
+        return (
+          <div>
+            <div className="font-medium text-ink">{time.value}</div>
+            <div className="mt-1 text-xs text-muted">{time.label}</div>
+          </div>
+        );
+      }
+    },
+    {
       title: "标题",
       width: 260,
       render: (_, record) => (
@@ -487,6 +516,7 @@ export default function WorkLogsPage() {
           columns={columns}
           locale={{ emptyText: <Empty description="暂无填报记录，先写一条日报或计划" /> }}
           pagination={{ pageSize: 8 }}
+          scroll={{ x: 1360 }}
         />
       </section>
 
@@ -641,7 +671,7 @@ export default function WorkLogsPage() {
       >
         {detailRecord ? (
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-5">
               <div className="metric-card">
                 <div className="metric-label">人员</div>
                 <div className="mt-2 text-sm font-medium text-ink">{detailRecord.user?.name ?? "-"}</div>
@@ -653,6 +683,11 @@ export default function WorkLogsPage() {
               <div className="metric-card">
                 <div className="metric-label">工时</div>
                 <div className="metric-value">{Number(detailRecord.hours).toFixed(1)}h</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">填报时间</div>
+                <div className="mt-2 text-sm font-medium leading-5 text-ink">{workLogTimeInfo(detailRecord).value}</div>
+                <div className="mt-1 text-xs text-muted">{workLogTimeInfo(detailRecord).label}</div>
               </div>
               <div className="metric-card">
                 <div className="metric-label">状态</div>

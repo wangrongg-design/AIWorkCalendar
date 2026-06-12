@@ -669,7 +669,6 @@ struct CalendarDashboardView: View {
     @State private var selectedDetailRoute: CalendarDetailRoute?
     @State private var assistantInput = ""
     @State private var assistantReply: CalendarAssistantReply?
-    @State private var selectedLogDetail: WorkLog?
     var onCreateReport: ((String) -> Void)?
     var onOpenLogs: (() -> Void)?
     var onOpenProjects: (() -> Void)?
@@ -690,22 +689,10 @@ struct CalendarDashboardView: View {
 
                     CalendarDailyBriefStatusCard(day: viewModel.todayMobileDay)
 
-                    CalendarWeekBriefOverview(days: viewModel.weekMobileDays)
-
-                    CalendarAttentionBriefList(
+                    CalendarWeeklyDigestCard(
                         days: viewModel.weekMobileDays,
                         onOpenDate: { dateKey in
                             selectedDetailRoute = CalendarDetailRoute(date: dateKey)
-                        }
-                    )
-
-                    CalendarBriefRecentRecordList(
-                        logs: viewModel.recentLogs,
-                        onOpenLog: { log in
-                            selectedLogDetail = log
-                        },
-                        onOpenLogs: {
-                            onOpenLogs?()
                         }
                     )
                 }
@@ -775,9 +762,6 @@ struct CalendarDashboardView: View {
                     }
                 )
                 .environmentObject(auth)
-            }
-            .sheet(item: $selectedLogDetail) { log in
-                WorkLogDetailView(log: log)
             }
         }
     }
@@ -1202,6 +1186,153 @@ private struct CalendarDailyBriefStatusCard: View {
     }
 }
 
+private struct CalendarWeeklyDigestCard: View {
+    let days: [CalendarMobileDayItem]
+    let onOpenDate: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("本周简报")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AITheme.ColorToken.ink900)
+
+                Spacer(minLength: AITheme.Spacing.xs)
+
+                Text(weekRange)
+                    .font(AITheme.Typography.caption)
+                    .foregroundStyle(AITheme.ColorToken.textSecondary)
+            }
+
+            HStack(spacing: AITheme.Spacing.xs) {
+                CalendarBriefMetricTile(
+                    value: "\(filledDays)",
+                    label: "已填",
+                    tint: AITheme.ColorToken.success,
+                    surface: AITheme.ColorToken.successSurface
+                )
+                CalendarBriefMetricTile(
+                    value: "\(missingDays)",
+                    label: "未填",
+                    tint: missingDays > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ink500,
+                    surface: missingDays > 0 ? AITheme.ColorToken.warningSurface : AITheme.ColorToken.surface
+                )
+                CalendarBriefMetricTile(
+                    value: "\(riskCount)",
+                    label: "风险",
+                    tint: riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink500,
+                    surface: riskCount > 0 ? AITheme.ColorToken.dangerSurface : AITheme.ColorToken.surface
+                )
+            }
+
+            Divider()
+                .overlay(AITheme.ColorToken.separator)
+
+            if attentionItems.isEmpty {
+                HStack(spacing: AITheme.Spacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.headline)
+                        .foregroundStyle(AITheme.ColorToken.success)
+                        .frame(width: 30, height: 30)
+                        .background(AITheme.ColorToken.successSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("暂无需要关注的问题")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AITheme.ColorToken.ink900)
+                        Text("有异常时会优先显示在这里。")
+                            .font(AITheme.Typography.footnote)
+                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(attentionItems.enumerated()), id: \.element.id) { index, item in
+                        Button {
+                            onOpenDate(item.dateKey)
+                        } label: {
+                            HStack(spacing: AITheme.Spacing.sm) {
+                                Image(systemName: item.systemImage)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(item.tint)
+                                    .frame(width: 30, height: 30)
+                                    .background(item.surface)
+                                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.sm, style: .continuous))
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(AITheme.ColorToken.ink900)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.82)
+                                    Text(item.subtitle)
+                                        .font(AITheme.Typography.footnote)
+                                        .foregroundStyle(AITheme.ColorToken.textSecondary)
+                                        .lineLimit(2)
+                                }
+
+                                Spacer(minLength: AITheme.Spacing.xs)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AITheme.ColorToken.ink400)
+                            }
+                            .padding(.vertical, index == 0 ? 0 : AITheme.Spacing.sm)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < attentionItems.count - 1 {
+                            Divider()
+                                .overlay(AITheme.ColorToken.separator)
+                                .padding(.leading, 42)
+                                .padding(.vertical, AITheme.Spacing.sm)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(AITheme.Spacing.md)
+        .background(AITheme.ColorToken.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+        }
+    }
+
+    private var pastAndTodayDays: [CalendarMobileDayItem] {
+        days.filter { !$0.isFuture }
+    }
+
+    private var filledDays: Int {
+        pastAndTodayDays.filter { $0.filledCount > 0 }.count
+    }
+
+    private var missingDays: Int {
+        pastAndTodayDays.filter { $0.filledCount == 0 || $0.missingCount > 0 }.count
+    }
+
+    private var riskCount: Int {
+        pastAndTodayDays.reduce(0) { $0 + $1.riskCount }
+    }
+
+    private var weekRange: String {
+        guard let first = days.first?.date, let last = days.last?.date else {
+            return ""
+        }
+        return "\(formatShortDate(first))-\(formatShortDate(last))"
+    }
+
+    private var attentionItems: [CalendarBriefAttentionItem] {
+        CalendarBriefAttentionItem.make(from: days, limit: 2)
+    }
+}
+
 private struct CalendarWeekBriefOverview: View {
     let days: [CalendarMobileDayItem]
 
@@ -1366,6 +1497,21 @@ private struct CalendarAttentionBriefList: View {
     }
 
     private var attentionItems: [CalendarBriefAttentionItem] {
+        CalendarBriefAttentionItem.make(from: days, limit: 2)
+    }
+}
+
+private struct CalendarBriefAttentionItem: Identifiable {
+    let id = UUID()
+    let dateKey: String
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let tint: Color
+    let surface: Color
+    let priority: Int
+
+    static func make(from days: [CalendarMobileDayItem], limit: Int) -> [CalendarBriefAttentionItem] {
         Array(
             days
                 .filter { !$0.isFuture }
@@ -1414,20 +1560,9 @@ private struct CalendarAttentionBriefList: View {
                     }
                     return lhs.dateKey > rhs.dateKey
                 }
-                .prefix(2)
+                .prefix(limit)
         )
     }
-}
-
-private struct CalendarBriefAttentionItem: Identifiable {
-    let id = UUID()
-    let dateKey: String
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-    let surface: Color
-    let priority: Int
 }
 
 private struct CalendarBriefRecentRecordList: View {
@@ -3056,116 +3191,76 @@ private struct CalendarLegend: View {
 }
 
 private struct CalendarOverallAnalysisSheet: View {
-    @EnvironmentObject private var auth: AuthStore
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: CalendarViewModel
-    @State private var period: CalendarAnalysisPeriod = .week
-    @State private var projects: [Project] = []
     let onOpenDate: (String) -> Void
     let onGenerateWeeklyReport: () -> Void
     let onRemindMissing: () -> Void
     let onOpenProjects: () -> Void
 
     var body: some View {
-        let summary = viewModel.summary(for: period)
+        let summary = viewModel.summary(for: .week)
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: AITheme.Spacing.md) {
-                    Picker("周期", selection: $period) {
-                        ForEach(CalendarAnalysisPeriod.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
+                VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
                     Text(summary.rangeText)
                         .font(AITheme.Typography.support)
                         .foregroundStyle(AITheme.ColorToken.textSecondary)
 
                     CalendarAnalysisConclusionCard(
-                        title: "\(period.title)核心结论",
+                        title: "本周判断",
                         conclusion: summary.coreConclusion,
                         tone: leadingTone
                     )
 
-                    VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
+                    VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
                         CalendarAnalysisInfoRow(
-                            title: "风险提醒",
+                            title: "风险",
                             value: summary.riskReminder,
-                            systemImage: "exclamationmark.triangle.fill",
-                            tint: summary.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.ink500
+                            systemImage: summary.riskCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+                            tint: summary.riskCount > 0 ? AITheme.ColorToken.danger : AITheme.ColorToken.success
                         )
+
                         CalendarAnalysisInfoRow(
-                            title: "人员状态",
+                            title: "覆盖",
                             value: summary.peopleStatus,
-                            systemImage: "person.2.fill",
+                            systemImage: summary.missingCount > 0 ? "person.crop.circle.badge.exclamationmark" : "person.2.fill",
                             tint: summary.missingCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ink500
-                        )
-                        CalendarAnalysisInfoRow(
-                            title: "项目进展",
-                            value: projectText,
-                            systemImage: "folder.fill",
-                            tint: viewModel.riskDayCount > 0 ? AITheme.ColorToken.warning : AITheme.ColorToken.ink500
                         )
                     }
 
-                    VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
-                        Text("建议动作")
-                            .font(AITheme.Typography.eyebrow)
-                            .foregroundStyle(AITheme.ColorToken.textSecondary)
+                    if !analysisActions.isEmpty {
+                        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+                            Text("下一步")
+                                .font(AITheme.Typography.eyebrow)
+                                .foregroundStyle(AITheme.ColorToken.textSecondary)
 
-                        FlowActionButtons {
-                            CalendarAnalysisActionButton(
-                                title: "生成周报",
-                                systemImage: "doc.badge.plus",
-                                tint: AITheme.ColorToken.primary
-                            ) {
-                                dismiss()
-                                onGenerateWeeklyReport()
-                            }
-
-                            CalendarAnalysisActionButton(
-                                title: "查看缺填成员",
-                                systemImage: "person.crop.circle.badge.exclamationmark",
-                                tint: AITheme.ColorToken.warning
-                            ) {
-                                dismiss()
-                                onRemindMissing()
-                            }
-
-                            CalendarAnalysisActionButton(
-                                title: "查看风险项目",
-                                systemImage: "folder.badge.questionmark",
-                                tint: AITheme.ColorToken.danger
-                            ) {
-                                dismiss()
-                                onOpenProjects()
-                            }
-
-                            if let firstRiskDay = viewModel.firstRiskDay {
-                                CalendarAnalysisActionButton(
-                                    title: "风险日期",
-                                    systemImage: "calendar.badge.exclamationmark",
-                                    tint: AITheme.ColorToken.danger
-                                ) {
-                                    dismiss()
-                                    onOpenDate(firstRiskDay.date)
+                            FlowActionButtons {
+                                ForEach(analysisActions) { action in
+                                    CalendarAnalysisActionButton(
+                                        title: action.title,
+                                        systemImage: action.systemImage,
+                                        tint: action.tint
+                                    ) {
+                                        dismiss()
+                                        action.perform()
+                                    }
                                 }
                             }
                         }
-                    }
-                    .padding(AITheme.Spacing.md)
-                    .background(AITheme.ColorToken.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
-                            .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+                        .padding(AITheme.Spacing.md)
+                        .background(AITheme.ColorToken.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: AITheme.Radius.lg, style: .continuous)
+                                .stroke(AITheme.ColorToken.separator, lineWidth: 0.5)
+                        }
                     }
                 }
                 .padding(AITheme.Spacing.lg)
             }
             .background(AITheme.ColorToken.appBackground)
-            .navigationTitle("周期判断")
+            .navigationTitle("本周判断")
             .compactNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -3175,15 +3270,12 @@ private struct CalendarOverallAnalysisSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
-        .task {
-            await loadProjects()
-        }
     }
 
     private var leadingTone: Color {
-        let summary = viewModel.summary(for: period)
+        let summary = viewModel.summary(for: .week)
         if summary.riskCount > 0 {
             return AITheme.ColorToken.danger
         }
@@ -3193,34 +3285,51 @@ private struct CalendarOverallAnalysisSheet: View {
         return AITheme.ColorToken.ai
     }
 
-    private var projectText: String {
-        guard !projects.isEmpty else {
-            return "项目进展可进入项目页查看，重点关注临期、暂停和负责人缺失。"
+    private var analysisActions: [CalendarSheetAction] {
+        let summary = viewModel.summary(for: .week)
+        var actions: [CalendarSheetAction] = []
+        if summary.riskCount > 0, let firstRiskDay = viewModel.firstRiskDay {
+            actions.append(
+                CalendarSheetAction(
+                    title: "查看风险日期",
+                    systemImage: "calendar.badge.exclamationmark",
+                    tint: AITheme.ColorToken.danger,
+                    perform: {
+                        onOpenDate(firstRiskDay.date)
+                    }
+                )
+            )
         }
-        let active = projects.filter { $0.status == .active }.count
-        let risks = projects.filter(projectHasRisk).count
-        return "\(active) 个项目进行中，\(risks) 个项目需要关注。"
+        if summary.missingCount > 0 {
+            actions.append(
+                CalendarSheetAction(
+                    title: "查看缺填成员",
+                    systemImage: "person.crop.circle.badge.exclamationmark",
+                    tint: AITheme.ColorToken.warning,
+                    perform: onRemindMissing
+                )
+            )
+        }
+        if actions.isEmpty {
+            actions.append(
+                CalendarSheetAction(
+                    title: "生成周报",
+                    systemImage: "doc.badge.plus",
+                    tint: AITheme.ColorToken.primary,
+                    perform: onGenerateWeeklyReport
+                )
+            )
+        }
+        return Array(actions.prefix(2))
     }
+}
 
-    private func loadProjects() async {
-        do {
-            projects = try await auth.client().request("/projects")
-        } catch {
-            projects = []
-        }
-    }
-
-    private func projectHasRisk(_ project: Project) -> Bool {
-        if project.status == .paused || project.owner == nil {
-            return true
-        }
-        if let endDate = project.endDate,
-           let end = DateHelpers.dayFormatter.date(from: String(endDate.prefix(10))) {
-            let days = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
-            return days <= 7
-        }
-        return false
-    }
+private struct CalendarSheetAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let perform: () -> Void
 }
 
 private struct CalendarAnalysisConclusionCard: View {

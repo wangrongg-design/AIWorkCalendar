@@ -4,49 +4,28 @@
     <view class="profile-subtitle">{{user.tenantName}} · {{departmentText}}</view>
   </view>
 
-  <view class="metric-grid">
-    <view class="metric-card">
-      <view class="metric-icon document-icon"></view>
-      <view>
-        <view class="metric-label">今日填报</view>
-        <view class="metric-value">{{todayCount}}</view>
-      </view>
+  <view class="surface profile-section">
+    <view class="section-title">账号</view>
+    <view class="info-row">
+      <text>姓名</text>
+      <text>{{user.name}}</text>
     </view>
-    <view class="metric-card">
-      <view class="metric-icon clock-icon"></view>
-      <view>
-        <view class="metric-label">今日工时</view>
-        <view class="metric-value">{{todayHours}}h</view>
-      </view>
+    <view class="info-row">
+      <text>邮箱</text>
+      <text>{{emailText}}</text>
     </view>
-    <view class="metric-card">
-      <view class="metric-icon warning-icon"></view>
-      <view>
-        <view class="metric-label">风险信号</view>
-        <view class="metric-value risk">{{todayRiskCount}}</view>
-      </view>
+    <view wx:if="{{user.phone}}" class="info-row">
+      <text>手机</text>
+      <text>{{user.phone}}</text>
     </view>
-    <view class="metric-card">
-      <view class="metric-icon trend-icon"></view>
-      <view>
-        <view class="metric-label">近 7 日</view>
-        <view class="metric-value ai">{{weeklyHours}}h</view>
-      </view>
-    </view>
-  </view>
-
-  <view class="ai-action-card ai-profile-panel">
-    <view class="ai-action-icon">AI</view>
-    <view class="ai-action-copy">
-      <view class="ai-action-kicker">AI 工作画像</view>
-      <view class="ai-action-title">{{profileConclusion}}</view>
-      <view class="ai-action-desc">{{profileRiskText}}</view>
+    <view class="info-row">
+      <text>角色</text>
+      <text>{{rolesText}}</text>
     </view>
   </view>
 
   <view class="surface profile-section">
-    <view class="section-title">企业与权限</view>
-    <view class="section-desc">用于日报归属、团队范围和管理权限。</view>
+    <view class="section-title">组织</view>
     <view class="info-row">
       <text>企业</text>
       <text>{{user.tenantName}}</text>
@@ -58,30 +37,6 @@
     <view class="info-row">
       <text>部门</text>
       <text>{{departmentText}}</text>
-    </view>
-    <view class="info-row">
-      <text>邮箱</text>
-      <text>{{emailText}}</text>
-    </view>
-    <view class="info-row">
-      <text>角色</text>
-      <text>{{rolesText}}</text>
-    </view>
-  </view>
-
-  <view class="surface profile-section">
-    <view class="section-title">账号安全</view>
-    <view class="info-row">
-      <text>登录状态</text>
-      <text>已登录</text>
-    </view>
-    <view class="info-row">
-      <text>通知设置</text>
-      <text>跟随系统</text>
-    </view>
-    <view class="info-row">
-      <text>API</text>
-      <text>{{apiBaseURL}}</text>
     </view>
   </view>
 

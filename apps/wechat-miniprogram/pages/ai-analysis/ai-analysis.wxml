@@ -2,6 +2,7 @@
   <view class="analysis-header">
     <view class="page-title">AI 整体分析</view>
     <view class="page-subtitle">{{rangeTitle}}</view>
+    <view class="ai-generated-disclosure analysis-disclosure">人工智能生成分析</view>
   </view>
 
   <view class="segmented-control period-tabs">
@@ -32,6 +33,7 @@
   </view>
 
   <view class="surface insight-section primary">
+    <view class="ai-generated-disclosure">人工智能生成</view>
     <view class="section-kicker">核心结论</view>
     <view class="section-body">{{coreConclusion}}</view>
   </view>

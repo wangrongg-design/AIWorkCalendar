@@ -74,6 +74,10 @@
   background: #ECFDF9;
 }
 
+.ai-detail-section .ai-generated-disclosure {
+  margin-bottom: 12rpx;
+}
+
 .ai-kicker {
   color: #0F766E;
   font-size: 24rpx;

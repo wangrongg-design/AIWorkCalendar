@@ -33,8 +33,8 @@
         <text wx:if="{{item.projectName}}">{{item.projectName}}</text>
       </view>
       <view class="log-preview">{{item.contentPreview}}</view>
-      <view wx:if="{{item.hasRisk}}" class="risk-line">AI 发现风险或阻塞</view>
-      <view class="log-actions">
+      <view wx:if="{{item.hasRisk}}" class="risk-line">人工智能生成风险提示：发现风险或阻塞</view>
+      <view wx:if="{{item.status === 'DRAFT' || item.canDelete}}" class="log-actions">
         <button
           wx:if="{{item.status === 'DRAFT'}}"
           class="log-action submit"
@@ -45,6 +45,7 @@
           提交
         </button>
         <button
+          wx:if="{{item.canDelete}}"
           class="log-action delete"
           data-id="{{item.id}}"
           loading="{{operatingId === item.id}}"

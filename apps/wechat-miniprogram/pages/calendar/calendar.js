@@ -124,7 +124,7 @@ function buildTodayBrief(day) {
     return {
       title: "有风险需要关注",
       summary: day.filledCount > 0 ? `已填报 · ${hourSummary} · ${riskText}` : `未填报 · 工时待补齐 · ${riskText}`,
-      message: "AI 已发现风险信号，建议去记录页查看原始日报。",
+      message: "人工智能已发现风险信号，建议去记录页查看原始日报。",
       tone: "risk"
     };
   }
@@ -141,7 +141,7 @@ function buildTodayBrief(day) {
   return {
     title: "今天状态正常",
     summary: `已填报 · ${hourSummary} · ${riskText}`,
-    message: "AI 暂未发现需要你处理的问题。",
+    message: "人工智能暂未发现需要你处理的问题。",
     tone: "success"
   };
 }
@@ -156,6 +156,11 @@ function buildWeekMetrics(days) {
     { value: `${missingDays} 天`, label: "未填", tone: missingDays > 0 ? "warning" : "muted" },
     { value: `${risks} 条`, label: "风险", tone: risks > 0 ? "risk" : "muted" }
   ];
+}
+
+function buildWeekRange(days) {
+  if (!days.length) return "";
+  return `${days[0].dateText}-${days[days.length - 1].dateText}`;
 }
 
 function buildAttentionItems(days) {
@@ -218,6 +223,7 @@ Page({
   data: {
     scope: "self",
     homeSubtitle: "",
+    weekRange: "",
     todayBrief: {},
     weekMetrics: [],
     attentionItems: [],
@@ -271,15 +277,13 @@ Page({
       const detailMap = new Map(detailEntries);
       const weekDays = dates.map((date) => buildDayItem(date, dayMap.get(keyFromDate(date)), detailMap.get(keyFromDate(date))));
       const todayItem = buildDayItem(today, dayMap.get(dateKey()), detailMap.get(dateKey()));
-      const logs = await this.loadRecentLogs();
       const attentionItems = buildAttentionItems(weekDays);
       this.setData({
         todayBrief: buildTodayBrief(todayItem),
         weekMetrics: buildWeekMetrics(weekDays),
+        weekRange: buildWeekRange(weekDays),
         attentionItems,
-        hasAttention: attentionItems.length > 0,
-        recentLogs: logs,
-        hasRecentLogs: logs.length > 0
+        hasAttention: attentionItems.length > 0
       });
     } catch (error) {
       wx.showToast({ title: error.message || "日历加载失败", icon: "none" });

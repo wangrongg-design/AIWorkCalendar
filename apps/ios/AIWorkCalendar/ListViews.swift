@@ -174,42 +174,29 @@ struct WorkLogRow: View {
         VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text(log.title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
                 StatusBadge(title: log.status.title, systemImage: nil, tint: log.status.badgeTint)
             }
 
-            HStack(spacing: AITheme.Spacing.sm) {
+            HStack(spacing: AITheme.Spacing.xs) {
                 Text(String(log.date.prefix(10)))
                 Text("\(log.hoursText)h")
                 if let project = log.project {
                     Text(project.displayName)
                         .lineLimit(1)
                 }
+                if log.hasAIRisk {
+                    Text("风险")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AITheme.ColorToken.danger)
+                }
             }
             .font(.caption)
             .foregroundStyle(AITheme.ColorToken.textSecondary)
-
-            Text(log.content)
-                .font(.callout)
-                .lineLimit(2)
-
-            if log.hasAIRisk {
-                Label("发现风险或阻塞", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(AITheme.ColorToken.danger)
-            }
         }
         .padding(.vertical, 2)
-        .padding(.leading, log.hasAIRisk ? AITheme.Spacing.xs : 0)
-        .overlay(alignment: .leading) {
-            if log.hasAIRisk {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(AITheme.ColorToken.danger)
-                    .frame(width: 3)
-            }
-        }
     }
 }
 
@@ -324,19 +311,6 @@ struct ProjectsView: View {
     var body: some View {
         NavigationStack {
             List {
-                if !viewModel.projects.isEmpty {
-                    CompactAIActionPanel(
-                        conclusion: viewModel.projectConclusion,
-                        risk: viewModel.projectRiskText,
-                        actionTitle: viewModel.riskOnly ? "查看全部项目" : "只看异常项目",
-                        systemImage: "scope"
-                    ) {
-                        viewModel.riskOnly.toggle()
-                    }
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
-
                 if viewModel.filteredProjects.isEmpty, !viewModel.isLoading {
                     EmptyListView(
                         title: viewModel.projects.isEmpty ? "暂无项目" : "没有匹配项目",
@@ -360,6 +334,17 @@ struct ProjectsView: View {
             .scrollContentBackground(.hidden)
             .background(AITheme.ColorToken.appBackground)
             .searchable(text: $viewModel.searchText, prompt: "搜索项目、负责人")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        viewModel.riskOnly.toggle()
+                    } label: {
+                        Image(systemName: viewModel.riskOnly ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+                    }
+                    .foregroundStyle(viewModel.riskOnly ? AITheme.ColorToken.warning : AITheme.ColorToken.ink700)
+                    .accessibilityLabel(viewModel.riskOnly ? "查看全部项目" : "只看异常项目")
+                }
+            }
             .overlay {
                 if viewModel.isLoading {
                     ProgressView()
@@ -394,28 +379,28 @@ struct ProjectRow: View {
     let project: Project
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AITheme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AITheme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text(project.displayName)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
                 StatusBadge(title: project.status.title, systemImage: nil, tint: project.status.badgeTint)
             }
 
-            HStack(spacing: AITheme.Spacing.sm) {
+            HStack(spacing: AITheme.Spacing.xs) {
                 Label(project.owner?.name ?? "未设置负责人", systemImage: "person")
                 Label(project.dueText, systemImage: "clock")
+                if project.hasProjectRisk {
+                    Text("需关注")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(project.aiRiskTint)
+                }
             }
             .font(.caption)
             .foregroundStyle(AITheme.ColorToken.textSecondary)
-
-            Label(project.aiRiskHint, systemImage: "sparkles")
-                .font(.caption)
-                .foregroundStyle(project.aiRiskTint)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, AITheme.Spacing.xs)
+        .padding(.vertical, 2)
     }
 }
 
@@ -424,17 +409,6 @@ struct ProjectDetailView: View {
 
     var body: some View {
         List {
-            ProjectDetailHeader(project: project)
-                .listRowInsets(EdgeInsets(top: AITheme.Spacing.md, leading: AITheme.Spacing.lg, bottom: AITheme.Spacing.md, trailing: AITheme.Spacing.lg))
-                .listRowBackground(Color.clear)
-
-            Section("AI 项目判断") {
-                Label(project.aiRiskHint, systemImage: "sparkles")
-                    .foregroundStyle(project.aiRiskTint)
-                LabeledContent("负责人", value: project.owner?.name ?? "未设置")
-                LabeledContent("周期", value: project.timelineText)
-            }
-
             Section("项目") {
                 LabeledContent("名称", value: project.name)
                 if let code = project.code, !code.isEmpty {
@@ -443,6 +417,16 @@ struct ProjectDetailView: View {
                 LabeledContent("状态") {
                     StatusBadge(title: project.status.title, systemImage: nil, tint: project.status.badgeTint)
                 }
+                LabeledContent("负责人", value: project.owner?.name ?? "未设置")
+                LabeledContent("周期", value: project.timelineText)
+                if project.hasProjectRisk {
+                    LabeledContent {
+                        Text(project.aiRiskHint)
+                            .foregroundStyle(project.aiRiskTint)
+                    } label: {
+                        Text("关注")
+                    }
+                }
             }
 
             if let description = project.description, !description.isEmpty {
@@ -450,25 +434,13 @@ struct ProjectDetailView: View {
                     Text(description)
                 }
             }
-
-            if let owner = project.owner {
-                Section("负责人") {
-                    LabeledContent("姓名", value: owner.name)
-                    if let email = owner.email {
-                        LabeledContent("邮箱", value: email)
-                    }
-                    if let department = owner.department?.name {
-                        LabeledContent("部门", value: department)
-                    }
+            if let owner = project.owner, let email = owner.email {
+                Section("联系") {
+                    LabeledContent("邮箱", value: email)
                 }
             }
-
-            Section("周期") {
-                LabeledContent("开始", value: project.startDate.map { String($0.prefix(10)) } ?? "未设置")
-                LabeledContent("结束", value: project.endDate.map { String($0.prefix(10)) } ?? "未设置")
-            }
         }
-        .navigationTitle("项目详情")
+        .navigationTitle(project.displayName)
         .compactNavigationTitle()
         .appTabBarContentInset(AITheme.Spacing.md)
     }

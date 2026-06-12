@@ -6,6 +6,10 @@
   margin-bottom: 18rpx;
 }
 
+.analysis-disclosure {
+  margin-top: 14rpx;
+}
+
 .period-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -58,6 +62,10 @@
 .insight-section.primary {
   border-color: #CCFBF1;
   background: #ECFDF9;
+}
+
+.insight-section .ai-generated-disclosure {
+  margin-bottom: 12rpx;
 }
 
 .section-kicker {

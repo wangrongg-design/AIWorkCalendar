@@ -4,6 +4,7 @@
       <view>
         <view class="page-title">AI日历</view>
         <view class="page-subtitle">{{homeSubtitle}}</view>
+        <view class="ai-generated-disclosure calendar-disclosure">人工智能生成提示</view>
       </view>
       <button class="refresh-button" bindtap="loadHome">
         <view class="refresh-icon"></view>
@@ -12,6 +13,7 @@
   </view>
 
   <view class="daily-status-card">
+    <view class="ai-generated-disclosure">人工智能生成</view>
     <view class="status-main">
       <view class="status-icon {{todayBrief.tone}}"></view>
       <view class="status-copy">
@@ -22,22 +24,25 @@
     <view class="status-message {{todayBrief.tone}}">{{todayBrief.message}}</view>
   </view>
 
-  <view class="week-overview">
-    <view class="section-title">本周概览</view>
+  <view class="weekly-digest-card">
+    <view class="digest-head">
+      <view class="section-title">本周简报</view>
+      <view class="digest-range">{{weekRange}}</view>
+    </view>
     <view class="brief-metrics">
       <view wx:for="{{weekMetrics}}" wx:key="label" class="brief-metric {{item.tone}}">
         <view class="brief-value">{{item.value}}</view>
         <view class="brief-label">{{item.label}}</view>
       </view>
     </view>
-  </view>
-
-  <view class="attention-section">
-    <view class="section-title">需要关注</view>
-    <view class="brief-list">
+    <view class="digest-divider"></view>
+    <view class="digest-attention">
       <view wx:if="{{!hasAttention}}" class="empty-row">
         <view class="empty-icon success"></view>
-        <view class="empty-text">暂无需要关注的问题</view>
+        <view class="empty-copy">
+          <view class="empty-title">暂无需要关注的问题</view>
+          <view class="empty-text">有异常时会优先显示在这里。</view>
+        </view>
       </view>
       <view
         wx:for="{{attentionItems}}"
@@ -52,33 +57,6 @@
           <view class="row-subtitle">{{item.subtitle}}</view>
         </view>
         <view class="chevron">›</view>
-      </view>
-    </view>
-  </view>
-
-  <view class="recent-section">
-    <view class="section-head">
-      <view class="section-title">最近记录</view>
-      <button class="text-link" bindtap="openLogs">查看全部</button>
-    </view>
-    <view class="brief-list">
-      <view wx:if="{{!hasRecentLogs}}" class="empty-row">
-        <view class="empty-icon document"></view>
-        <view class="empty-text">提交日报后，这里会显示最近 3 条记录。</view>
-      </view>
-      <view
-        wx:for="{{recentLogs}}"
-        wx:key="id"
-        class="recent-row"
-        data-id="{{item.id}}"
-        bindtap="openLogDetail"
-      >
-        <view class="row-copy">
-          <view class="row-title">{{item.title}}</view>
-          <view class="row-subtitle">{{item.meta}}</view>
-        </view>
-        <view wx:if="{{item.hasRisk}}" class="risk-badge">风险</view>
-        <view wx:else class="chevron">›</view>
       </view>
     </view>
   </view>

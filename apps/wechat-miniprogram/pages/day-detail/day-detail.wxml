@@ -7,7 +7,8 @@
   </view>
 
   <view class="ai-detail-card {{aiInsightTone}}">
-    <view class="ai-kicker">AI 今日洞察</view>
+    <view class="ai-generated-disclosure">人工智能生成洞察</view>
+    <view class="ai-kicker">今日洞察</view>
     <view class="ai-title">{{aiInsightTitle}}</view>
     <view class="ai-desc">{{aiInsightText}}</view>
   </view>
@@ -47,6 +48,7 @@
         <view class="log-content">{{log.content}}</view>
         <view class="log-meta">{{log.hours}} 小时</view>
         <view wx:if="{{log.aiSummary || log.riskText}}" class="analysis">
+          <view class="analysis-disclosure">人工智能生成分析</view>
           <view wx:if="{{log.aiSummary}}" class="analysis-line">总结：{{log.aiSummary}}</view>
           <view wx:if="{{log.riskText}}" class="analysis-risk">风险：{{log.riskText}}</view>
         </view>

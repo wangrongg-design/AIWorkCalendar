@@ -22,12 +22,33 @@ function draftMessages(messages) {
   }));
 }
 
+function datePillText(key) {
+  const [, month, day] = String(key || dateKey()).split("-");
+  return `${Number(month || 0)}月${Number(day || 0)}日`;
+}
+
+function createVoiceRecognitionManager() {
+  if (typeof requirePlugin !== "function") {
+    return null;
+  }
+  try {
+    const plugin = requirePlugin("WechatSI");
+    if (!plugin || typeof plugin.getRecordRecognitionManager !== "function") {
+      return null;
+    }
+    return plugin.getRecordRecognitionManager();
+  } catch (error) {
+    return null;
+  }
+}
+
 Page({
   data: {
     user: {},
     chatMessages: [chatMessage("assistant", INITIAL_ASSISTANT_MESSAGE)],
     chatInput: "",
     date: dateKey(),
+    datePill: datePillText(dateKey()),
     title: "",
     content: "",
     hours: "1",
@@ -45,7 +66,15 @@ Page({
     hasDraftContent: false,
     drafting: false,
     savingDraft: false,
-    submitting: false
+    submitting: false,
+    voiceRecognizing: false,
+    voiceError: "",
+    voiceBaseText: "",
+    voiceSupported: true
+  },
+
+  onLoad() {
+    this.setupVoiceRecognition();
   },
 
   onShow() {
@@ -62,10 +91,43 @@ Page({
     }
     this.setData({
       user: getUser() || {},
-      date: prefillDate || this.data.date || dateKey()
+      date: prefillDate || this.data.date || dateKey(),
+      datePill: datePillText(prefillDate || this.data.date || dateKey())
     });
     this.loadProjects();
     this.loadWorkLogs();
+  },
+
+  onHide() {
+    this.stopVoiceRecognition();
+  },
+
+  onUnload() {
+    this.stopVoiceRecognition();
+  },
+
+  setupVoiceRecognition() {
+    const manager = createVoiceRecognitionManager();
+    if (!manager) {
+      this.setData({ voiceSupported: false });
+      return;
+    }
+    this.voiceManager = manager;
+    manager.onRecognize = (result) => {
+      this.applyVoiceResult(result && result.result);
+    };
+    manager.onStop = (result) => {
+      this.applyVoiceResult(result && result.result);
+      this.setData({ voiceRecognizing: false });
+    };
+    manager.onError = (error) => {
+      const message = error && error.msg ? error.msg : "语音识别失败，请重试";
+      this.setData({
+        voiceRecognizing: false,
+        voiceError: message
+      });
+      wx.showToast({ title: message, icon: "none" });
+    };
   },
 
   async loadProjects() {
@@ -135,6 +197,80 @@ Page({
     this.setData({ chatInput: event.detail.value });
   },
 
+  toggleVoiceInput() {
+    if (this.data.voiceRecognizing) {
+      this.stopVoiceRecognition();
+      return;
+    }
+    if (!this.voiceManager) {
+      this.setupVoiceRecognition();
+    }
+    if (!this.voiceManager) {
+      this.setData({ voiceSupported: false });
+      wx.showToast({ title: "语音识别插件不可用", icon: "none" });
+      return;
+    }
+    wx.authorize({
+      scope: "scope.record",
+      success: () => this.startVoiceRecognition(),
+      fail: () => {
+        wx.showModal({
+          title: "需要麦克风权限",
+          content: "开启麦克风权限后，可以语音输入并自动转成日报文字。",
+          confirmText: "去设置",
+          success: (result) => {
+            if (result.confirm) {
+              wx.openSetting();
+            }
+          }
+        });
+      }
+    });
+  },
+
+  startVoiceRecognition() {
+    const voiceBaseText = this.data.chatInput.trim();
+    this.setData({
+      voiceRecognizing: true,
+      voiceError: "",
+      voiceBaseText
+    });
+    try {
+      this.voiceManager.start({
+        duration: 60000,
+        lang: "zh_CN"
+      });
+    } catch (error) {
+      this.setData({
+        voiceRecognizing: false,
+        voiceError: "语音识别启动失败，请重试"
+      });
+      wx.showToast({ title: "语音识别启动失败", icon: "none" });
+    }
+  },
+
+  stopVoiceRecognition() {
+    if (!this.voiceManager || !this.data.voiceRecognizing) {
+      return;
+    }
+    try {
+      this.voiceManager.stop();
+    } catch (error) {
+      this.setData({ voiceRecognizing: false });
+    }
+  },
+
+  applyVoiceResult(result) {
+    const transcript = String(result || "").trim();
+    if (!transcript) {
+      return;
+    }
+    const base = this.data.voiceBaseText.trim();
+    this.setData({
+      chatInput: base ? `${base}\n${transcript}` : transcript
+    });
+  },
+
   async sendChatMessage(text) {
     const content = (typeof text === "string" ? text : this.data.chatInput).trim();
     if (!content) {
@@ -157,6 +293,7 @@ Page({
       });
       this.setData({
         date: draft.date,
+        datePill: datePillText(draft.date),
         title: draft.title,
         content: draft.content,
         hours: String(draft.hours),
@@ -165,14 +302,17 @@ Page({
       this.applyTodayStatus(this.data.workLogs);
       wx.showToast({ title: draft.kind === "PLAN" ? "已生成计划" : "已生成日报" });
     } catch (error) {
-      wx.showToast({ title: error.message || "AI 生成失败", icon: "none" });
+      wx.showToast({ title: error.message || "人工智能生成失败", icon: "none" });
     } finally {
       this.setData({ drafting: false });
     }
   },
 
   onDateChange(event) {
-    this.setData({ date: event.detail.value });
+    this.setData({
+      date: event.detail.value,
+      datePill: datePillText(event.detail.value)
+    });
   },
 
   onProjectChange(event) {
@@ -202,11 +342,14 @@ Page({
       content: "",
       hours: "1",
       date: dateKey(),
+      datePill: datePillText(dateKey()),
       savedDraftId: "",
       hasDraftContent: false,
       projectIndex: 0,
       projectId: "",
       chatInput: "",
+      voiceError: "",
+      voiceBaseText: "",
       chatMessages: [chatMessage("assistant", INITIAL_ASSISTANT_MESSAGE)]
     }, () => this.applyTodayStatus(this.data.workLogs));
   },

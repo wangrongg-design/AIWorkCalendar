@@ -11,7 +11,7 @@ Page({
     missingEmployees: [],
     hasFilled: false,
     hasMissing: false,
-    aiInsightTitle: "AI 今日洞察",
+    aiInsightTitle: "今日洞察",
     aiInsightText: "日期详情会展示填报、缺填、风险和关联日报。",
     aiInsightTone: "",
     loading: false
@@ -91,7 +91,7 @@ Page({
     }
     return {
       aiInsightTitle: "今天还没有团队成员提交日报",
-      aiInsightText: "提醒员工填写后，AI 会自动生成团队观察和风险提示。",
+      aiInsightText: "提醒员工填写后，人工智能会生成团队观察和风险提示。",
       aiInsightTone: "warning"
     };
   }

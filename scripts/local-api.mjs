@@ -452,6 +452,7 @@ function login(res, body) {
   }
   const tenantId = typeof body.tenantId === "string" && body.tenantId.trim() ? body.tenantId.trim() : undefined;
   const tenantCode = normalizeOptionalUnifiedSocialCreditCode(body.tenantCode);
+  const hasTenantScope = Boolean(tenantId || tenantCode);
   const matches = users.filter((item) => {
     const ownerTenant = tenants.find((candidate) => candidate.id === item.tenantId);
     return (
@@ -470,7 +471,7 @@ function login(res, body) {
   if (!businessMatches.length) {
     return error(res, 401, "Use platform ops login");
   }
-  if (businessMatches.length > 1 && !tenantId && !tenantCode) {
+  if (businessMatches.length > 1 && !hasTenantScope) {
     return json(res, {
       requiresTenantSelection: true,
       options: businessMatches.map((item) => tenantSelectionOption(item))

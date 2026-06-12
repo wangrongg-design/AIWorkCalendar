@@ -9,19 +9,6 @@
       </view>
     </view>
 
-    <view class="surface ai-section">
-      <view class="ai-kicker">AI 项目判断</view>
-      <view class="ai-title">{{project.aiRiskHint}}</view>
-      <view class="info-row">
-        <text>负责人</text>
-        <text>{{project.ownerName}}</text>
-      </view>
-      <view class="info-row">
-        <text>周期</text>
-        <text>{{project.timelineText}}</text>
-      </view>
-    </view>
-
     <view class="surface detail-section">
       <view class="section-title">项目</view>
       <view class="info-row">
@@ -36,6 +23,18 @@
         <text>状态</text>
         <text>{{project.statusTitle}}</text>
       </view>
+      <view class="info-row">
+        <text>负责人</text>
+        <text>{{project.ownerName}}</text>
+      </view>
+      <view class="info-row">
+        <text>周期</text>
+        <text>{{project.timelineText}}</text>
+      </view>
+      <view wx:if="{{project.riskClass}}" class="info-row">
+        <text>关注</text>
+        <text class="{{project.riskClass}}">{{project.aiRiskHint}}</text>
+      </view>
     </view>
 
     <view wx:if="{{project.description}}" class="surface detail-section">
@@ -43,27 +42,11 @@
       <view class="description">{{project.description}}</view>
     </view>
 
-    <view class="surface detail-section">
-      <view class="section-title">负责人</view>
+    <view wx:if="{{project.ownerEmail}}" class="surface detail-section">
+      <view class="section-title">联系</view>
       <view class="info-row">
-        <text>姓名</text>
-        <text>{{project.ownerName}}</text>
-      </view>
-      <view wx:if="{{project.ownerEmail}}" class="info-row">
         <text>邮箱</text>
         <text>{{project.ownerEmail}}</text>
-      </view>
-    </view>
-
-    <view class="surface detail-section">
-      <view class="section-title">周期</view>
-      <view class="info-row">
-        <text>开始</text>
-        <text>{{project.startText}}</text>
-      </view>
-      <view class="info-row">
-        <text>结束</text>
-        <text>{{project.endText}}</text>
       </view>
     </view>
   </block>
