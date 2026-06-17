@@ -90,7 +90,9 @@ function summarize(days, projects, totalEmployees) {
   const filled = days.reduce((sum, item) => sum + (item.filledCount || 0), 0);
   const missing = days.reduce((sum, item) => sum + (item.missingCount || 0), 0);
   const risks = days.reduce((sum, item) => sum + (item.riskCount || 0), 0);
-  const riskDays = days.filter((item) => (item.riskCount || 0) > 0);
+  const blockers = days.reduce((sum, item) => sum + (item.blockerCount || 0), 0);
+  const riskBlockerCount = risks + blockers;
+  const riskDays = days.filter((item) => ((item.riskCount || 0) + (item.blockerCount || 0)) > 0);
   const missingDays = days.filter((item) => (item.missingCount || 0) > 0);
   const denominator = filled + missing;
   const fillRate = denominator ? Math.round((filled / denominator) * 100) : 0;
@@ -98,8 +100,8 @@ function summarize(days, projects, totalEmployees) {
   const riskProjects = projects.filter(projectRisk);
 
   let coreConclusion = "当前周期暂无足够填报信号";
-  if (risks > 0) {
-    coreConclusion = `当前周期发现 ${risks} 条风险信号，优先处理风险日期。`;
+  if (riskBlockerCount > 0) {
+    coreConclusion = `当前周期发现 ${riskBlockerCount} 条风险/阻塞信号，优先处理重点日期。`;
   } else if (missing > 0) {
     coreConclusion = `当前周期有 ${missing} 条缺填记录，先补齐日报覆盖。`;
   } else if (filled > 0) {
@@ -110,23 +112,25 @@ function summarize(days, projects, totalEmployees) {
     fillRate,
     missingCount: missing,
     riskCount: risks,
+    blockerCount: blockers,
+    riskBlockerCount,
     riskDayCount: riskDays.length,
     firstRiskDate: riskDays[0] ? riskDays[0].date : "",
     firstMissingDate: missingDays[0] ? missingDays[0].date : "",
     coreConclusion,
-    riskReminder: risks > 0
-      ? `有 ${riskDays.length} 天出现风险，建议先进入风险日期查看具体日报。`
+    riskReminder: riskBlockerCount > 0
+      ? `有 ${riskDays.length} 天出现风险/阻塞，建议先进入重点日期查看具体日报。`
       : missing > 0
         ? "缺填会影响人工智能对团队状态的判断，建议优先提醒未填成员。"
-        : "暂无明显风险，继续关注临近截止日期和低覆盖日期。",
+        : "暂无明显风险/阻塞，继续关注临近截止日期和低覆盖日期。",
     peopleStatus: totalEmployees > 0
       ? `当前范围约 ${totalEmployees} 名成员，周期填报率 ${fillRate}%，缺填 ${missing} 条。`
       : "当前范围暂无成员统计，请确认组织和范围配置。",
     projectProgress: projects.length
       ? `${activeProjects.length} 个项目进行中，${riskProjects.length} 个项目需要关注。`
       : "当前范围暂无项目数据，项目风险可进入项目页查看。",
-    suggestedAction: risks > 0
-      ? "先查看风险日期，再复盘关联项目和负责人。"
+    suggestedAction: riskBlockerCount > 0
+      ? "先查看风险/阻塞日期，再复盘关联项目和负责人。"
       : missing > 0
         ? "先提醒未填报，再生成周报沉淀本周期结论。"
         : "可以生成周报，保留本周期工作节奏和关键结论。"
@@ -146,6 +150,8 @@ Page({
     fillRate: 0,
     missingCount: 0,
     riskCount: 0,
+    blockerCount: 0,
+    riskBlockerCount: 0,
     riskDayCount: 0,
     firstRiskDate: "",
     firstMissingDate: "",

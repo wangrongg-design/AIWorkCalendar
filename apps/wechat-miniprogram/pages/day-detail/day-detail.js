@@ -12,7 +12,7 @@ Page({
     hasFilled: false,
     hasMissing: false,
     aiInsightTitle: "今日洞察",
-    aiInsightText: "日期详情会展示填报、缺填、风险和关联日报。",
+    aiInsightText: "日期详情会展示填报、缺填、风险/阻塞和关联日报。",
     aiInsightTone: "",
     loading: false
   },
@@ -44,7 +44,11 @@ Page({
         }))
       }));
       const missingEmployees = result.missingEmployees || [];
-      const stats = result.stats || {};
+      const rawStats = result.stats || {};
+      const stats = {
+        ...rawStats,
+        riskBlockerCount: (rawStats.riskCount || 0) + (rawStats.blockerCount || 0)
+      };
       const aiInsight = this.buildInsight(stats, filledEmployees, missingEmployees);
       this.setData({
         stats,
@@ -68,10 +72,11 @@ Page({
   },
 
   buildInsight(stats, filledEmployees, missingEmployees) {
-    if ((stats.riskCount || 0) > 0) {
+    const riskBlockerCount = (stats.riskCount || 0) + (stats.blockerCount || 0);
+    if (riskBlockerCount > 0) {
       return {
-        aiInsightTitle: `${stats.riskCount} 条风险需要关注`,
-        aiInsightText: "建议优先查看风险记录，确认阻塞来源、负责人和后续动作。",
+        aiInsightTitle: `${riskBlockerCount} 条风险/阻塞需要关注`,
+        aiInsightText: "建议优先查看相关记录，确认阻塞来源、负责人和后续动作。",
         aiInsightTone: "risk"
       };
     }
@@ -91,7 +96,7 @@ Page({
     }
     return {
       aiInsightTitle: "今天还没有团队成员提交日报",
-      aiInsightText: "提醒员工填写后，人工智能会生成团队观察和风险提示。",
+      aiInsightText: "提醒员工填写后，会生成团队观察和风险/阻塞提示。",
       aiInsightTone: "warning"
     };
   }

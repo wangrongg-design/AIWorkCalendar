@@ -65,7 +65,7 @@ const valueCards = [
   {
     icon: <Sparkles size={20} />,
     title: "周期汇报自动生成",
-    lines: ["AI 根据真实工作记录生成日报、周报和月报。", "项目总结不再依赖手工整理。"]
+    lines: ["基于真实工作记录生成日报、周报和月报。", "项目总结不再依赖手工整理。"]
   },
   {
     icon: <BarChart2 size={20} />,
@@ -75,10 +75,10 @@ const valueCards = [
 ];
 
 const capabilityCards = [
-  { accent: "blue", title: "AI 日报", lines: ["员工填写当天工作。", "AI 自动提取成果、工时、项目和风险。"] },
-  { accent: "blue", title: "AI 周报", lines: ["系统按周汇总团队工作重点。", "项目进展、风险变化和下周计划同步生成。"] },
-  { accent: "blue", title: "AI 月报", lines: ["管理者快速查看团队月度产出。", "项目投入和关键问题集中呈现。"] },
-  { accent: "red", title: "AI 风险分析", lines: ["自动识别延期、阻塞和重复问题。", "异常投入和无人跟进事项会被提示。"] },
+  { accent: "blue", title: "日报提炼", lines: ["员工填写当天工作。", "系统提取成果、工时、项目和风险。"] },
+  { accent: "blue", title: "团队周报", lines: ["系统按周汇总团队工作重点。", "项目进展、风险变化和下周计划同步生成。"] },
+  { accent: "blue", title: "月度汇总", lines: ["管理者快速查看团队月度产出。", "项目投入和关键问题集中呈现。"] },
+  { accent: "red", title: "风险分析", lines: ["自动识别延期、阻塞和重复问题。", "异常投入和无人跟进事项会被提示。"] },
   { accent: "black", title: "日历看板", lines: ["按日查看填报率和缺填人员。", "风险数量和团队状态集中呈现。"] },
   { accent: "orange", title: "项目管理", lines: ["日报可关联项目。", "管理者按项目查看投入、进展和风险。"] }
 ];
@@ -87,11 +87,11 @@ const workflowSteps = [
   { title: "创建企业", lines: ["管理员注册账号。", "创建企业工作空间。"] },
   { title: "邀请成员", lines: ["添加部门、成员和角色。", "员工进入同一个工作空间。"] },
   { title: "每日填报", lines: ["员工每天填写工作日报。", "也可以填写未来计划。"] },
-  { title: "AI 生成汇报", lines: ["系统自动整理日报、周报和月报。", "风险和项目进展同步生成。"] },
-  { title: "管理者查看团队状态", lines: ["管理者查看日历看板和 AI 汇报。", "及时发现问题并推进工作。"] }
+  { title: "生成周期汇报", lines: ["系统自动整理日报、周报和月报。", "风险和项目进展同步生成。"] },
+  { title: "管理者查看团队状态", lines: ["管理者查看日历看板和周期汇报。", "及时发现问题并推进工作。"] }
 ];
 
-const trialFeatures = ["创建企业空间", "邀请部门成员", "AI 日报提炼", "AI 周报归纳", "AI 月报生成", "日历看板面板", "风险识别分析"];
+const trialFeatures = ["创建企业空间", "邀请部门成员", "日报提炼", "周报归纳", "月报生成", "日历看板面板", "风险识别分析"];
 const proFeatures = ["全部免费试用能力", "项目管理关联追踪", "团队状态图谱分析", "跨周期深度汇报生成", "企业历史数据导出", "多级管理员权限管理"];
 
 const securityCards = [
@@ -105,7 +105,7 @@ const faqItems = [
   { question: "免费试用多久？", lines: ["企业可免费试用 1 个月。", "试用期内不限制人数。"] },
   { question: "正式版怎么收费？", lines: ["正式版为 ¥19 / 启用成员 / 月。", "只按启用成员计费。"] },
   { question: "员工需要复杂培训吗？", lines: ["不需要。", "员工只需要像写普通日报一样填写工作内容。", "系统会自动整理和分析。"] },
-  { question: "AI 会替员工写日报吗？", lines: ["系统不会凭空生成工作内容。", "AI 会基于员工填写的真实记录进行整理、分析和汇报。"] },
+  { question: "系统会替员工写日报吗？", lines: ["系统不会凭空生成工作内容。", "只会基于员工填写的真实记录进行整理、分析和汇报。"] },
   { question: "管理者能看到哪些数据？", lines: ["管理者只能查看自己权限范围内的数据。", "包括团队、部门、项目和日报数据。"] },
   { question: "企业数据是否隔离？", lines: ["是。", "企业数据按租户隔离。", "不同企业的数据相互独立。"] }
 ];
@@ -134,7 +134,8 @@ export default function HomePage() {
   });
 
   const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   };
 
   return (
@@ -167,13 +168,13 @@ export default function HomePage() {
         <div className="calendarseven-hero-copy">
           <div className="calendarseven-chip">
             <Sparkles size={15} />
-            <span>企业 AI 工作日历</span>
+            <span>企业工作日历</span>
           </div>
           <h1>让 AI 自动理解团队工作</h1>
-          <p className="calendarseven-lede">日报、计划、项目和风险，自动汇成一张智能工作日历。</p>
+          <p className="calendarseven-lede">员工照常填报，管理者直接看到缺填、风险、项目进展和下一步动作。</p>
           <p className="calendarseven-price-line">
             <span>企业免费试用 1 个月。</span>
-            <span>正式使用 ¥19 / 启用成员 / 月。</span>
+            <span>按启用成员计费，管理员可随时停用成员。</span>
           </p>
           <div className="calendarseven-hero-actions">
             <Button type="primary" size="large" icon={<ArrowRight size={18} />} onClick={() => scrollTo("signup")}>
@@ -196,10 +197,10 @@ export default function HomePage() {
           <div className="calendarseven-window-body">
             <div className="calendarseven-window-head">
               <div>
-                <span>七数AI 日历看板</span>
+                <span>工作日历看板</span>
                 <strong>今日团队状态</strong>
               </div>
-              <em>AI 已分析</em>
+              <em>已更新 09:42</em>
             </div>
 
             <div className="calendarseven-status-grid">
@@ -223,11 +224,11 @@ export default function HomePage() {
 
             <div className="calendarseven-week-panel">
               <span>本周项目进展已自动汇总</span>
-              <p>AI 从日报中提取移动端重构进展，并匹配技术阻塞状态。</p>
+              <p>从日报中提取移动端重构进展，并匹配技术阻塞状态。</p>
             </div>
 
             <div className="calendarseven-attention">
-              <span>AI 已生成管理者关注事项</span>
+              <span>管理者关注事项</span>
               <p>
                 <i className="is-warning" />
                 海外支付联调存在网络阻塞，需要今天确认运维日志。
@@ -246,7 +247,7 @@ export default function HomePage() {
           <h2>团队每天在做什么，不再靠人工追问。</h2>
           <p>
             <span>员工正常填报。</span>
-            <span>AI 自动理解内容。</span>
+            <span>系统自动整理内容。</span>
             <span>管理者直接看到进展、风险和汇报结果。</span>
           </p>
         </div>
@@ -313,49 +314,60 @@ export default function HomePage() {
       <section className="calendarseven-section" id="pricing">
         <div className="calendarseven-section-head is-centered">
           <h2>先完整试用，再按启用成员付费。</h2>
-          <p>适合当前阶段企业快速验证，不增加复杂采购成本。</p>
+          <p>免费试用、按启用成员计费，企业管理员可随时停用成员并导出数据。</p>
         </div>
 
         <div className="calendarseven-pricing-layout">
-          <div className="calendarseven-plan-grid">
-            <article className="calendarseven-plan">
+          <div className="calendarseven-procurement">
+            <div className="calendarseven-procurement-head">
+              <span>企业采购说明</span>
+              <strong>免费试用后，按启用成员数量计费。</strong>
+              <p>试用期内不限制人数。正式使用时，停用成员不计入当月估算费用，管理员可导出企业数据。</p>
+            </div>
+            <div className="calendarseven-procurement-grid">
+              <article>
+                <span>试用</span>
+                <strong>1 个月免费</strong>
+                <p>创建企业空间后立即开始，不需要先绑定支付。</p>
+              </article>
+              <article>
+                <span>计费</span>
+                <strong>¥19 / 启用成员 / 月</strong>
+                <p>只计算企业内启用成员，管理员可随时停用离职或暂停成员。</p>
+              </article>
+              <article>
+                <span>数据</span>
+                <strong>隔离与导出</strong>
+                <p>企业数据按租户隔离，管理员可在后台发起完整数据导出。</p>
+              </article>
+            </div>
+            <div className="calendarseven-procurement-lists">
               <div>
-                <h3>免费试用</h3>
-                <strong>¥0</strong>
-                <p>企业免费试用 1 个月，不限制人数。</p>
+                <h3>试用包含</h3>
+                <ul>
+                  {trialFeatures.map((feature) => (
+                    <li key={feature}>
+                      <Check size={16} />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul>
-                {trialFeatures.map((feature) => (
-                  <li key={feature}>
-                    <Check size={16} />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <button type="button" onClick={() => scrollTo("signup")}>
-                免费创建企业
-              </button>
-            </article>
-
-            <article className="calendarseven-plan is-pro">
               <div>
-                <em>PRO</em>
-                <h3>专业版</h3>
-                <strong>¥19</strong>
-                <p>启用成员 / 月。</p>
+                <h3>正式使用增加</h3>
+                <ul>
+                  {proFeatures.map((feature) => (
+                    <li key={feature}>
+                      <Check size={16} />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul>
-                {proFeatures.map((feature) => (
-                  <li key={feature}>
-                    <Check size={16} />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <button type="button" onClick={() => scrollTo("signup")}>
-                开始使用
-              </button>
-            </article>
+            </div>
+            <button type="button" onClick={() => scrollTo("signup")}>
+              免费创建企业
+            </button>
           </div>
 
           <div className="calendarseven-signup" id="signup">
@@ -440,15 +452,17 @@ export default function HomePage() {
               const isOpen = activeFaq === index;
               return (
                 <article key={item.question} className={isOpen ? "is-open" : ""}>
-                  <button type="button" onClick={() => setActiveFaq(isOpen ? null : index)}>
+                  <button type="button" onClick={() => setActiveFaq(isOpen ? null : index)} aria-expanded={isOpen}>
                     <span>{item.question}</span>
                     <ChevronDown size={18} />
                   </button>
-                  <p>
-                    {item.lines.map((line) => (
-                      <span key={line}>{line}</span>
-                    ))}
-                  </p>
+                  {isOpen ? (
+                    <p>
+                      {item.lines.map((line) => (
+                        <span key={line}>{line}</span>
+                      ))}
+                    </p>
+                  ) : null}
                 </article>
               );
             })}
@@ -459,7 +473,7 @@ export default function HomePage() {
           <h2>让团队从今天开始自动沉淀工作状态。</h2>
           <p>
             <span>免费创建企业，邀请成员后即可开始试用。</span>
-            <span>企业免费试用 1 个月，正式使用 ¥19 / 启用成员 / 月。</span>
+              <span>免费试用 1 个月，正式使用按启用成员计费。</span>
           </p>
           <div>
             <Button type="primary" size="large" icon={<ArrowRight size={18} />} onClick={() => scrollTo("signup")}>
@@ -476,7 +490,7 @@ export default function HomePage() {
         <div>
           <img src="/seven-ai-logo.png" alt="七数AI" />
           <strong>Work Calendar AI</strong>
-          <p>面向企业团队的 AI 工作日历系统。</p>
+          <p>面向企业团队的工作日历系统。</p>
           <span>冀ICP备19023975号</span>
         </div>
         <nav aria-label="页脚链接">

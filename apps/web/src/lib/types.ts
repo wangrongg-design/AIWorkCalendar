@@ -301,6 +301,7 @@ export type CalendarDay = {
   remindCount?: number;
   fillRate: number;
   riskCount: number;
+  blockerCount?: number;
   totalHours?: number;
 };
 
@@ -335,6 +336,7 @@ export type CalendarDayDetail = {
     fillRate: number;
     totalHours: number;
     riskCount: number;
+    blockerCount?: number;
   };
 };
 
@@ -345,6 +347,8 @@ export type Report = {
   title: string;
   periodStart: string;
   periodEnd: string;
+  departmentId?: string | null;
+  department?: Department | null;
   content?: {
     completed: string[];
     progress: string[];
@@ -355,9 +359,50 @@ export type Report = {
       byUser: Array<{ userName: string; hours: number }>;
     };
     summary: string;
+    evidence?: ReportEvidence;
   } | null;
   error?: string | null;
   createdAt: string;
+};
+
+export type ReportEvidence = {
+  stats: ReportReadinessStats;
+  sources: ReportSource[];
+};
+
+export type ReportSource = {
+  id: string;
+  date: string;
+  title: string;
+  userName: string;
+  projectName?: string | null;
+  summary: string;
+  risks?: string[];
+  blockers?: string[];
+  hours: number;
+};
+
+export type ReportReadinessStats = {
+  workLogCount: number;
+  targetMemberCount: number;
+  coveredMemberCount: number;
+  missingMemberCount: number;
+  riskCount: number;
+  blockerCount: number;
+  projectCount: number;
+  totalHours: number;
+};
+
+export type ReportReadiness = {
+  type: ReportType;
+  periodStart: string;
+  periodEnd: string;
+  departmentId?: string | null;
+  scopeName: string;
+  canGenerate: boolean;
+  emptyReason?: string | null;
+  stats: ReportReadinessStats;
+  sources: ReportSource[];
 };
 
 export type Notification = {

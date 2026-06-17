@@ -95,15 +95,22 @@ function summarizeDays(days: CalendarDay[]) {
   const filled = days.reduce((sum, day) => sum + day.filledCount, 0);
   const missing = days.reduce((sum, day) => sum + day.missingCount, 0);
   const risks = days.reduce((sum, day) => sum + day.riskCount, 0);
+  const blockers = days.reduce((sum, day) => sum + (day.blockerCount ?? 0), 0);
   const totalHours = days.reduce((sum, day) => sum + (day.totalHours ?? 0), 0);
   const denominator = filled + missing;
   return {
     filled,
     missing,
     risks,
+    blockers,
+    riskBlockers: risks + blockers,
     totalHours: Number(totalHours.toFixed(1)),
     rate: denominator ? Number(((filled / denominator) * 100).toFixed(1)) : 0
   };
+}
+
+function dayRiskBlockerCount(day: Pick<CalendarDay, "riskCount" | "blockerCount">) {
+  return (day.riskCount ?? 0) + (day.blockerCount ?? 0);
 }
 
 function buildPeriodBuckets(days: CalendarDay[], period: AnalysisPeriod) {
@@ -193,15 +200,15 @@ export default function AIAnalysisPage() {
     const previousSummary = summarizeDays(previousDays);
     const previousHasComparableData = previousDays.length > 0;
     const rateDelta = previousHasComparableData ? Number((summary.rate - previousSummary.rate).toFixed(1)) : null;
-    const riskDelta = previousHasComparableData ? summary.risks - previousSummary.risks : null;
+    const riskDelta = previousHasComparableData ? summary.riskBlockers - previousSummary.riskBlockers : null;
     const hoursDelta = previousHasComparableData ? Number((summary.totalHours - previousSummary.totalHours).toFixed(1)) : null;
-    const riskDays = [...currentDays].filter((day) => day.riskCount > 0).sort((a, b) => b.riskCount - a.riskCount || a.date.localeCompare(b.date));
+    const riskDays = [...currentDays].filter((day) => dayRiskBlockerCount(day) > 0).sort((a, b) => dayRiskBlockerCount(b) - dayRiskBlockerCount(a) || a.date.localeCompare(b.date));
     const missingDays = [...currentDays].filter((day) => day.missingCount > 0).sort((a, b) => b.missingCount - a.missingCount || a.date.localeCompare(b.date));
     const bestDay = [...currentDays].filter((day) => day.filledCount + day.missingCount > 0).sort((a, b) => b.fillRate - a.fillRate)[0];
     const weakestDay = [...currentDays].filter((day) => day.filledCount + day.missingCount > 0).sort((a, b) => a.fillRate - b.fillRate)[0];
     const focusDays = [...currentDays]
-      .filter((day) => day.riskCount > 0 || day.missingCount > 0)
-      .sort((a, b) => b.riskCount * 3 + b.missingCount - (a.riskCount * 3 + a.missingCount) || a.date.localeCompare(b.date));
+      .filter((day) => dayRiskBlockerCount(day) > 0 || day.missingCount > 0)
+      .sort((a, b) => dayRiskBlockerCount(b) * 3 + b.missingCount - (dayRiskBlockerCount(a) * 3 + a.missingCount) || a.date.localeCompare(b.date));
     const buckets = buildPeriodBuckets(currentDays, analysisPeriod);
     const periodLabel = analysisPeriods.find((item) => item.value === analysisPeriod)?.label ?? "本周";
     const scopeLabel =
@@ -222,10 +229,10 @@ export default function AIAnalysisPage() {
         ? `${periodLabel}尚未进入可分析日期，暂不形成结论。`
         : summary.filled + summary.missing === 0
           ? `${subjectLabel}暂无可分析成员或填报要求。`
-          : summary.rate >= 90 && summary.risks === 0
+          : summary.rate >= 90 && summary.riskBlockers === 0
             ? `${subjectLabel}执行节奏稳定，填报率 ${summary.rate}%。`
-            : summary.risks > 0
-              ? `${subjectLabel}发现 ${summary.risks} 条风险信号，需要优先跟进。`
+            : summary.riskBlockers > 0
+              ? `${subjectLabel}发现 ${summary.riskBlockers} 条风险/阻塞信号，需要优先跟进。`
               : `${subjectLabel}填报率 ${summary.rate}%，建议补齐关键日期日报。`;
 
     const evidence = [
@@ -233,13 +240,13 @@ export default function AIAnalysisPage() {
       previousHasComparableData
         ? `填报率较前一可比周期 ${previousRangeText} ${deltaText(rateDelta, " 个百分点")}。`
         : "暂无前一可比周期数据，先以当前周期建立基线。",
-      riskDays.length ? `${riskDays.length} 个日期存在风险信号，累计 ${summary.risks} 条风险。` : "当前周期暂无明显风险日期。",
+      riskDays.length ? `${riskDays.length} 个日期存在风险/阻塞信号，累计 ${summary.riskBlockers} 条风险/阻塞。` : "当前周期暂无明显风险/阻塞日期。",
       summary.totalHours > 0 ? `累计记录 ${summary.totalHours}h，较前期 ${deltaText(hoursDelta, "h")}。` : "工时数据不足，建议先推动填报。"
     ];
 
     const recommendations = [
       missingDays[0] ? `${missingDays[0].date} 缺填 ${missingDays[0].missingCount} 人，建议优先提醒并确认是否为休息日。` : "缺填压力较低，保持当前节奏。",
-      riskDays[0] ? `${riskDays[0].date} 风险 ${riskDays[0].riskCount} 条，建议打开当天详情定位项目和负责人。` : "暂无需要立即升级的风险日期。",
+      riskDays[0] ? `${riskDays[0].date} 风险/阻塞 ${dayRiskBlockerCount(riskDays[0])} 条，建议打开当天详情定位项目和负责人。` : "暂无需要立即升级的风险/阻塞日期。",
       rateDelta !== null && rateDelta < -5 ? `填报率环比下降 ${Math.abs(rateDelta)} 个百分点，建议在团队例会同步填报要求。` : "填报趋势未出现明显下滑。",
       weakestDay && bestDay && weakestDay.date !== bestDay.date ? `${weakestDay.date} 是周期低点，${bestDay.date} 是节奏最好日期，可对比复盘。` : "暂无足够样本形成节奏高低点判断。"
     ];
@@ -273,7 +280,7 @@ export default function AIAnalysisPage() {
           <Typography.Title level={3} className="page-title">
             周期判断
           </Typography.Title>
-          <Typography.Text className="page-subtitle">周期复盘入口：按周、月、季度和年度分析团队节奏、风险趋势和投入变化。</Typography.Text>
+          <Typography.Text className="page-subtitle">周期复盘入口：按周、月、季度和年度分析团队节奏、风险/阻塞趋势和投入变化。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel">
           <DatePicker
@@ -358,8 +365,8 @@ export default function AIAnalysisPage() {
           <div className="metric-hint">需要提醒补齐</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">风险</div>
-          <div className="metric-value text-danger">{analysis.summary.risks}</div>
+          <div className="metric-label">风险/阻塞</div>
+          <div className="metric-value text-danger">{analysis.summary.riskBlockers}</div>
           <div className="metric-hint">较前期 {deltaText(analysis.trend.riskDelta, " 条")}</div>
         </div>
         <div className="metric-card">
@@ -409,7 +416,7 @@ export default function AIAnalysisPage() {
                   </div>
                   <Progress percent={bucket.summary.rate} showInfo={false} strokeColor="var(--color-primary)" />
                   <p>
-                    提交 {bucket.summary.filled} · 缺填 {bucket.summary.missing} · 风险 {bucket.summary.risks}
+                    提交 {bucket.summary.filled} · 缺填 {bucket.summary.missing} · 风险/阻塞 {bucket.summary.riskBlockers}
                   </p>
                 </div>
               ))}
@@ -451,7 +458,7 @@ export default function AIAnalysisPage() {
               {analysis.focusDays.slice(0, 8).map((day) => (
                 <button key={day.date} type="button" onClick={() => router.push(`/calendar?date=${day.date}`)}>
                   <span>{dayjs(day.date).format("M月D日")}</span>
-                  <Tag color={day.riskCount ? "red" : "orange"}>{day.riskCount ? `风险 ${day.riskCount}` : `缺填 ${day.missingCount}`}</Tag>
+                  <Tag color={dayRiskBlockerCount(day) ? "red" : "orange"}>{dayRiskBlockerCount(day) ? `风险/阻塞 ${dayRiskBlockerCount(day)}` : `缺填 ${day.missingCount}`}</Tag>
                   <strong>填报率 {day.fillRate}%</strong>
                 </button>
               ))}

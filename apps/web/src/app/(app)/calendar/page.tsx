@@ -1,12 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Tooltip, Typography, Upload, message } from "antd";
+import { Alert, Button, Checkbox, DatePicker, Drawer, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Tooltip, Typography, Upload, message } from "antd";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
 import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, Paperclip, RefreshCw, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import type { ClipboardEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { TextAreaRef } from "antd/es/input/TextArea";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -53,18 +55,24 @@ type PendingAttachment = {
   file: File;
 };
 
+type DraftPreviewItem = WorkLogDraftItem & {
+  projectId?: string;
+  selected: boolean;
+};
+
 type DraftPreview = {
   assistantMessage: string;
-  items: WorkLogDraftItem[];
+  items: DraftPreviewItem[];
   attachedToFirst: boolean;
+  attachmentTargetIndex: number;
 };
 
 const attachmentMaxBytes = 8 * 1024 * 1024;
-const quickQuestions = ["本周风险", "项目进度", "人员负载", "异常工时"];
+const quickQuestions = ["本周风险/阻塞", "项目进度", "人员负载", "异常工时"];
 const copilotActions = [
   { label: "提醒未填报员工", prompt: "帮我整理今天未填报员工，并给出提醒话术。" },
   { label: "生成本周总结", prompt: "基于当前可见日报和计划，生成本周管理总结。" },
-  { label: "查看风险项目", prompt: "列出当前范围内存在风险或阻塞的项目，并说明原因。" }
+  { label: "查看风险/阻塞项目", prompt: "列出当前范围内存在风险或阻塞的项目，并说明原因。" }
 ];
 
 function monthCells(month: Dayjs) {
@@ -91,6 +99,7 @@ function monthSummary(days: CalendarDay[]) {
   const missing = days.reduce((sum, day) => sum + day.missingCount, 0);
   const remind = days.reduce((sum, day) => sum + (day.remindCount ?? 0), 0);
   const risks = days.reduce((sum, day) => sum + day.riskCount, 0);
+  const blockers = days.reduce((sum, day) => sum + (day.blockerCount ?? 0), 0);
   const totalHours = days.reduce((sum, day) => sum + (day.totalHours ?? 0), 0);
   const denominator = filled + missing;
   return {
@@ -98,9 +107,19 @@ function monthSummary(days: CalendarDay[]) {
     missing,
     remind,
     risks,
+    blockers,
+    riskBlockers: risks + blockers,
     totalHours: Number(totalHours.toFixed(1)),
     rate: denominator ? Number(((filled / denominator) * 100).toFixed(1)) : 0
   };
+}
+
+function calendarRiskBlockerCount(day?: Pick<CalendarDay, "riskCount" | "blockerCount"> | null) {
+  return (day?.riskCount ?? 0) + (day?.blockerCount ?? 0);
+}
+
+function detailRiskBlockerCount(stats?: CalendarDayDetail["stats"] | null) {
+  return (stats?.riskCount ?? 0) + (stats?.blockerCount ?? 0);
 }
 
 function dateKind(date: string) {
@@ -112,6 +131,86 @@ function dateKind(date: string) {
 function chineseDateLabel(date: string) {
   const value = dayjs(date);
   return `${value.format("YYYY年M月D日")} · ${weekdayLabels[value.day()]}`;
+}
+
+function clipboardImageFiles(event: ClipboardEvent<HTMLElement>) {
+  return Array.from(event.clipboardData?.items ?? [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item, index) => {
+      const file = item.getAsFile();
+      if (!file) return null;
+      const extension = file.type.split("/")[1] || "png";
+      const filename = file.name || `pasted-image-${Date.now()}-${index + 1}.${extension}`;
+      return new File([file], filename, { type: file.type || "image/png" });
+    })
+    .filter((file): file is File => Boolean(file));
+}
+
+function renderMarkdownInline(text: string) {
+  const nodes: ReactNode[] = [];
+  const pattern = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    nodes.push(<strong key={`${match.index}-${match[1]}`}>{match[1]}</strong>);
+    lastIndex = pattern.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+  return nodes.length ? nodes : text;
+}
+
+function renderAssistantMarkdown(content: string) {
+  const nodes: ReactNode[] = [];
+  let list: { type: "ul" | "ol"; items: ReactNode[] } | null = null;
+
+  const flushList = () => {
+    if (!list) return;
+    const ListTag = list.type;
+    nodes.push(
+      <ListTag key={`list-${nodes.length}`} className="ai-copilot-markdown-list">
+        {list.items}
+      </ListTag>
+    );
+    list = null;
+  };
+
+  content.replace(/\r\n/g, "\n").split("\n").forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      flushList();
+      nodes.push(
+        <strong key={`heading-${index}`} className="ai-copilot-markdown-heading">
+          {renderMarkdownInline(heading[2])}
+        </strong>
+      );
+      return;
+    }
+    const unordered = /^[-*]\s+(.+)$/.exec(trimmed);
+    const ordered = /^\d+\.\s+(.+)$/.exec(trimmed);
+    if (unordered || ordered) {
+      const type = unordered ? "ul" : "ol";
+      if (!list || list.type !== type) {
+        flushList();
+        list = { type, items: [] };
+      }
+      list.items.push(<li key={`item-${index}`}>{renderMarkdownInline((unordered ?? ordered)?.[1] ?? trimmed)}</li>);
+      return;
+    }
+    flushList();
+    nodes.push(<p key={`paragraph-${index}`}>{renderMarkdownInline(trimmed)}</p>);
+  });
+  flushList();
+  return nodes;
 }
 
 function fileToBase64(file: File) {
@@ -162,6 +261,13 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
   };
 }
 
+function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
+  return {
+    ...draftItemToForm(item),
+    projectId: item.projectId
+  };
+}
+
 function formDateKey(value: Dayjs | Date | string | number | null | undefined, fallback = dayjs().format("YYYY-MM-DD")) {
   if (dayjs.isDayjs(value)) {
     return value.isValid() ? value.format("YYYY-MM-DD") : fallback;
@@ -200,11 +306,13 @@ export default function CalendarPage() {
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const chatThreadRef = useRef<HTMLDivElement | null>(null);
+  const chatInputRef = useRef<TextAreaRef | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "可以直接问我：本月团队重点、今天风险、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
+      content: "可以直接问我：本月团队重点、今天风险/阻塞、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
     }
   ]);
 
@@ -234,6 +342,14 @@ export default function CalendarPage() {
         .map((item) => ({ value: item.id, label: item.code ? `${item.code} · ${item.name}` : item.name })),
     [projects.data]
   );
+
+  const projectNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const project of projects.data ?? []) {
+      map.set(project.id, project.code ? `${project.code} · ${project.name}` : project.name);
+    }
+    return map;
+  }, [projects.data]);
 
   const pendingUploadFiles: UploadFile[] = useMemo(
     () =>
@@ -303,7 +419,12 @@ export default function CalendarPage() {
       });
       const items = normalizedDraftItems(draft);
       const attachedToFirst = pendingAttachments.length > 0 && items.length > 1;
-      return { assistantMessage: draft.assistantMessage, items, attachedToFirst };
+      return {
+        assistantMessage: draft.assistantMessage,
+        items: items.map((item) => ({ ...item, projectId: quickFillForm.getFieldValue("projectId"), selected: true })),
+        attachedToFirst,
+        attachmentTargetIndex: 0
+      };
     },
     onSuccess: (preview) => {
       setDraftPreview(preview);
@@ -319,15 +440,22 @@ export default function CalendarPage() {
 
   const confirmDraftWorkLog = useMutation({
     mutationFn: async (preview: DraftPreview) => {
-      for (const [index, item] of preview.items.entries()) {
-        await createAndSubmitWorkLog(draftItemToForm(item), index === 0);
+      const selectedEntries = preview.items.map((item, index) => ({ item, index })).filter((entry) => entry.item.selected);
+      if (!selectedEntries.length) {
+        throw new Error("请至少确认一条草稿。");
       }
-      return preview;
+      const hasAttachments = pendingAttachments.length > 0;
+      const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
+      const uploadTargetIndex = selectedEntries.some((entry) => entry.index === requestedTargetIndex) ? requestedTargetIndex : selectedEntries[0].index;
+      for (const { item, index } of selectedEntries) {
+        await createAndSubmitWorkLog(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex);
+      }
+      return { ...preview, submittedCount: selectedEntries.length, hasAttachments, uploadTargetIndex };
     },
     onSuccess: (preview) => {
-      message.success(preview.items.length > 1 ? `已提交 ${preview.items.length} 条填报。` : "已提交填报。");
-      if (preview.attachedToFirst) {
-        message.info("检测到多条日程，附件已关联到第一条填报。");
+      message.success(preview.submittedCount > 1 ? `已提交 ${preview.submittedCount} 条填报。` : "已提交填报。");
+      if (preview.hasAttachments && preview.submittedCount > 1) {
+        message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
       }
       setDraftPreview(null);
       setQuickFillOpen(false);
@@ -386,6 +514,31 @@ export default function CalendarPage() {
   const cells = useMemo(() => monthCells(month), [month]);
   const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
+  const currentWeekDays = useMemo(() => {
+    const weekStart = dayjs().startOf("day").subtract((dayjs().day() + 6) % 7, "day");
+    const weekEnd = weekStart.add(6, "day");
+    return (calendar.data?.days ?? []).filter((day) => {
+      const value = dayjs(day.date);
+      return value.isValid() && (value.isSame(weekStart, "day") || value.isAfter(weekStart, "day")) && (value.isSame(weekEnd, "day") || value.isBefore(weekEnd, "day"));
+    });
+  }, [calendar.data?.days]);
+  const weekBrief = useMemo(() => monthSummary(currentWeekDays), [currentWeekDays]);
+  const focusDays = useMemo(() => {
+    const visibleDays = calendar.data?.days ?? [];
+    return visibleDays
+      .filter((day) => {
+        const actionableMissing = dateKind(day.date) === "future" ? day.missingCount : (day.remindCount ?? day.missingCount);
+        return day.date === today || calendarRiskBlockerCount(day) > 0 || actionableMissing > 0;
+      })
+      .sort((a, b) => {
+        if (a.date === today) return -1;
+        if (b.date === today) return 1;
+        const aMissing = dateKind(a.date) === "future" ? a.missingCount : (a.remindCount ?? a.missingCount);
+        const bMissing = dateKind(b.date) === "future" ? b.missingCount : (b.remindCount ?? b.missingCount);
+        return calendarRiskBlockerCount(b) - calendarRiskBlockerCount(a) || bMissing - aMissing || a.date.localeCompare(b.date);
+      })
+      .slice(0, 5);
+  }, [calendar.data?.days, today]);
   const todayStats = todayDetail.data?.stats;
   const todayReferenceCount = useMemo(
     () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
@@ -412,7 +565,7 @@ export default function CalendarPage() {
       return {
         tone: "neutral",
         title: "正在同步今日团队状态",
-        copy: "稍后会给出风险、缺填和填报覆盖情况。"
+        copy: "稍后会给出风险/阻塞、缺填和填报覆盖情况。"
       };
     }
     if (!todayStats || todayStats.totalEmployees === 0) {
@@ -422,10 +575,11 @@ export default function CalendarPage() {
         copy: "当前范围暂无可分析成员，先确认团队、部门和日报要求配置。"
       };
     }
-    if (todayStats.riskCount > 0) {
+    const todayRiskBlockerCount = detailRiskBlockerCount(todayStats);
+    if (todayRiskBlockerCount > 0) {
       return {
         tone: "danger",
-        title: `${todayStats.riskCount} 条风险待确认`,
+        title: `${todayRiskBlockerCount} 条风险/阻塞待确认`,
         copy: "先确认影响项目和负责人，再决定是否提醒或升级。"
       };
     }
@@ -447,7 +601,7 @@ export default function CalendarPage() {
     return {
       tone: "success",
       title: "今日团队状态正常",
-      copy: `团队合计 ${todayStats.totalHours}h，暂无风险和缺填，可继续查看本周节奏。`
+      copy: `团队合计 ${todayStats.totalHours}h，暂无风险/阻塞和缺填，可继续查看本周节奏。`
     };
   }, [calendar.isFetching, todayDetail.isFetching, todayStats]);
 
@@ -481,7 +635,7 @@ export default function CalendarPage() {
       missingOrRemindCount > 0
         ? `${missingOrRemindCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，可优先提醒。`
         : `团队${selectedDateKind === "future" ? "计划" : "日报"}已全部提交。`,
-      stats.riskCount > 0 ? `发现 ${stats.riskCount} 条风险信号，建议先查看异常记录。` : "暂未发现明显风险信号。",
+      detailRiskBlockerCount(stats) > 0 ? `发现 ${detailRiskBlockerCount(stats)} 条风险/阻塞信号，建议先查看异常记录。` : "暂未发现明显风险/阻塞信号。",
       stats.totalHours > 0 ? `当前记录工时合计 ${stats.totalHours}h，可继续按项目核对投入。` : "当前暂无可分析工时。"
     ];
     const firstProject = dayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).find((log) => log.project)?.project?.name;
@@ -502,10 +656,10 @@ export default function CalendarPage() {
     }
     return [
       summary.remind > 0 ? `本月截至今天还有 ${summary.remind} 人次日报需要提醒补齐。` : `本月填报率为 ${summary.rate}%，团队提交节奏稳定。`,
-      summary.risks > 0 ? `本月累计出现 ${summary.risks} 条风险信号，建议查看风险日期和项目。` : "本月暂未出现明显风险信号。",
+      summary.riskBlockers > 0 ? `本月累计出现 ${summary.riskBlockers} 条风险/阻塞信号，建议查看重点日期和项目。` : "本月暂未出现明显风险/阻塞信号。",
       summary.filled > 0 ? `当前范围累计 ${summary.filled} 条已提交记录，可继续追问项目进展和人员投入。` : "还没有足够记录支撑深入分析。"
     ];
-  }, [aiObservations, calendar.isFetching, selectedDate, summary.filled, summary.missing, summary.rate, summary.remind, summary.risks]);
+  }, [aiObservations, calendar.isFetching, selectedDate, summary.filled, summary.missing, summary.rate, summary.remind, summary.riskBlockers]);
   const copilotContext = useMemo(
     () => [
       selectedDate ? chineseDateLabel(selectedDate) : month.format("YYYY年M月"),
@@ -543,6 +697,25 @@ export default function CalendarPage() {
       message.error(error instanceof Error ? error.message : "助手暂时无法回答，请稍后重试。");
     }
   });
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      const thread = chatThreadRef.current;
+      if (!thread) return;
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      thread.scrollTo({ top: thread.scrollHeight, behavior: prefersReducedMotion ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [calendarChat.isPending, chatMessages, chatOpen]);
+
+  useEffect(() => {
+    if (!chatOpen || calendarChat.isPending) return;
+    const frame = window.requestAnimationFrame(() => {
+      chatInputRef.current?.focus({ cursor: "end" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [calendarChat.isPending, chatOpen]);
 
   const submitCalendarChat = (question = chatInput) => {
     const normalized = question.trim();
@@ -587,13 +760,40 @@ export default function CalendarPage() {
     setQuickFillOpen(true);
   };
 
-  const addPendingAttachment = (file: RcFile) => {
-    if (file.size > attachmentMaxBytes) {
-      message.error("单个附件不能超过 8MB，请压缩后重新上传。");
-      return Upload.LIST_IGNORE;
+  const addPendingFiles = (files: File[], source: "upload" | "paste") => {
+    const accepted = files.reduce<PendingAttachment[]>((result, file, index) => {
+      if (file.size > attachmentMaxBytes) {
+        message.error("单个附件不能超过 8MB，请压缩后重新上传。");
+        return result;
+      }
+      const uploadFile = file as RcFile;
+      result.push({
+        uid: uploadFile.uid || `${source}-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+        file
+      });
+      return result;
+    }, []);
+    if (!accepted.length) {
+      return false;
     }
-    setPendingAttachments((items) => [...items, { uid: file.uid, file }]);
-    return false;
+    setPendingAttachments((items) => [...items, ...accepted]);
+    if (source === "paste") {
+      message.success(`已添加 ${accepted.length} 张粘贴图片。`);
+    }
+    return true;
+  };
+
+  const addPendingAttachment = (file: RcFile) => {
+    return addPendingFiles([file], "upload") ? false : Upload.LIST_IGNORE;
+  };
+
+  const handlePasteImages = (event: ClipboardEvent<HTMLElement>) => {
+    const files = clipboardImageFiles(event);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    addPendingFiles(files, "paste");
   };
 
   const sendQuickFillAiMessage = () => {
@@ -604,6 +804,17 @@ export default function CalendarPage() {
     setQuickFillAiInput("");
     setDraftPreview(null);
     draftWorkLog.mutate(nextMessages);
+  };
+
+  const updateDraftPreviewItem = (index: number, patch: Partial<DraftPreviewItem>) => {
+    setDraftPreview((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item))
+          }
+        : current
+    );
   };
 
   const goToday = () => {
@@ -619,7 +830,7 @@ export default function CalendarPage() {
           <Typography.Title level={3} className="page-title">
             工作日历
           </Typography.Title>
-          <Typography.Text className="page-subtitle">当日和具体日期的团队状态入口：看今天谁填了、谁缺填、哪里有风险。</Typography.Text>
+          <Typography.Text className="page-subtitle">当日和具体日期的团队状态入口：看今天谁填了、谁缺填、哪里有风险/阻塞。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel dashboard-calendar-toolbar">
           <DatePicker picker="month" value={month} format="YYYY年M月" onChange={(value) => value && setMonth(value)} allowClear={false} />
@@ -686,9 +897,83 @@ export default function CalendarPage() {
             <div className="workbench-actions is-single-action">
               <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button ai-assistant-entry-button">
                 <Bot size={18} />
-                <span>AI工作助手</span>
+                <span>AI 工作助手</span>
               </button>
             </div>
+          </div>
+
+          <div className="mobile-calendar-flow">
+            <section className={`mobile-today-card is-${todayPriority.tone}`}>
+              <div className="mobile-card-label">
+                {todayPriority.tone === "danger" ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+                今日判断
+              </div>
+              <h2>{todayPriority.title}</h2>
+              <p>{todayPriority.copy}</p>
+              <div className="mobile-stat-row" aria-label="今日统计">
+                <span>
+                  <strong>{todayStats?.fillRate ?? 0}%</strong>
+                  填报率
+                </span>
+                <span>
+                  <strong>{todayStats?.missingCount ?? 0}</strong>
+                  未填报
+                </span>
+                <span>
+                  <strong>{detailRiskBlockerCount(todayStats)}</strong>
+                  风险/阻塞
+                </span>
+              </div>
+              <div className="mobile-next-actions">
+                <button
+                  type="button"
+                  className="mobile-next-action is-primary"
+                  onClick={() => (scope === "self" ? openQuickFill(today) : setSelectedDate(today))}
+                >
+                  {scope === "self" ? "填写今日日报" : "查看今日详情"}
+                </button>
+                <button type="button" className="mobile-next-action" onClick={() => setChatOpen(true)}>
+                  打开工作助手
+                </button>
+              </div>
+            </section>
+
+            <section className="mobile-week-brief">
+              <div>
+                <div className="mobile-card-label">本周简报</div>
+                <h3>{weekBrief.riskBlockers > 0 ? `${weekBrief.riskBlockers} 条风险/阻塞需跟进` : "本周暂无明显风险/阻塞"}</h3>
+                <p>
+                  已提交 {weekBrief.filled} 条，未填报 {weekBrief.remind || weekBrief.missing} 人次，合计 {weekBrief.totalHours}h。
+                </p>
+              </div>
+              <Progress type="circle" percent={weekBrief.rate} size={66} strokeColor="var(--color-primary)" trailColor="var(--color-gray-2)" />
+            </section>
+
+            <section className="mobile-focus-panel">
+              <div className="mobile-card-label">重点关注</div>
+              <div className="mobile-focus-list">
+                {focusDays.length ? (
+                  focusDays.map((day) => {
+                    const kind = dateKind(day.date);
+                    const missing = kind === "future" ? day.missingCount : (day.remindCount ?? day.missingCount);
+                    const riskBlockerCount = calendarRiskBlockerCount(day);
+                    return (
+                      <button key={day.date} type="button" className="mobile-focus-item" onClick={() => setSelectedDate(day.date)}>
+                        <span className="mobile-focus-date">{dayjs(day.date).format("M月D日")} · {weekdayLabels[dayjs(day.date).day()]}</span>
+                        <span className="mobile-focus-copy">
+                          {riskBlockerCount > 0 ? `风险/阻塞 ${riskBlockerCount} 条` : missing > 0 ? `${kind === "future" ? "未计划" : "未填报"} ${missing} 人` : "今日状态"}
+                        </span>
+                        <span className="mobile-focus-rate">{kind === "future" ? "计划率" : "填报率"} {day.fillRate}%</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="mobile-focus-empty">当前范围暂无缺填、风险/阻塞或需要跟进的日期。</div>
+                )}
+              </div>
+            </section>
+
+            <div className="mobile-calendar-nav-title">月历导航</div>
           </div>
 
           <div className="surface-panel dashboard-calendar-grid calendar-board-scroll">
@@ -709,6 +994,7 @@ export default function CalendarPage() {
               const filledCount = day?.filledCount ?? 0;
               const missingCount = day?.missingCount ?? 0;
               const totalCount = filledCount + missingCount;
+              const riskBlockerCount = calendarRiskBlockerCount(day);
               return (
                 <button
                   key={key}
@@ -720,7 +1006,7 @@ export default function CalendarPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{cell.date()}</span>
                     </div>
-                    {day?.riskCount ? <Tag className="calendar-risk-tag" color="red">风险 {day.riskCount}</Tag> : null}
+                    {riskBlockerCount ? <Tag className="calendar-risk-tag" color="red">风险/阻塞 {riskBlockerCount}</Tag> : null}
                   </div>
                   <div className="calendar-cell-body mt-4 text-xs">
                     <div className="calendar-count flex items-center gap-1 text-ink">
@@ -795,6 +1081,7 @@ export default function CalendarPage() {
                 autoSize={{ minRows: 2, maxRows: 4 }}
                 placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
                 disabled={draftWorkLog.isPending}
+                onPaste={handlePasteImages}
                 onChange={(event) => setQuickFillAiInput(event.target.value)}
                 onPressEnter={(event) => {
                   if (!event.shiftKey) {
@@ -810,34 +1097,102 @@ export default function CalendarPage() {
             {draftPreview ? (
               <div className="quickfill-draft-preview">
                 <Alert
-                  type={draftPreview.items.some((item) => item.missingFields.length > 0 || item.confidence < 0.8) ? "warning" : "info"}
+                  type={draftPreview.items.some((item) => item.selected && (item.missingFields.length > 0 || item.confidence < 0.8)) ? "warning" : "info"}
                   showIcon
                   message="请确认草稿后再提交"
-                  description="日期、工时和内容会写入正式填报；如识别有误，可以修改下方表单，或重新描述生成草稿。"
+                  description="系统不会自动提交。你可以逐条确认、跳过或修改日期、标题、工时、项目和内容。"
                 />
+                {pendingAttachments.length > 0 && draftPreview.items.length > 1 ? (
+                  <div className="quickfill-attachment-target">
+                    <span>附件归属</span>
+                    <Select
+                      value={draftPreview.attachmentTargetIndex}
+                      listHeight={280}
+                      options={draftPreview.items.map((item, index) => ({
+                        value: index,
+                        disabled: !item.selected,
+                        label: `第 ${index + 1} 条 · ${item.title || "未命名草稿"}`
+                      }))}
+                      onChange={(value) =>
+                        setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))
+                      }
+                    />
+                    <em>未选择或跳过目标时，自动关联到第一条已确认草稿。</em>
+                  </div>
+                ) : null}
                 <div className="quickfill-draft-list">
                   {draftPreview.items.map((item, index) => (
-                    <div key={`${item.date}-${item.title}-${index}`} className="quickfill-draft-item">
+                    <div key={`${item.date}-${item.title}-${index}`} className={`quickfill-draft-item ${item.selected ? "" : "is-muted"}`}>
                       <div className="quickfill-draft-head">
-                        <strong>{item.title}</strong>
+                        <Checkbox checked={item.selected} onChange={(event) => updateDraftPreviewItem(index, { selected: event.target.checked })}>
+                          确认第 {index + 1} 条
+                        </Checkbox>
                         <span>{item.kind === "PLAN" ? "计划" : "日报"}</span>
                       </div>
-                      <div className="quickfill-draft-meta">
-                        <span>日期：{dayjs(item.date).format("YYYY年M月D日")}</span>
-                        <span>工时：{Number(item.hours).toFixed(1)}h</span>
-                        <span>项目：未关联</span>
-                        <span>置信度：{Math.round(item.confidence * 100)}%</span>
-                        {draftPreview.attachedToFirst && index === 0 ? <span>附件：关联到本条</span> : null}
+                      <div className="quickfill-draft-edit-grid">
+                        <label>
+                          <span>日期</span>
+                          <DatePicker
+                            className="w-full"
+                            value={dayjs(item.date).isValid() ? dayjs(item.date) : dayjs()}
+                            onChange={(value) => value && updateDraftPreviewItem(index, { date: value.format("YYYY-MM-DD") })}
+                          />
+                        </label>
+                        <label>
+                          <span>工时</span>
+                          <InputNumber
+                            className="w-full"
+                            min={0}
+                            max={24}
+                            step={0.5}
+                            value={item.hours}
+                            onChange={(value) => updateDraftPreviewItem(index, { hours: Number(value ?? 0) })}
+                          />
+                        </label>
+                        <label className="quickfill-draft-title-field">
+                          <span>标题</span>
+                          <Input value={item.title} onChange={(event) => updateDraftPreviewItem(index, { title: event.target.value })} />
+                        </label>
+                        <label className="quickfill-draft-project-field">
+                          <span>项目</span>
+                          <Select
+                            allowClear
+                            value={item.projectId}
+                            placeholder="未关联"
+                            loading={projects.isFetching}
+                            listHeight={280}
+                            options={projectOptions}
+                            onChange={(value) => updateDraftPreviewItem(index, { projectId: value })}
+                          />
+                        </label>
                       </div>
-                      <p>{item.content}</p>
+                      <label className="quickfill-draft-content-field">
+                        <span>内容</span>
+                        <Input.TextArea
+                          autoSize={{ minRows: 2, maxRows: 5 }}
+                          value={item.content}
+                          onPaste={handlePasteImages}
+                          onChange={(event) => updateDraftPreviewItem(index, { content: event.target.value })}
+                        />
+                      </label>
+                      <div className="quickfill-draft-meta">
+                        <span>附件：{pendingAttachments.length ? (draftPreview.attachmentTargetIndex === index ? "关联到本条" : "未关联到本条") : "无"}</span>
+                        <span>项目：{item.projectId ? projectNameById.get(item.projectId) ?? "已选择项目" : "未关联"}</span>
+                        <span>置信度：{Math.round(item.confidence * 100)}%</span>
+                      </div>
                       {item.missingFields.length ? <div className="quickfill-draft-warning">需确认：{item.missingFields.join("、")}</div> : null}
                     </div>
                   ))}
                 </div>
                 <div className="quickfill-draft-actions">
                   <Button onClick={() => setDraftPreview(null)}>继续编辑</Button>
-                  <Button type="primary" loading={confirmDraftWorkLog.isPending} onClick={() => confirmDraftWorkLog.mutate(draftPreview)}>
-                    确认并提交{draftPreview.items.length > 1 ? ` ${draftPreview.items.length} 条` : ""}
+                  <Button
+                    type="primary"
+                    loading={confirmDraftWorkLog.isPending}
+                    disabled={!draftPreview.items.some((item) => item.selected)}
+                    onClick={() => confirmDraftWorkLog.mutate(draftPreview)}
+                  >
+                    确认并提交{draftPreview.items.filter((item) => item.selected).length > 1 ? ` ${draftPreview.items.filter((item) => item.selected).length} 条` : ""}
                   </Button>
                 </div>
               </div>
@@ -862,28 +1217,30 @@ export default function CalendarPage() {
               <Input />
             </Form.Item>
             <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-              <Select allowClear placeholder="选择项目" loading={projects.isFetching} options={projectOptions} />
+              <Select allowClear placeholder="选择项目" loading={projects.isFetching} listHeight={280} options={projectOptions} />
             </Form.Item>
           </div>
           <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
-            <Input.TextArea rows={6} />
+            <Input.TextArea rows={6} onPaste={handlePasteImages} />
           </Form.Item>
           <Form.Item label="附件">
-            <Upload.Dragger
-              multiple
-              fileList={pendingUploadFiles}
-              beforeUpload={addPendingAttachment}
-              onRemove={(file) => {
-                setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
-                return true;
-              }}
-            >
-              <p className="ant-upload-drag-icon">
-                <UploadCloud size={28} />
-              </p>
-              <p className="ant-upload-text">添加照片或文件</p>
-              <p className="ant-upload-hint">单个附件最大 8MB；多条草稿同时提交时，附件默认关联到第一条。</p>
-            </Upload.Dragger>
+            <div className="paste-upload-zone" tabIndex={0} onPaste={handlePasteImages}>
+              <Upload.Dragger
+                multiple
+                fileList={pendingUploadFiles}
+                beforeUpload={addPendingAttachment}
+                onRemove={(file) => {
+                  setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+                  return true;
+                }}
+              >
+                <p className="ant-upload-drag-icon">
+                  <UploadCloud size={28} />
+                </p>
+                <p className="ant-upload-text">添加照片或文件</p>
+                <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴微信或聊天截图。</p>
+              </Upload.Dragger>
+            </div>
           </Form.Item>
         </Form>
       </Modal>
@@ -934,14 +1291,16 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <div className="ai-copilot-thread">
+          <div className="ai-copilot-thread" ref={chatThreadRef}>
             {chatMessages.map((item) => (
               <div key={item.id} className={`ai-copilot-message ${item.role}`}>
                 <div className="ai-copilot-message-meta">
                   {item.role === "assistant" ? "助手" : user?.name ?? "我"}
                   {typeof item.contextCount === "number" ? <span> · 参考 {item.contextCount} 条记录</span> : null}
                 </div>
-                <div>{item.content}</div>
+                <div className={item.role === "assistant" ? "ai-copilot-markdown" : undefined}>
+                  {item.role === "assistant" ? renderAssistantMarkdown(item.content) : item.content}
+                </div>
               </div>
             ))}
             {calendarChat.isPending ? (
@@ -952,9 +1311,10 @@ export default function CalendarPage() {
           <div className="ai-copilot-compose">
             <div className="ai-copilot-input">
               <Input.TextArea
+                ref={chatInputRef}
                 value={chatInput}
                 rows={4}
-                placeholder="询问团队风险、项目进展、人员投入情况…"
+                placeholder="询问团队风险/阻塞、项目进展、人员投入情况…"
                 disabled={calendarChat.isPending}
                 onChange={(event) => setChatInput(event.target.value)}
                 onPressEnter={(event) => {
@@ -985,14 +1345,13 @@ export default function CalendarPage() {
         </div>
       </Modal>
 
-      <Modal
+      <Drawer
         title={null}
         open={Boolean(selectedDate)}
-        onCancel={() => setSelectedDate(null)}
-        footer={null}
-        width={1240}
-        style={{ top: 18 }}
-        className="workday-detail-modal"
+        onClose={() => setSelectedDate(null)}
+        width="min(1240px, calc(100vw - 32px))"
+        className="workday-detail-modal workday-detail-drawer"
+        destroyOnHidden
       >
         {selectedDate ? (
           <div className="workday-detail-hero">
@@ -1121,13 +1480,13 @@ export default function CalendarPage() {
                   <strong>{detailStats?.totalHours ?? 0}h</strong>
                 </div>
                 <div className="workday-ai-stat is-risk">
-                  <span>风险数量</span>
-                  <strong>{detailStats?.riskCount ?? 0}</strong>
+                  <span>风险/阻塞</span>
+                  <strong>{detailRiskBlockerCount(detailStats)}</strong>
                 </div>
               </div>
-              <div className={`workday-ai-risk-summary ${(detailStats?.riskCount ?? 0) > 0 ? "has-risk" : ""}`}>
-                <div className="workday-ai-subheading">异常 / 风险</div>
-                <strong>{(detailStats?.riskCount ?? 0) > 0 ? `发现 ${detailStats?.riskCount ?? 0} 条风险信号` : "暂未发现明显风险"}</strong>
+              <div className={`workday-ai-risk-summary ${detailRiskBlockerCount(detailStats) > 0 ? "has-risk" : ""}`}>
+                <div className="workday-ai-subheading">异常 / 风险/阻塞</div>
+                <strong>{detailRiskBlockerCount(detailStats) > 0 ? `发现 ${detailRiskBlockerCount(detailStats)} 条风险/阻塞信号` : "暂未发现明显风险/阻塞"}</strong>
                 <p>
                   {detailReminderActionCount > 0
                     ? `${detailReminderActionCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
@@ -1155,17 +1514,17 @@ export default function CalendarPage() {
                 </ul>
               </div>
               <div className="workday-ai-pills">
-                {["本周风险", "项目进度", "人员负载", "异常工时"].map((item) => (
+                {["本周风险/阻塞", "项目进度", "人员负载", "异常工时"].map((item) => (
                   <button key={item} type="button" className="workday-ai-pill" onClick={() => runCopilotPrompt(item)}>
                     {item}
                   </button>
                 ))}
               </div>
-              <div className="workday-ai-context-note">助手会带着当前日期、记录、缺填和风险上下文继续分析。</div>
+              <div className="workday-ai-context-note">助手会带着当前日期、记录、缺填和风险/阻塞上下文继续分析。</div>
             </div>
           </div>
         </div>
-      </Modal>
+      </Drawer>
 
       <Modal
         title={selectedWorkLog ? `${dayjs(selectedWorkLog.date).format("YYYY-MM-DD")} · ${selectedWorkLog.title}` : "填报详情"}

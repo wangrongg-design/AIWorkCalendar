@@ -32,8 +32,8 @@ function addDays(date: Date, days: number) {
   return result;
 }
 
-function riskCount(risks: unknown) {
-  return Array.isArray(risks) ? risks.length : risks ? 1 : 0;
+function arrayCount(value: unknown) {
+  return Array.isArray(value) ? value.length : value ? 1 : 0;
 }
 
 @Injectable()
@@ -80,7 +80,8 @@ export class AnalyticsService {
       const filledCount = filledUserIds.size;
       const totalCount = users.length;
       const missingCount = Math.max(totalCount - filledCount, 0);
-      const riskTotal = dayLogs.reduce((sum, item) => sum + riskCount(item.aiAnalysis?.risks), 0);
+      const riskTotal = dayLogs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.risks), 0);
+      const blockerTotal = dayLogs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.blockers), 0);
       const totalHours = dayLogs.reduce((sum, item) => sum + Number(item.hours), 0);
       days.push({
         date: key,
@@ -89,6 +90,7 @@ export class AnalyticsService {
         remindCount: key <= today ? missingCount : 0,
         fillRate: totalCount === 0 ? 0 : Number(((filledCount / totalCount) * 100).toFixed(1)),
         riskCount: riskTotal,
+        blockerCount: blockerTotal,
         totalHours: Number(totalHours.toFixed(2))
       });
     }
@@ -169,7 +171,8 @@ export class AnalyticsService {
         departmentName: item.department?.name ?? null
       }));
     const totalHours = logs.reduce((sum, item) => sum + Number(item.hours), 0);
-    const riskTotal = logs.reduce((sum, item) => sum + riskCount(item.aiAnalysis?.risks), 0);
+    const riskTotal = logs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.risks), 0);
+    const blockerTotal = logs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.blockers), 0);
     const remindCount = query.date <= today ? missingEmployees.length : 0;
     return {
       date: query.date,
@@ -183,7 +186,8 @@ export class AnalyticsService {
         remindCount,
         fillRate: users.length === 0 ? 0 : Number(((filledEmployees.length / users.length) * 100).toFixed(1)),
         totalHours,
-        riskCount: riskTotal
+        riskCount: riskTotal,
+        blockerCount: blockerTotal
       }
     };
   }

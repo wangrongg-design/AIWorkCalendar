@@ -786,6 +786,35 @@ export default function OrgPage() {
   const checkoutPaymentCode = checkout?.payment?.qrCodeText ?? checkout?.payment?.paymentUrl ?? "";
   const checkoutIsLive = checkout?.payment?.mode === "live";
   const checkoutIsMock = checkout?.payment?.mode === "mock" || !checkout?.payment?.mode;
+  const completedExportCount = (exportTasks.data ?? []).filter((task) => task.status === "COMPLETED").length;
+  const reportRequiredMemberCount = (org.data?.users ?? []).filter((member) => member.isActive && member.requiresWorkReport).length;
+  const setupChecklist = [
+    {
+      label: "完善部门",
+      done: (org.data?.departments.length ?? 0) > 0,
+      next: "至少建立一个部门，后续日报覆盖和部门经理视图才准确。"
+    },
+    {
+      label: "添加成员",
+      done: (org.data?.users.length ?? 0) > 1,
+      next: "把需要填报的员工加入企业，并分配到对应部门。"
+    },
+    {
+      label: "确认填报要求",
+      done: reportRequiredMemberCount > 0,
+      next: "为员工打开“需要填报”，管理员账号可保持关闭。"
+    },
+    {
+      label: "检查订阅",
+      done: Boolean(subscription?.isUsable),
+      next: "确认试用或专业版状态，正式使用按启用成员计费。"
+    },
+    {
+      label: "测试导出",
+      done: completedExportCount > 0,
+      next: "创建一次数据导出任务，确认企业备份路径可用。"
+    }
+  ];
 
   const renderDepartmentActions = (record: Department) => {
     if (!canManage) return null;
@@ -1111,6 +1140,26 @@ export default function OrgPage() {
           message="当前身份为只读权限"
           description="只有企业管理员可以设置组织架构、管理员工、分配部门和调整角色。"
         />
+      ) : null}
+
+      {canManage ? (
+        <section className="surface-panel admin-setup-panel">
+          <div>
+            <div className="section-title">管理员设置清单</div>
+            <div className="section-subtitle">新企业先完成这些项目，团队日历、订阅和数据备份会更稳定。</div>
+          </div>
+          <div className="admin-setup-list">
+            {setupChecklist.map((item) => (
+              <div key={item.label} className={`admin-setup-item ${item.done ? "is-done" : ""}`}>
+                <CheckCircle2 size={16} />
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.done ? "已完成" : item.next}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <Tabs

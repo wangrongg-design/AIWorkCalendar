@@ -199,7 +199,7 @@ export default function LoginPage() {
         open={tenantSelectionOpen}
         onCancel={() => setTenantSelectionOpen(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Typography.Text className="tenant-choice-copy">
           这个账号已加入多个企业，请选择本次要进入的工作空间。

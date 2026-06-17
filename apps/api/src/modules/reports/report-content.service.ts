@@ -17,6 +17,10 @@ function truncateText(value: string | null | undefined, limit: number) {
   return value.length > limit ? `${value.slice(0, limit)}...` : value;
 }
 
+function arrayCount(value: unknown) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
 @Injectable()
 export class ReportContentService {
   constructor(
@@ -92,7 +96,7 @@ export class ReportContentService {
               fileSize: attachment.fileSize,
               textContent: attachment.aiSummary ? null : truncateText(attachment.textContent, MAX_ATTACHMENT_TEXT_CHARS),
               aiSummary: truncateText(attachment.aiSummary, MAX_ATTACHMENT_TEXT_CHARS)
-            })),
+          })),
             analysis: item.aiAnalysis
               ? {
                   achievements: item.aiAnalysis.achievements,
@@ -113,12 +117,52 @@ export class ReportContentService {
           containsImages: workLogs.some((item) => item.attachments.some((attachment) => attachment.kind === "IMAGE"))
         }
       );
+      const targetMembers = isPersonal
+        ? [{ id: report.requesterId }]
+        : await this.prisma.user.findMany({
+            where: {
+              tenantId: report.tenantId,
+              isActive: true,
+              requiresWorkReport: true,
+              deletedAt: null,
+              ...(report.departmentId ? { departmentId: report.departmentId } : {})
+            },
+            select: { id: true }
+          });
+      const coveredUserIds = new Set(workLogs.map((item) => item.userId));
+      const projectIds = new Set(workLogs.map((item) => item.projectId).filter(Boolean));
+      const riskCount = workLogs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.risks), 0);
+      const blockerCount = workLogs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.blockers), 0);
+      const totalHours = workLogs.reduce((sum, item) => sum + Number(item.hours ?? 0), 0);
+      const evidence = {
+        stats: {
+          workLogCount: workLogs.length,
+          targetMemberCount: targetMembers.length,
+          coveredMemberCount: coveredUserIds.size,
+          missingMemberCount: Math.max(targetMembers.length - coveredUserIds.size, 0),
+          riskCount,
+          blockerCount,
+          projectCount: projectIds.size,
+          totalHours: Number(totalHours.toFixed(2))
+        },
+        sources: workLogs.slice(0, 20).map((item) => ({
+          id: item.id,
+          date: dateKey(item.date),
+          title: item.title,
+          userName: item.user.name,
+          projectName: item.project?.name ?? null,
+          summary: truncateText(item.aiAnalysis?.summary ?? item.content, 240),
+          risks: Array.isArray(item.aiAnalysis?.risks) ? item.aiAnalysis.risks.map(String) : [],
+          blockers: Array.isArray(item.aiAnalysis?.blockers) ? item.aiAnalysis.blockers.map(String) : [],
+          hours: Number(item.hours ?? 0)
+        }))
+      };
 
       const updated = await this.prisma.report.update({
         where: { id: report.id },
         data: {
           status: ReportStatus.COMPLETED,
-          content,
+          content: { ...content, evidence },
           error: null
         }
       });

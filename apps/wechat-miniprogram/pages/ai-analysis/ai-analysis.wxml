@@ -27,8 +27,8 @@
       <view class="metric-label">缺填</view>
     </view>
     <view class="metric">
-      <view class="metric-value risk">{{riskCount}}</view>
-      <view class="metric-label">风险</view>
+      <view class="metric-value risk">{{riskBlockerCount}}</view>
+      <view class="metric-label">风险/阻塞</view>
     </view>
   </view>
 
@@ -39,9 +39,9 @@
   </view>
 
   <view class="surface insight-section">
-    <view class="section-kicker warning">风险提醒</view>
+    <view class="section-kicker warning">风险/阻塞提醒</view>
     <view class="section-body">{{riskReminder}}</view>
-    <button wx:if="{{firstRiskDate}}" class="inline-action" bindtap="openRiskDay">查看风险日期</button>
+    <button wx:if="{{firstRiskDate}}" class="inline-action" bindtap="openRiskDay">查看重点日期</button>
   </view>
 
   <view class="surface insight-section">
@@ -60,7 +60,7 @@
     <view class="action-stack">
       <button class="primary-button" loading="{{generating}}" bindtap="generateWeeklyReport">生成周报</button>
       <button class="secondary-button" bindtap="remindMissing">提醒未填报</button>
-      <button class="tertiary-button" bindtap="viewRiskProjects">查看风险项目</button>
+      <button class="tertiary-button" bindtap="viewRiskProjects">查看风险/阻塞项目</button>
     </view>
   </view>
 

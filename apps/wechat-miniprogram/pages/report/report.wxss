@@ -354,11 +354,65 @@
   margin-top: 18rpx;
 }
 
+.draft-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 24rpx;
+}
+
+.draft-item {
+  border: 1rpx solid #E6E6E6;
+  border-radius: 24rpx;
+  background: #FFFFFF;
+  padding: 22rpx;
+}
+
+.draft-item.muted {
+  opacity: 0.58;
+}
+
+.draft-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.draft-item-title {
+  color: #1A1A1A;
+  font-size: 27rpx;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.draft-item-meta {
+  margin-top: 6rpx;
+  color: #737373;
+  font-size: 22rpx;
+  line-height: 1.45;
+}
+
+.draft-select-control {
+  display: flex;
+  min-height: 88rpx;
+  align-items: center;
+  gap: 10rpx;
+  color: #0B57D0;
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
 .editor-stack {
   display: flex;
   flex-direction: column;
   gap: 20rpx;
   margin-top: 24rpx;
+}
+
+.editor-stack.compact {
+  gap: 16rpx;
+  margin-top: 18rpx;
 }
 
 .editor-stack .field {

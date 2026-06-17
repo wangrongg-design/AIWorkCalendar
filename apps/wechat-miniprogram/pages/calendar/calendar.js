@@ -45,7 +45,7 @@ function formatHours(value) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function riskCount(log) {
+function riskBlockerCount(log) {
   const risks = log.aiAnalysis && Array.isArray(log.aiAnalysis.risks) ? log.aiAnalysis.risks.length : 0;
   const blockers = log.aiAnalysis && Array.isArray(log.aiAnalysis.blockers) ? log.aiAnalysis.blockers.length : 0;
   return risks + blockers;
@@ -65,7 +65,7 @@ function daySummaryText(day) {
   if (day.isFuture) {
     if (day.totalCount > 0) {
       parts.push(`计划 ${day.filledCount}/${day.totalCount}`);
-      if (day.riskCount > 0) parts.push(`风险 ${day.riskCount}`);
+      if (day.riskBlockerCount > 0) parts.push(`风险/阻塞 ${day.riskBlockerCount}`);
       if (day.hasTotalHours) parts.push(`工时 ${day.hoursText}`);
       return parts.join(" · ");
     }
@@ -74,12 +74,12 @@ function daySummaryText(day) {
   if (day.totalCount > 0) {
     parts.push(`填报 ${day.filledCount}/${day.totalCount}`);
     if (day.missingCount > 0) parts.push(`未填 ${day.missingCount}`);
-    if (day.riskCount > 0) parts.push(`风险 ${day.riskCount}`);
+    if (day.riskBlockerCount > 0) parts.push(`风险/阻塞 ${day.riskBlockerCount}`);
     if (day.hasTotalHours) parts.push(`工时 ${day.hoursText}`);
     return parts.join(" · ");
   }
-  if (day.riskCount > 0) {
-    return `暂无填报记录 · 风险 ${day.riskCount}`;
+  if (day.riskBlockerCount > 0) {
+    return `暂无填报记录 · 风险/阻塞 ${day.riskBlockerCount}`;
   }
   return "暂无填报记录";
 }
@@ -91,6 +91,7 @@ function buildDayItem(date, source, detail) {
   const filledCount = Number.isFinite(Number(stats.filledCount)) ? Number(stats.filledCount) : Number(source && source.filledCount ? source.filledCount : 0);
   const missingCount = Number.isFinite(Number(stats.missingCount)) ? Number(stats.missingCount) : Number(source && source.missingCount ? source.missingCount : 0);
   const risk = Number.isFinite(Number(stats.riskCount)) ? Number(stats.riskCount) : Number(source && source.riskCount ? source.riskCount : 0);
+  const blocker = Number.isFinite(Number(stats.blockerCount)) ? Number(stats.blockerCount) : Number(source && source.blockerCount ? source.blockerCount : 0);
   const totalEmployees = Number(stats.totalEmployees || 0);
   const totalCount = filledCount + missingCount > 0 ? filledCount + missingCount : totalEmployees;
   const fillRate = Number.isFinite(Number(stats.fillRate)) ? Number(stats.fillRate) : Number(source && source.fillRate ? source.fillRate : 0);
@@ -106,6 +107,8 @@ function buildDayItem(date, source, detail) {
     filledCount,
     missingCount,
     riskCount: risk,
+    blockerCount: blocker,
+    riskBlockerCount: risk + blocker,
     totalCount,
     fillRate,
     totalHours: hasTotalHours ? totalHoursNumber : 0,
@@ -117,14 +120,14 @@ function buildDayItem(date, source, detail) {
 }
 
 function buildTodayBrief(day) {
-  const riskText = day.riskCount > 0 ? `${day.riskCount} 条风险` : "无风险";
+  const riskText = day.riskBlockerCount > 0 ? `${day.riskBlockerCount} 条风险/阻塞` : "无风险/阻塞";
   const hourSummary = day.hasTotalHours ? day.hoursText : "工时待确认";
 
-  if (day.riskCount > 0) {
+  if (day.riskBlockerCount > 0) {
     return {
-      title: "有风险需要关注",
+      title: "有风险/阻塞需要关注",
       summary: day.filledCount > 0 ? `已填报 · ${hourSummary} · ${riskText}` : `未填报 · 工时待补齐 · ${riskText}`,
-      message: "人工智能已发现风险信号，建议去记录页查看原始日报。",
+      message: "已发现风险/阻塞信号，建议去记录页查看原始日报。",
       tone: "risk"
     };
   }
@@ -141,7 +144,7 @@ function buildTodayBrief(day) {
   return {
     title: "今天状态正常",
     summary: `已填报 · ${hourSummary} · ${riskText}`,
-    message: "人工智能暂未发现需要你处理的问题。",
+    message: "暂未发现需要你处理的问题。",
     tone: "success"
   };
 }
@@ -150,11 +153,11 @@ function buildWeekMetrics(days) {
   const current = days.filter((day) => !day.isFuture);
   const filledDays = current.filter((day) => day.filledCount > 0).length;
   const missingDays = current.filter((day) => day.filledCount === 0 || day.missingCount > 0).length;
-  const risks = current.reduce((sum, day) => sum + day.riskCount, 0);
+  const risks = current.reduce((sum, day) => sum + day.riskBlockerCount, 0);
   return [
     { value: `${filledDays} 天`, label: "已填", tone: "success" },
     { value: `${missingDays} 天`, label: "未填", tone: missingDays > 0 ? "warning" : "muted" },
-    { value: `${risks} 条`, label: "风险", tone: risks > 0 ? "risk" : "muted" }
+    { value: `${risks} 条`, label: "风险/阻塞", tone: risks > 0 ? "risk" : "muted" }
   ];
 }
 
@@ -167,11 +170,11 @@ function buildAttentionItems(days) {
   return days
     .filter((day) => !day.isFuture)
     .map((day) => {
-      if (day.riskCount > 0) {
+      if (day.riskBlockerCount > 0) {
         return {
           id: `risk-${day.dateKey}`,
           dateKey: day.dateKey,
-          title: `${day.dateText} 风险 ${day.riskCount} 条`,
+          title: `${day.dateText} 风险/阻塞 ${day.riskBlockerCount} 条`,
           subtitle: day.summaryText,
           tone: "risk",
           priority: 0
@@ -210,7 +213,7 @@ function buildAttentionItems(days) {
 function normalizeRecentLog(log) {
   const date = dateFromKey(String(log.date || "").slice(0, 10));
   const projectName = projectDisplayName(log.project);
-  const hasRisk = riskCount(log) > 0;
+  const hasRisk = riskBlockerCount(log) > 0;
   return {
     id: log.id,
     title: shortDateText(date),

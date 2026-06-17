@@ -16,3 +16,17 @@ export class GenerateReportDto {
   departmentId?: string;
 }
 
+export class ReportReadinessQueryDto {
+  @IsEnum(ReportType)
+  type: ReportType;
+
+  @IsDateString()
+  periodStart: string;
+
+  @IsDateString()
+  periodEnd: string;
+
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+}

@@ -27,6 +27,41 @@ function datePillText(key) {
   return `${Number(month || 0)}月${Number(day || 0)}日`;
 }
 
+function projectIndexForId(projectOptions, projectId) {
+  return Math.max(
+    0,
+    (projectOptions || []).findIndex((item) => item.id === (projectId || ""))
+  );
+}
+
+function projectDisplayName(projectOptions, projectIndex) {
+  const project = (projectOptions || [])[projectIndex] || (projectOptions || [])[0];
+  return project ? project.displayName : "不关联项目";
+}
+
+function normalizedDraftItems(draft, projectOptions, fallbackProjectId) {
+  const sourceItems = Array.isArray(draft && draft.items) && draft.items.length ? draft.items : [draft || {}];
+  return sourceItems.map((item, index) => {
+    const projectId = item.projectId || fallbackProjectId || "";
+    const projectIndex = projectIndexForId(projectOptions, projectId);
+    const confidence = Number(item.confidence == null ? draft.confidence : item.confidence);
+    return {
+      id: `draft-${Date.now()}-${index}`,
+      selected: true,
+      kind: item.kind || draft.kind || "WORK_LOG",
+      date: item.date || draft.date || dateKey(),
+      title: item.title || "工作填报",
+      content: item.content || item.title || "工作填报",
+      hours: String(item.hours == null ? "1" : item.hours),
+      projectId,
+      projectIndex,
+      projectName: projectDisplayName(projectOptions, projectIndex),
+      confidenceText: Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : "需确认",
+      missingFields: Array.isArray(item.missingFields) ? item.missingFields.join("、") : ""
+    };
+  });
+}
+
 function createVoiceRecognitionManager() {
   if (typeof requirePlugin !== "function") {
     return null;
@@ -52,6 +87,7 @@ Page({
     title: "",
     content: "",
     hours: "1",
+    draftItems: [],
     projectOptions: [{ id: "", displayName: "不关联项目" }],
     projectIndex: 0,
     projectId: "",
@@ -59,6 +95,7 @@ Page({
     todaySubmittedCount: 0,
     todayHoursText: "0",
     todayRiskCount: 0,
+    todayBlockerCount: 0,
     todayStatusIcon: "AI",
     todayConclusion: "今天还未完成填报",
     todayRiskText: "先用一句话描述今天完成的事，系统会整理标题、内容和工时。",
@@ -145,7 +182,15 @@ Page({
         0,
         projectOptions.findIndex((item) => item.id === this.data.projectId)
       );
-      this.setData({ projectOptions, projectIndex: selectedIndex });
+      const draftItems = (this.data.draftItems || []).map((item) => {
+        const projectIndex = projectIndexForId(projectOptions, item.projectId);
+        return {
+          ...item,
+          projectIndex,
+          projectName: projectDisplayName(projectOptions, projectIndex)
+        };
+      });
+      this.setData({ projectOptions, projectIndex: selectedIndex, draftItems });
     } catch (error) {
       this.setData({ projectOptions: [{ id: "", displayName: "不关联项目" }], projectIndex: 0, projectId: "" });
     }
@@ -172,10 +217,14 @@ Page({
     const hours = todayLogs.reduce((sum, item) => sum + Number(item.hours || 0), 0);
     const riskCount = todayLogs.reduce((sum, item) => {
       const risks = item.aiAnalysis && Array.isArray(item.aiAnalysis.risks) ? item.aiAnalysis.risks.length : 0;
-      const blockers = item.aiAnalysis && Array.isArray(item.aiAnalysis.blockers) ? item.aiAnalysis.blockers.length : 0;
-      return sum + risks + blockers;
+      return sum + risks;
     }, 0);
-    const hasDraftContent = Boolean(this.data.title.trim() || this.data.content.trim());
+    const blockerCount = todayLogs.reduce((sum, item) => {
+      const blockers = item.aiAnalysis && Array.isArray(item.aiAnalysis.blockers) ? item.aiAnalysis.blockers.length : 0;
+      return sum + blockers;
+    }, 0);
+    const riskBlockerCount = riskCount + blockerCount;
+    const hasDraftContent = Boolean((this.data.draftItems || []).length || this.data.title.trim() || this.data.content.trim());
     const todayHoursText = Number(hours.toFixed(1)).toString();
     this.setData({
       workLogs,
@@ -183,12 +232,13 @@ Page({
       todaySubmittedCount: submitted,
       todayHoursText,
       todayRiskCount: riskCount,
-      todayStatusIcon: riskCount > 0 ? "!" : "AI",
+      todayBlockerCount: blockerCount,
+      todayStatusIcon: riskBlockerCount > 0 ? "!" : "AI",
       todayConclusion: submitted > 0 ? `今天已提交 ${submitted} 条日报` : hasDraftContent ? "日报草稿已准备，等待确认提交" : "今天还未完成填报",
-      todayRiskText: riskCount > 0
-        ? `发现 ${riskCount} 个风险或阻塞，提交前建议补充处理动作。`
+      todayRiskText: riskBlockerCount > 0
+        ? `发现 ${riskBlockerCount} 个风险/阻塞，提交前建议补充处理动作。`
         : submitted > 0
-          ? "暂无明显风险，今日工作信号已进入团队看板。"
+          ? "暂无明显风险/阻塞，今日工作信号已进入团队看板。"
           : "先用一句话描述今天完成的事，系统会整理标题、内容和工时。"
     });
   },
@@ -291,16 +341,22 @@ Page({
           messages: draftMessages(messages)
         }
       });
+      const draftItems = normalizedDraftItems(draft, this.data.projectOptions, this.data.projectId);
+      const first = draftItems[0] || {};
       this.setData({
-        date: draft.date,
-        datePill: datePillText(draft.date),
-        title: draft.title,
-        content: draft.content,
-        hours: String(draft.hours),
+        draftItems,
+        date: first.date || this.data.date,
+        datePill: datePillText(first.date || this.data.date),
+        title: first.title || "",
+        content: first.content || "",
+        hours: first.hours || "1",
+        projectId: first.projectId || "",
+        projectIndex: first.projectIndex || 0,
+        hasDraftContent: draftItems.length > 0,
         chatMessages: messages.concat([chatMessage("assistant", draft.assistantMessage)])
       });
       this.applyTodayStatus(this.data.workLogs);
-      wx.showToast({ title: draft.kind === "PLAN" ? "已生成计划" : "已生成日报" });
+      wx.showToast({ title: draftItems.length > 1 ? `已生成 ${draftItems.length} 条草稿` : (first.kind === "PLAN" ? "已生成计划" : "已生成日报") });
     } catch (error) {
       wx.showToast({ title: error.message || "人工智能生成失败", icon: "none" });
     } finally {
@@ -324,6 +380,54 @@ Page({
     });
   },
 
+  updateDraftItem(index, patch) {
+    const draftItems = (this.data.draftItems || []).map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    ));
+    const active = draftItems.find((item) => item.selected) || draftItems[0] || {};
+    this.setData({
+      draftItems,
+      date: active.date || this.data.date,
+      datePill: datePillText(active.date || this.data.date),
+      title: active.title || "",
+      content: active.content || "",
+      hours: active.hours || "1",
+      projectId: active.projectId || "",
+      projectIndex: active.projectIndex || 0,
+      hasDraftContent: draftItems.length > 0
+    }, () => this.applyTodayStatus(this.data.workLogs));
+  },
+
+  onDraftSelectedChange(event) {
+    this.updateDraftItem(Number(event.currentTarget.dataset.index), { selected: Boolean(event.detail.value) });
+  },
+
+  onDraftDateChange(event) {
+    this.updateDraftItem(Number(event.currentTarget.dataset.index), { date: event.detail.value });
+  },
+
+  onDraftProjectChange(event) {
+    const projectIndex = Number(event.detail.value);
+    const project = this.data.projectOptions[projectIndex] || this.data.projectOptions[0];
+    this.updateDraftItem(Number(event.currentTarget.dataset.index), {
+      projectIndex,
+      projectId: project.id,
+      projectName: project.displayName
+    });
+  },
+
+  onDraftTitleInput(event) {
+    this.updateDraftItem(Number(event.currentTarget.dataset.index), { title: event.detail.value });
+  },
+
+  onDraftHoursInput(event) {
+    this.updateDraftItem(Number(event.currentTarget.dataset.index), { hours: event.detail.value });
+  },
+
+  onDraftContentInput(event) {
+    this.updateDraftItem(Number(event.currentTarget.dataset.index), { content: event.detail.value });
+  },
+
   onHoursInput(event) {
     this.setData({ hours: event.detail.value });
   },
@@ -341,6 +445,7 @@ Page({
       title: "",
       content: "",
       hours: "1",
+      draftItems: [],
       date: dateKey(),
       datePill: datePillText(dateKey()),
       savedDraftId: "",
@@ -354,10 +459,11 @@ Page({
     }, () => this.applyTodayStatus(this.data.workLogs));
   },
 
-  validatedPayload() {
-    const title = this.data.title.trim();
-    const content = this.data.content.trim();
-    const hours = Number(this.data.hours);
+  validatedPayload(source) {
+    const values = source || this.data;
+    const title = String(values.title || "").trim();
+    const content = String(values.content || "").trim();
+    const hours = Number(values.hours);
     if (!title || !content) {
       wx.showToast({ title: "请填写标题和内容", icon: "none" });
       return null;
@@ -367,11 +473,11 @@ Page({
       return null;
     }
     return {
-      date: this.data.date,
+      date: values.date || this.data.date,
       title,
       content,
       hours,
-      projectId: this.data.projectId || undefined
+      projectId: values.projectId || undefined
     };
   },
 
@@ -392,7 +498,8 @@ Page({
   },
 
   async saveDraft() {
-    const payload = this.validatedPayload();
+    const draftItem = (this.data.draftItems || []).find((item) => item.selected) || (this.data.draftItems || [])[0];
+    const payload = this.validatedPayload(draftItem);
     if (!payload) return;
     this.setData({ savingDraft: true });
     try {
@@ -407,13 +514,34 @@ Page({
   },
 
   async submit() {
-    const payload = this.validatedPayload();
+    const selectedDraftItems = (this.data.draftItems || []).filter((item) => item.selected);
+    if ((this.data.draftItems || []).length && !selectedDraftItems.length) {
+      wx.showToast({ title: "请至少确认一条草稿", icon: "none" });
+      return;
+    }
+    const singleDraftItem = selectedDraftItems.length === 1 ? selectedDraftItems[0] : null;
+    const payload = this.validatedPayload(singleDraftItem);
     if (!payload) return;
     this.setData({ submitting: true });
     try {
-      const workLog = await this.upsertDraft(payload);
-      await request(`/work-logs/${workLog.id}/submit`, { method: "POST" });
-      wx.showToast({ title: "已提交" });
+      if (selectedDraftItems.length > 1) {
+        for (const item of selectedDraftItems) {
+          const itemPayload = this.validatedPayload(item);
+          if (!itemPayload) {
+            this.setData({ submitting: false });
+            return;
+          }
+          const workLog = await request("/work-logs", {
+            method: "POST",
+            data: itemPayload
+          });
+          await request(`/work-logs/${workLog.id}/submit`, { method: "POST" });
+        }
+      } else {
+        const workLog = await this.upsertDraft(payload);
+        await request(`/work-logs/${workLog.id}/submit`, { method: "POST" });
+      }
+      wx.showToast({ title: selectedDraftItems.length > 1 ? `已提交 ${selectedDraftItems.length} 条` : "已提交" });
       this.clearForm();
       this.loadWorkLogs();
     } catch (error) {

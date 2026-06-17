@@ -27,8 +27,8 @@
       <view class="metric-label">工时</view>
     </view>
     <view class="metric">
-      <view class="metric-value risk">{{stats.riskCount || 0}}</view>
-      <view class="metric-label">风险</view>
+      <view class="metric-value risk">{{stats.riskBlockerCount || 0}}</view>
+      <view class="metric-label">风险/阻塞</view>
     </view>
   </view>
 

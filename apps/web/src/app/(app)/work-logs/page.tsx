@@ -1,11 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
+import { Alert, Button, Checkbox, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
 import { Bot, Download, Edit2, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
+import type { ClipboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiDownload, apiFetch } from "@/lib/api";
@@ -32,6 +33,18 @@ type PendingAttachment = {
   file: File;
 };
 
+type DraftPreviewItem = WorkLogDraftItem & {
+  projectId?: string;
+  selected: boolean;
+};
+
+type DraftPreview = {
+  assistantMessage: string;
+  items: DraftPreviewItem[];
+  attachedToFirst: boolean;
+  attachmentTargetIndex: number;
+};
+
 const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
 
 function formatFileSize(value: number) {
@@ -39,6 +52,19 @@ function formatFileSize(value: number) {
     return `${(value / 1024 / 1024).toFixed(1)}MB`;
   }
   return `${Math.max(1, Math.round(value / 1024))}KB`;
+}
+
+function clipboardImageFiles(event: ClipboardEvent<HTMLElement>) {
+  return Array.from(event.clipboardData?.items ?? [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item, index) => {
+      const file = item.getAsFile();
+      if (!file) return null;
+      const extension = file.type.split("/")[1] || "png";
+      const filename = file.name || `pasted-image-${Date.now()}-${index + 1}.${extension}`;
+      return new File([file], filename, { type: file.type || "image/png" });
+    })
+    .filter((file): file is File => Boolean(file));
 }
 
 function dateTimeText(value?: string | null) {
@@ -105,6 +131,13 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
   };
 }
 
+function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
+  return {
+    ...draftItemToForm(item),
+    projectId: item.projectId
+  };
+}
+
 export default function WorkLogsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<WorkLogForm>();
@@ -122,6 +155,7 @@ export default function WorkLogsPage() {
       content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会先识别整理，等待完成后再写入填报。"
     }
   ]);
+  const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
 
   const logs = useQuery({
@@ -141,6 +175,14 @@ export default function WorkLogsPage() {
         .map((item) => ({ value: item.id, label: item.code ? `${item.code} · ${item.name}` : item.name })),
     [projects.data]
   );
+
+  const projectNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const project of projects.data ?? []) {
+      map.set(project.id, project.code ? `${project.code} · ${project.name}` : project.name);
+    }
+    return map;
+  }, [projects.data]);
 
   const filteredLogs = useMemo(() => {
     return (logs.data ?? []).filter((item) => {
@@ -181,13 +223,40 @@ export default function WorkLogsPage() {
     }
   };
 
-  const addPendingAttachment = (file: RcFile) => {
-    if (file.size > ATTACHMENT_MAX_BYTES) {
-      message.error("单个附件不能超过 8MB，请压缩后重新上传。");
-      return Upload.LIST_IGNORE;
+  const addPendingFiles = (files: File[], source: "upload" | "paste") => {
+    const accepted = files.reduce<PendingAttachment[]>((result, file, index) => {
+      if (file.size > ATTACHMENT_MAX_BYTES) {
+        message.error("单个附件不能超过 8MB，请压缩后重新上传。");
+        return result;
+      }
+      const uploadFile = file as RcFile;
+      result.push({
+        uid: uploadFile.uid || `${source}-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+        file
+      });
+      return result;
+    }, []);
+    if (!accepted.length) {
+      return false;
     }
-    setPendingAttachments((items) => [...items, { uid: file.uid, file }]);
-    return false;
+    setPendingAttachments((items) => [...items, ...accepted]);
+    if (source === "paste") {
+      message.success(`已添加 ${accepted.length} 张粘贴图片。`);
+    }
+    return true;
+  };
+
+  const addPendingAttachment = (file: RcFile) => {
+    return addPendingFiles([file], "upload") ? false : Upload.LIST_IGNORE;
+  };
+
+  const handlePasteImages = (event: ClipboardEvent<HTMLElement>) => {
+    const files = clipboardImageFiles(event);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    addPendingFiles(files, "paste");
   };
 
   const downloadAttachment = async (workLogId: string, attachment: WorkLogAttachment) => {
@@ -211,7 +280,7 @@ export default function WorkLogsPage() {
   const createLog = useMutation({
     mutationFn: (values: WorkLogForm) => createAndSubmitLog(values, true),
     onSuccess: () => {
-      message.success("已填报，AI 将自动分析。");
+      message.success("已提交，将自动分析。");
       setModalOpen(false);
       setPendingAttachments([]);
       form.resetFields();
@@ -261,7 +330,7 @@ export default function WorkLogsPage() {
   const submitLog = useMutation({
     mutationFn: (id: string) => apiFetch<WorkLog>(`/work-logs/${id}/submit`, { method: "POST" }),
     onSuccess: () => {
-      message.success("已提交，AI 将异步分析");
+      message.success("已提交，将进入分析队列");
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
     }
@@ -285,16 +354,22 @@ export default function WorkLogsPage() {
         })
       });
       if (editing) {
-        return { draft, count: 0, attachedToFirst: false, filledForm: true };
+        return { draft, preview: null, filledForm: true };
       }
       const items = normalizedDraftItems(draft);
       const attachedToFirst = pendingAttachments.length > 0 && items.length > 1;
-      for (const [index, item] of items.entries()) {
-        await createAndSubmitLog(draftItemToForm(item), index === 0);
-      }
-      return { draft, count: items.length, attachedToFirst, filledForm: false };
+      return {
+        draft,
+        preview: {
+          assistantMessage: draft.assistantMessage,
+          items: items.map((item) => ({ ...item, projectId: form.getFieldValue("projectId"), selected: true })),
+          attachedToFirst,
+          attachmentTargetIndex: 0
+        } satisfies DraftPreview,
+        filledForm: false
+      };
     },
-    onSuccess: ({ draft, count, attachedToFirst, filledForm }) => {
+    onSuccess: ({ draft, preview, filledForm }) => {
       if (filledForm) {
         const first = normalizedDraftItems(draft)[0];
         form.setFieldsValue(draftItemToForm(first));
@@ -303,20 +378,47 @@ export default function WorkLogsPage() {
       if (filledForm) {
         message.success("已整理到表单，请确认后保存修改。");
       } else {
-        message.success(count > 1 ? `已填报 ${count} 条，AI 将自动分析。` : "已填报，AI 将自动分析。");
-        if (attachedToFirst) {
-          message.info("检测到多条日程，附件已关联到第一条填报。");
+        setDraftPreview(preview);
+        if (preview?.items.length === 1) {
+          form.setFieldsValue(draftPreviewItemToForm(preview.items[0]));
         }
-        setModalOpen(false);
-        setPendingAttachments([]);
-        form.resetFields();
-        queryClient.invalidateQueries({ queryKey: ["work-logs"] });
-        queryClient.invalidateQueries({ queryKey: ["calendar"] });
-        queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+        message.success("已生成草稿，请确认后提交。");
       }
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "AI 填报失败，请调整描述后重试。");
+      message.error(error instanceof Error ? error.message : "草稿生成失败，请调整描述后重试。");
+    }
+  });
+
+  const confirmDraftLog = useMutation({
+    mutationFn: async (preview: DraftPreview) => {
+      const selectedEntries = preview.items.map((item, index) => ({ item, index })).filter((entry) => entry.item.selected);
+      if (!selectedEntries.length) {
+        throw new Error("请至少确认一条草稿。");
+      }
+      const hasAttachments = pendingAttachments.length > 0;
+      const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
+      const uploadTargetIndex = selectedEntries.some((entry) => entry.index === requestedTargetIndex) ? requestedTargetIndex : selectedEntries[0].index;
+      for (const { item, index } of selectedEntries) {
+        await createAndSubmitLog(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex);
+      }
+      return { ...preview, submittedCount: selectedEntries.length, hasAttachments, uploadTargetIndex };
+    },
+    onSuccess: (preview) => {
+      message.success(preview.submittedCount > 1 ? `已提交 ${preview.submittedCount} 条填报。` : "已提交填报。");
+      if (preview.hasAttachments && preview.submittedCount > 1) {
+        message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
+      }
+      setDraftPreview(null);
+      setModalOpen(false);
+      setPendingAttachments([]);
+      form.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "提交草稿失败，请检查后重试。");
     }
   });
 
@@ -326,6 +428,7 @@ export default function WorkLogsPage() {
     const nextMessages = [...aiMessages, { role: "user" as const, content: text }];
     setAiMessages(nextMessages);
     setAiInput("");
+    setDraftPreview(null);
     draftLog.mutate(nextMessages);
   };
 
@@ -348,6 +451,7 @@ export default function WorkLogsPage() {
         content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会先识别整理，等待完成后再写入填报。"
       }
     ]);
+    setDraftPreview(null);
     setModalOpen(true);
   };
 
@@ -381,7 +485,19 @@ export default function WorkLogsPage() {
         content: "可以继续用自然语言修改这条填报，例如“把日期改成明天，工时改成 2 小时，内容补充联调风险”。"
       }
     ]);
+    setDraftPreview(null);
     setModalOpen(true);
+  };
+
+  const updateDraftPreviewItem = (index: number, patch: Partial<DraftPreviewItem>) => {
+    setDraftPreview((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item))
+          }
+        : current
+    );
   };
 
   const columns: ColumnsType<WorkLog> = [
@@ -430,8 +546,8 @@ export default function WorkLogsPage() {
       render: (value: string) => <Tag color={value === "SUBMITTED" ? "green" : "default"}>{value === "SUBMITTED" ? "已提交" : "草稿"}</Tag>
     },
     {
-      title: "风险",
-      width: 100,
+      title: "风险/阻塞",
+      width: 120,
       render: (_, record) => {
         const count = (record.aiAnalysis?.risks?.length ?? 0) + (record.aiAnalysis?.blockers?.length ?? 0);
         return <Tag color={count ? "red" : "default"}>{count ? `${count} 条` : "无"}</Tag>;
@@ -468,7 +584,7 @@ export default function WorkLogsPage() {
       <div className="surface-panel worklog-entry-panel">
         <div className="worklog-entry-copy">
           <div className="section-title">写日报/计划</div>
-          <div className="section-subtitle">直接写一句话，AI 会识别日期、工时和工作内容，多条日程也可以一次填报。</div>
+          <div className="section-subtitle">直接写一句话，系统会识别日期、工时和工作内容，多条日程也可以一次填报。</div>
         </div>
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
           写日报/计划
@@ -525,12 +641,13 @@ export default function WorkLogsPage() {
         open={modalOpen}
         onCancel={() => {
           setModalOpen(false);
+          setDraftPreview(null);
           setPendingAttachments([]);
         }}
         onOk={() => form.submit()}
-        okText={editing ? "保存修改" : "填报"}
+        okText={editing ? "保存修改" : "提交表单"}
         cancelText="取消"
-        confirmLoading={createLog.isPending || updateLog.isPending || draftLog.isPending}
+        confirmLoading={createLog.isPending || updateLog.isPending || draftLog.isPending || confirmDraftLog.isPending}
         width={880}
       >
         <Form
@@ -547,8 +664,8 @@ export default function WorkLogsPage() {
         >
           <div className="mb-5 rounded-[18px] bg-surface-container-low p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-              <Bot size={17} className="text-secondary" />
-              AI 对话填报
+              <WandSparkles size={17} className="text-secondary" />
+              智能草稿
             </div>
             <div className="mb-3 max-h-48 space-y-2 overflow-auto">
               {aiMessages.map((item, index) => (
@@ -567,7 +684,7 @@ export default function WorkLogsPage() {
               <div className="quickfill-draft-waiting" role="status" aria-live="polite">
                 <span className="quickfill-draft-spinner" />
                 <div>
-                  <strong>{editing ? "正在整理到表单" : "正在生成并提交填报"}</strong>
+                  <strong>{editing ? "正在整理到表单" : "正在生成草稿"}</strong>
                   <p>正在调用模型识别日期、工时和工作内容，正式环境可能需要 5-20 秒，请稍候。</p>
                 </div>
               </div>
@@ -578,6 +695,7 @@ export default function WorkLogsPage() {
                 autoSize={{ minRows: 2, maxRows: 4 }}
                 placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
                 disabled={draftLog.isPending}
+                onPaste={handlePasteImages}
                 onChange={(event) => setAiInput(event.target.value)}
                 onPressEnter={(event) => {
                   if (!event.shiftKey) {
@@ -587,9 +705,112 @@ export default function WorkLogsPage() {
                 }}
               />
               <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftLog.isPending} disabled={draftLog.isPending} onClick={sendAiMessage}>
-                {editing ? "整理到表单" : "生成并提交"}
+                {editing ? "整理到表单" : "生成草稿"}
               </Button>
             </div>
+            {draftPreview ? (
+              <div className="quickfill-draft-preview">
+                <Alert
+                  type={draftPreview.items.some((item) => item.selected && (item.missingFields.length > 0 || item.confidence < 0.8)) ? "warning" : "info"}
+                  showIcon
+                  message="请确认草稿后再提交"
+                  description="系统不会自动提交。你可以逐条确认、跳过或修改日期、标题、工时、项目和内容。"
+                />
+                {pendingAttachments.length > 0 && draftPreview.items.length > 1 ? (
+                  <div className="quickfill-attachment-target">
+                    <span>附件归属</span>
+                    <Select
+                      value={draftPreview.attachmentTargetIndex}
+                      listHeight={280}
+                      options={draftPreview.items.map((item, index) => ({
+                        value: index,
+                        disabled: !item.selected,
+                        label: `第 ${index + 1} 条 · ${item.title || "未命名草稿"}`
+                      }))}
+                      onChange={(value) =>
+                        setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))
+                      }
+                    />
+                    <em>未选择或跳过目标时，自动关联到第一条已确认草稿。</em>
+                  </div>
+                ) : null}
+                <div className="quickfill-draft-list">
+                  {draftPreview.items.map((item, index) => (
+                    <div key={`${item.date}-${item.title}-${index}`} className={`quickfill-draft-item ${item.selected ? "" : "is-muted"}`}>
+                      <div className="quickfill-draft-head">
+                        <Checkbox checked={item.selected} onChange={(event) => updateDraftPreviewItem(index, { selected: event.target.checked })}>
+                          确认第 {index + 1} 条
+                        </Checkbox>
+                        <span>{item.kind === "PLAN" ? "计划" : "日报"}</span>
+                      </div>
+                      <div className="quickfill-draft-edit-grid">
+                        <label>
+                          <span>日期</span>
+                          <DatePicker
+                            className="w-full"
+                            value={dayjs(item.date).isValid() ? dayjs(item.date) : dayjs()}
+                            onChange={(value) => value && updateDraftPreviewItem(index, { date: value.format("YYYY-MM-DD") })}
+                          />
+                        </label>
+                        <label>
+                          <span>工时</span>
+                          <InputNumber
+                            className="w-full"
+                            min={0}
+                            max={24}
+                            step={0.5}
+                            value={item.hours}
+                            onChange={(value) => updateDraftPreviewItem(index, { hours: Number(value ?? 0) })}
+                          />
+                        </label>
+                        <label className="quickfill-draft-title-field">
+                          <span>标题</span>
+                          <Input value={item.title} onChange={(event) => updateDraftPreviewItem(index, { title: event.target.value })} />
+                        </label>
+                        <label className="quickfill-draft-project-field">
+                          <span>项目</span>
+                          <Select
+                            allowClear
+                            value={item.projectId}
+                            placeholder="未关联"
+                            loading={projects.isFetching}
+                            listHeight={280}
+                            options={projectOptions}
+                            onChange={(value) => updateDraftPreviewItem(index, { projectId: value })}
+                          />
+                        </label>
+                      </div>
+                      <label className="quickfill-draft-content-field">
+                        <span>内容</span>
+                        <Input.TextArea
+                          autoSize={{ minRows: 2, maxRows: 5 }}
+                          value={item.content}
+                          onPaste={handlePasteImages}
+                          onChange={(event) => updateDraftPreviewItem(index, { content: event.target.value })}
+                        />
+                      </label>
+                      <div className="quickfill-draft-meta">
+                        <span>附件：{pendingAttachments.length ? (draftPreview.attachmentTargetIndex === index ? "关联到本条" : "未关联到本条") : "无"}</span>
+                        <span>项目：{item.projectId ? projectNameById.get(item.projectId) ?? "已选择项目" : "未关联"}</span>
+                        <span>置信度：{Math.round(item.confidence * 100)}%</span>
+                      </div>
+                      {item.missingFields.length ? <div className="quickfill-draft-warning">需确认：{item.missingFields.join("、")}</div> : null}
+                    </div>
+                  ))}
+                </div>
+                <div className="quickfill-draft-actions">
+                  <Button onClick={() => setDraftPreview(null)}>继续修改描述</Button>
+                  <Button
+                    type="primary"
+                    loading={confirmDraftLog.isPending}
+                    disabled={!draftPreview.items.some((item) => item.selected)}
+                    onClick={() => confirmDraftLog.mutate(draftPreview)}
+                  >
+                    确认并提交{draftPreview.items.filter((item) => item.selected).length > 1 ? ` ${draftPreview.items.filter((item) => item.selected).length} 条` : ""}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Form.Item name="date" label="日期" rules={[{ required: true }]}>
@@ -610,11 +831,11 @@ export default function WorkLogsPage() {
               <Input />
             </Form.Item>
             <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-              <Select allowClear placeholder="选择项目" loading={projects.isFetching} options={projectOptions} />
+              <Select allowClear placeholder="选择项目" loading={projects.isFetching} listHeight={280} options={projectOptions} />
             </Form.Item>
           </div>
           <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
-            <Input.TextArea rows={6} />
+            <Input.TextArea rows={6} onPaste={handlePasteImages} />
           </Form.Item>
           <Form.Item label="附件">
             {editing?.attachments?.length ? (
@@ -643,21 +864,23 @@ export default function WorkLogsPage() {
                 ))}
               </div>
             ) : null}
-            <Upload.Dragger
-              multiple
-              fileList={pendingUploadFiles}
-              beforeUpload={addPendingAttachment}
-              onRemove={(file) => {
-                setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
-                return true;
-              }}
-            >
-              <p className="ant-upload-drag-icon">
-                <UploadCloud size={28} />
-              </p>
-              <p className="ant-upload-text">添加照片或文件</p>
-              <p className="ant-upload-hint">单个附件最大 8MB，提交后 AI 会结合附件摘要和图片内容分析。</p>
-            </Upload.Dragger>
+            <div className="paste-upload-zone" tabIndex={0} onPaste={handlePasteImages}>
+              <Upload.Dragger
+                multiple
+                fileList={pendingUploadFiles}
+                beforeUpload={addPendingAttachment}
+                onRemove={(file) => {
+                  setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+                  return true;
+                }}
+              >
+                <p className="ant-upload-drag-icon">
+                  <UploadCloud size={28} />
+                </p>
+                <p className="ant-upload-text">添加照片或文件</p>
+                <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴微信或聊天截图。</p>
+              </Upload.Dragger>
+            </div>
           </Form.Item>
         </Form>
       </Modal>

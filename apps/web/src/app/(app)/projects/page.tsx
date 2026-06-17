@@ -73,7 +73,7 @@ function uniqueTexts(values: Array<string | null | undefined>, limit = 8) {
   return Array.from(new Set(values.map((item) => item?.trim()).filter(Boolean) as string[])).slice(0, limit);
 }
 
-function logRiskCount(record: WorkLog) {
+function logRiskBlockerCount(record: WorkLog) {
   return (record.aiAnalysis?.risks?.length ?? 0) + (record.aiAnalysis?.blockers?.length ?? 0);
 }
 
@@ -95,15 +95,41 @@ function projectOverviewText(project: Project, analysis: ReturnType<typeof summa
   if (!analysis.totalLogs) {
     return `${project.name} 当前周期还没有关联日报。`;
   }
-  if (analysis.riskCount) {
-    return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，存在 ${analysis.riskCount} 条风险记录。`;
+  if (analysis.riskBlockerCount) {
+    return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，存在 ${analysis.riskBlockerCount} 条风险/阻塞记录。`;
   }
-  return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，整体${projectHealth(project).label}，暂无明确风险。`;
+  return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，整体${projectHealth(project).label}，暂无明确风险/阻塞。`;
+}
+
+function projectNextActions(project: Project, analysis: ReturnType<typeof summarizeProjectLogs>) {
+  const actions: string[] = [];
+  if (!project.owner?.name) {
+    actions.push("先补充项目负责人，避免风险归属不清。");
+  }
+  if (analysis.riskBlockerCount) {
+    actions.push(`请 ${project.owner?.name ?? "项目负责人"} 核对风险/阻塞日报，确认影响范围和处理动作。`);
+  }
+  if (project.endDate) {
+    const daysLeft = dayjs(project.endDate).startOf("day").diff(dayjs().startOf("day"), "day");
+    if (daysLeft < 0) {
+      actions.push("项目已超过结束日期，建议复核交付状态或调整项目周期。");
+    } else if (daysLeft <= 7) {
+      actions.push(`距离结束日期还有 ${daysLeft} 天，建议确认剩余任务和延期风险。`);
+    }
+  }
+  if (!analysis.totalLogs) {
+    actions.push("当前周期缺少关联日报，先提醒成员按项目归属提交记录。");
+  }
+  if (!actions.length) {
+    actions.push("继续保持日报归属，周会前复核关键进展即可。");
+  }
+  return actions.slice(0, 3);
 }
 
 function summarizeProjectLogs(logs: WorkLog[]) {
   const totalHours = logs.reduce((sum, item) => sum + Number(item.hours ?? 0), 0);
-  const riskLogs = logs.filter((item) => logRiskCount(item) > 0);
+  const riskCount = logs.reduce((sum, item) => sum + (item.aiAnalysis?.risks?.length ?? 0), 0);
+  const blockerCount = logs.reduce((sum, item) => sum + (item.aiAnalysis?.blockers?.length ?? 0), 0);
   const members = uniqueTexts(logs.map((item) => item.user?.name));
   const completed = uniqueTexts(logs.flatMap((item) => item.aiAnalysis?.achievements?.length ? item.aiAnalysis.achievements : [item.title]), 6);
   const risks = uniqueTexts(logs.flatMap((item) => [...(item.aiAnalysis?.risks ?? []), ...(item.aiAnalysis?.blockers ?? [])]), 6);
@@ -111,7 +137,9 @@ function summarizeProjectLogs(logs: WorkLog[]) {
   return {
     totalLogs: logs.length,
     totalHours,
-    riskCount: riskLogs.length,
+    riskCount,
+    blockerCount,
+    riskBlockerCount: riskCount + blockerCount,
     members,
     completed,
     risks,
@@ -168,6 +196,7 @@ export default function ProjectsPage() {
   const projectAnalysis = useMemo(() => {
     return summarizeProjectLogs(projectLogs.data ?? []);
   }, [projectLogs.data]);
+  const projectActions = useMemo(() => (selectedProject ? projectNextActions(selectedProject, projectAnalysis) : []), [projectAnalysis, selectedProject]);
 
   const saveProject = useMutation({
     mutationFn: (values: ProjectForm) => {
@@ -235,10 +264,10 @@ export default function ProjectsPage() {
     { title: "人员", width: 110, render: (_, record) => record.user?.name ?? "-" },
     { title: "工时", dataIndex: "hours", width: 90, render: formatHours },
     {
-      title: "风险",
-      width: 90,
+      title: "风险/阻塞",
+      width: 120,
       render: (_, record) => {
-        const count = logRiskCount(record);
+        const count = logRiskBlockerCount(record);
         return <Tag color={count ? "red" : "default"}>{count ? `${count} 条` : "无"}</Tag>;
       }
     }
@@ -251,7 +280,7 @@ export default function ProjectsPage() {
           <Typography.Title level={3} className="page-title">
             项目
           </Typography.Title>
-          <Typography.Text className="page-subtitle">项目日报沉淀为进展、风险和下一步动作。</Typography.Text>
+          <Typography.Text className="page-subtitle">项目日报沉淀为进展、风险/阻塞和下一步动作。</Typography.Text>
         </div>
         {canManage ? (
           <Button type="primary" icon={<Plus size={16} />} onClick={openCreate}>
@@ -352,17 +381,17 @@ export default function ProjectsPage() {
               <div className="surface-panel project-focus-panel">
                 <div className="project-focus-head">
                   <div className="min-w-0">
-                    <div className="section-title">AI项目分析报告</div>
+                    <div className="section-title">项目工作摘要</div>
                     <div className="section-subtitle">{rangeText(range)}</div>
                   </div>
-                  <div className="project-focus-stats" aria-label="AI项目分析报告数据">
+                  <div className="project-focus-stats" aria-label="项目工作摘要数据">
                     <span><strong>{projectAnalysis.totalLogs}</strong>条日报/计划</span>
                     <span><strong>{projectAnalysis.members.length}</strong>人</span>
-                    <span><strong>{projectAnalysis.riskCount}</strong>条风险</span>
+                    <span><strong>{projectAnalysis.riskBlockerCount}</strong>条风险/阻塞</span>
                     <span><strong>{projectAnalysis.totalHours.toFixed(1)}</strong>h</span>
                   </div>
                 </div>
-                <p className={`project-focus-summary ${projectAnalysis.riskCount ? "is-risk" : ""}`}>
+                <p className={`project-focus-summary ${projectAnalysis.riskBlockerCount ? "is-risk" : ""}`}>
                   {projectOverviewText(selectedProject, projectAnalysis)}
                 </p>
                 <div className="project-focus-grid">
@@ -377,7 +406,7 @@ export default function ProjectsPage() {
                     )}
                   </section>
                   <section>
-                    <div className="project-focus-title">风险阻塞</div>
+                    <div className="project-focus-title">风险/阻塞</div>
                     {projectAnalysis.risks.length ? (
                       <ul className="project-insight-list is-risk">
                         {projectAnalysis.risks.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
@@ -385,6 +414,12 @@ export default function ProjectsPage() {
                     ) : (
                       <div className="project-focus-empty">暂无风险或阻塞。</div>
                     )}
+                  </section>
+                  <section>
+                    <div className="project-focus-title">下一步动作</div>
+                    <ul className="project-insight-list">
+                      {projectActions.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
                   </section>
                 </div>
               </div>

@@ -277,8 +277,18 @@ const server = http.createServer(async (req, res) => {
     if (route === "POST /ai/chat/calendar") return json(res, calendarChat(requireUser(currentUser), body));
     if (route === "POST /ai/work-log-draft") return json(res, workLogDraft(requireUser(currentUser), body));
 
+    if (route === "GET /reports/readiness") return json(res, reportReadiness(requireUser(currentUser), Object.fromEntries(url.searchParams.entries())));
     if (route === "POST /reports/generate") return json(res, generateReport(requireUser(currentUser), body));
-    if (route === "GET /reports") return json(res, reports.filter((item) => item.requesterId === requireUser(currentUser).id));
+    if (route === "GET /reports") {
+      const user = requireUser(currentUser);
+      return json(
+        res,
+        reports
+          .filter((item) => item.tenantId === user.tenantId && item.requesterId === user.id && !item.deletedAt)
+          .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+          .slice(0, 50)
+      );
+    }
     if (route === "GET /notifications") return json(res, listNotifications(requireUser(currentUser)));
     if (route === "POST /notifications/read-all") return json(res, readAllNotifications(requireUser(currentUser)));
     if (req.method === "POST" && url.pathname.startsWith("/notifications/") && url.pathname.endsWith("/read")) {
@@ -1743,6 +1753,7 @@ function calendar(user, url) {
     const filled = new Set(logs.map((item) => item.userId));
     const missingCount = Math.max(reportUsers.length - filled.size, 0);
     const riskCount = logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0);
+    const blockerCount = logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.blockers?.length ?? 0)), 0);
     days.push({
       date: key,
       filledCount: filled.size,
@@ -1750,6 +1761,7 @@ function calendar(user, url) {
       remindCount: key <= today ? missingCount : 0,
       fillRate: reportUsers.length ? Number(((filled.size / reportUsers.length) * 100).toFixed(1)) : 0,
       riskCount,
+      blockerCount,
       totalHours: Number(logs.reduce((sum, item) => sum + Number(item.hours), 0).toFixed(2))
     });
   }
@@ -1791,7 +1803,8 @@ function calendarDay(user, url) {
       remindCount: date <= today ? missingEmployees.length : 0,
       fillRate: visibleUsers.length ? Number(((filledEmployees.length / visibleUsers.length) * 100).toFixed(1)) : 0,
       totalHours: logs.reduce((sum, item) => sum + Number(item.hours), 0),
-      riskCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0)
+      riskCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0),
+      blockerCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.blockers?.length ?? 0)), 0)
     }
   };
 }
@@ -2059,18 +2072,117 @@ function localCalendarAnswer(question, logs, periodLabel) {
   ].join("\n");
 }
 
-function generateReport(user, body) {
+function normalizeReportDepartmentId(value) {
+  return value && value !== "__company__" ? value : null;
+}
+
+function reportScope(user, body) {
+  const type = body.type;
+  const isPersonal = type === "PERSONAL_DAILY" || type === "PERSONAL_WEEKLY";
+  if (isPersonal) {
+    return { isPersonal: true, departmentId: null, scopeName: user.name };
+  }
+  const isDepartment = type === "DEPARTMENT_DAILY" || type === "DEPARTMENT_WEEKLY";
+  if (!isDepartment) throw httpError(400, "Unsupported report type");
+  let departmentId = normalizeReportDepartmentId(body.departmentId);
+  if (hasRole(user, ["DEPARTMENT_MANAGER"])) departmentId = user.departmentId;
+  if (!departmentId && !hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) {
+    throw httpError(400, "Department report requires departmentId");
+  }
+  if (!hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]) && departmentId !== user.departmentId) {
+    throw httpError(400, "Cannot generate report for another department");
+  }
+  const department = departmentId ? departments.find((item) => item.id === departmentId && item.tenantId === user.tenantId && !item.deletedAt) : null;
+  if (departmentId && !department) throw httpError(400, "Department not found");
+  return { isPersonal: false, departmentId, scopeName: department?.name ?? "全公司" };
+}
+
+function reportDataset(user, body) {
   const start = body.periodStart;
   const end = body.periodEnd;
-  const isDepartment = body.type?.startsWith("DEPARTMENT");
-  const targetDept = isDepartment ? (hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]) ? body.departmentId : user.departmentId) : null;
+  const scope = reportScope(user, body);
+  const members = scope.isPersonal
+    ? users.filter((item) => item.id === user.id && item.tenantId === user.tenantId && !item.deletedAt)
+    : users.filter((item) =>
+        item.tenantId === user.tenantId &&
+        item.isActive &&
+        item.requiresWorkReport &&
+        !item.deletedAt &&
+        (!scope.departmentId || item.departmentId === scope.departmentId)
+      );
   const candidates = workLogs
     .filter((item) => item.tenantId === user.tenantId && item.status === "SUBMITTED" && !item.deletedAt && item.date >= start && item.date <= end)
     .filter((item) => {
-      if (!isDepartment) return item.userId === user.id;
+      if (scope.isPersonal) return item.userId === user.id;
       const owner = users.find((candidate) => candidate.id === item.userId);
-      return owner?.departmentId === targetDept;
+      return owner?.requiresWorkReport && owner.isActive && !owner.deletedAt && (!scope.departmentId || owner.departmentId === scope.departmentId);
     });
+  const coveredUserIds = new Set(candidates.map((item) => item.userId));
+  const projectIds = new Set(candidates.map((item) => item.projectId).filter(Boolean));
+  const riskCount = candidates.reduce((sum, item) => sum + (analyses.get(item.id)?.risks?.length ?? 0), 0);
+  const blockerCount = candidates.reduce((sum, item) => sum + (analyses.get(item.id)?.blockers?.length ?? 0), 0);
+  const totalHours = candidates.reduce((sum, item) => sum + Number(item.hours), 0);
+  const stats = {
+    workLogCount: candidates.length,
+    targetMemberCount: members.length,
+    coveredMemberCount: coveredUserIds.size,
+    missingMemberCount: Math.max(members.length - coveredUserIds.size, 0),
+    riskCount,
+    blockerCount,
+    projectCount: projectIds.size,
+    totalHours: Number(totalHours.toFixed(2))
+  };
+  const sources = candidates.slice(0, 20).map((item) => {
+    const owner = users.find((candidate) => candidate.id === item.userId);
+    const project = projects.find((candidate) => candidate.id === item.projectId);
+    const analysis = analyses.get(item.id);
+    return {
+      id: item.id,
+      date: item.date,
+      title: item.title,
+      userName: owner?.name ?? item.userId,
+      projectName: project?.name ?? null,
+      summary: analysis?.summary ?? item.content,
+      risks: analysis?.risks ?? [],
+      blockers: analysis?.blockers ?? [],
+      hours: Number(item.hours)
+    };
+  });
+  return { start, end, scope, members, candidates, stats, sources };
+}
+
+function reportReadiness(user, body) {
+  const dataset = reportDataset(user, body);
+  return {
+    type: body.type,
+    periodStart: dataset.start,
+    periodEnd: dataset.end,
+    departmentId: dataset.scope.departmentId,
+    scopeName: dataset.scope.scopeName,
+    canGenerate: dataset.stats.workLogCount > 0,
+    emptyReason: dataset.stats.workLogCount > 0 ? null : "当前周期暂无可用日报，建议先填写日报或切换时间范围。",
+    stats: dataset.stats,
+    sources: dataset.sources.slice(0, 12)
+  };
+}
+
+function generateReport(user, body) {
+  const { start, end, scope, candidates, stats, sources } = reportDataset(user, body);
+  const existing = reports.find(
+    (item) =>
+      item.tenantId === user.tenantId &&
+      item.requesterId === user.id &&
+      item.type === body.type &&
+      item.periodStart === start &&
+      item.periodEnd === end &&
+      (item.departmentId ?? null) === (scope.departmentId ?? null) &&
+      ["PENDING", "COMPLETED"].includes(item.status) &&
+      !item.deletedAt
+  );
+  if (existing) return existing;
+  if (!candidates.length) {
+    throw httpError(400, "当前周期暂无可用日报，建议先填写日报或切换时间范围。");
+  }
   const byUser = new Map();
   for (const log of candidates) {
     const owner = users.find((item) => item.id === log.userId);
@@ -2084,19 +2196,20 @@ function generateReport(user, body) {
       return `${owner?.name ?? "员工"}${project?.name ? ` [${project.name}]` : ""}: ${item.title}`;
     }),
     progress: candidates.map((item) => analyses.get(item.id)?.summary ?? item.content),
-    risks: candidates.flatMap((item) => analyses.get(item.id)?.risks ?? []),
+    risks: candidates.flatMap((item) => [...(analyses.get(item.id)?.risks ?? []), ...(analyses.get(item.id)?.blockers ?? [])]),
     nextPlan: ["继续推进已提交工作中的后续事项。"],
     hours: {
       total: Number(candidates.reduce((sum, item) => sum + Number(item.hours), 0).toFixed(2)),
       byUser: Array.from(byUser.entries()).map(([userName, hours]) => ({ userName, hours: Number(hours.toFixed(2)) }))
     },
-    summary: `${start} 至 ${end} 共生成 ${candidates.length} 条工作记录的汇报。`
+    summary: `${start} 至 ${end} 共生成 ${candidates.length} 条工作记录的汇报。`,
+    evidence: { stats, sources }
   };
   const report = {
     id: `report-${Date.now()}`,
     tenantId: user.tenantId,
     requesterId: user.id,
-    departmentId: targetDept,
+    departmentId: scope.departmentId,
     type: body.type,
     status: "COMPLETED",
     title: `${reportTypeLabel(body.type)} ${start === end ? start : `${start} 至 ${end}`}`,

@@ -76,7 +76,53 @@
     </view>
     <view class="ai-generated-disclosure draft-disclosure">人工智能生成内容</view>
 
-    <view class="editor-stack">
+    <view wx:if="{{draftItems.length}}" class="draft-item-list">
+      <view wx:for="{{draftItems}}" wx:key="id" class="draft-item {{item.selected ? '' : 'muted'}}">
+        <view class="draft-item-head">
+          <view>
+            <view class="draft-item-title">第 {{index + 1}} 条 · {{item.kind === 'PLAN' ? '计划' : '日报'}}</view>
+            <view class="draft-item-meta">置信度 {{item.confidenceText}}<text wx:if="{{item.missingFields}}"> · 需确认：{{item.missingFields}}</text></view>
+          </view>
+          <view class="draft-select-control">
+            <text>{{item.selected ? '确认' : '跳过'}}</text>
+            <switch checked="{{item.selected}}" color="#0B57D0" data-index="{{index}}" bindchange="onDraftSelectedChange" />
+          </view>
+        </view>
+
+        <view class="editor-stack compact">
+          <view class="field">
+            <text class="field-label">日期</text>
+            <picker mode="date" value="{{item.date}}" data-index="{{index}}" bindchange="onDraftDateChange">
+              <view class="picker-value">{{item.date}}</view>
+            </picker>
+          </view>
+
+          <view class="field">
+            <text class="field-label">项目</text>
+            <picker value="{{item.projectIndex}}" range="{{projectOptions}}" range-key="displayName" data-index="{{index}}" bindchange="onDraftProjectChange">
+              <view class="picker-value">{{item.projectName}}</view>
+            </picker>
+          </view>
+
+          <view class="field">
+            <text class="field-label">标题</text>
+            <input class="input" value="{{item.title}}" placeholder="例如：完成日报月历联调" data-index="{{index}}" bindinput="onDraftTitleInput" />
+          </view>
+
+          <view class="field">
+            <text class="field-label">工时</text>
+            <input class="input" type="digit" value="{{item.hours}}" data-index="{{index}}" bindinput="onDraftHoursInput" />
+          </view>
+
+          <view class="field">
+            <text class="field-label">日报内容</text>
+            <textarea class="textarea" value="{{item.content}}" maxlength="3000" placeholder="生成后可继续手动补充。" data-index="{{index}}" bindinput="onDraftContentInput" />
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="editor-stack">
       <view class="field">
         <text class="field-label">日期</text>
         <picker mode="date" value="{{date}}" bindchange="onDateChange">

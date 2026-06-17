@@ -51,8 +51,10 @@ function buildMonthGrid(month, days) {
       filledCount: 0,
       missingCount: 0,
       fillRate: 0,
-      riskCount: 0
+      riskCount: 0,
+      blockerCount: 0
     };
+    const riskBlockerCount = (data.riskCount || 0) + (data.blockerCount || 0);
     items.push({
       ...data,
       id: key,
@@ -61,9 +63,10 @@ function buildMonthGrid(month, days) {
       isFuture: isFutureDay(key),
       isToday: key === today,
       totalCount: data.filledCount + data.missingCount,
-      tone: data.riskCount > 0 ? "risk" : data.fillRate >= 80 ? "good" : data.fillRate > 0 ? "normal" : "empty",
-      primaryText: data.riskCount > 0
-        ? "风险"
+      riskBlockerCount,
+      tone: riskBlockerCount > 0 ? "risk" : data.fillRate >= 80 ? "good" : data.fillRate > 0 ? "normal" : "empty",
+      primaryText: riskBlockerCount > 0
+        ? "风险/阻塞"
         : data.fillRate >= 80
           ? "已填"
           : data.fillRate > 0
@@ -71,7 +74,7 @@ function buildMonthGrid(month, days) {
             : isFutureDay(key)
               ? "待填"
               : "未填",
-      secondaryText: data.riskCount > 0
+      secondaryText: riskBlockerCount > 0
         ? "需关注"
         : data.filledCount + data.missingCount > 0
           ? `${Math.round(data.fillRate)}%`
