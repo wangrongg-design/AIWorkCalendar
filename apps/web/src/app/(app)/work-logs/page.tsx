@@ -5,12 +5,12 @@ import { Alert, Button, Checkbox, DatePicker, Empty, Form, Input, InputNumber, M
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { Bot, Download, Edit2, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
+import { Bot, Download, Edit2, MessageSquare, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import type { ClipboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiDownload, apiFetch } from "@/lib/api";
-import { Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
+import { CommunicationInsight, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type WorkLogForm = {
@@ -19,6 +19,14 @@ type WorkLogForm = {
   content: string;
   startTime?: dayjs.Dayjs;
   endTime?: dayjs.Dayjs;
+  hours?: number | null;
+  projectId?: string;
+};
+
+type CommunicationDraftForm = {
+  date: dayjs.Dayjs;
+  title: string;
+  content: string;
   hours?: number | null;
   projectId?: string;
 };
@@ -141,8 +149,10 @@ function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
 export default function WorkLogsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<WorkLogForm>();
+  const [communicationDraftForm] = Form.useForm<CommunicationDraftForm>();
   const [editing, setEditing] = useState<WorkLog | null>(null);
   const [detailRecord, setDetailRecord] = useState<WorkLog | null>(null);
+  const [communicationDraft, setCommunicationDraft] = useState<CommunicationInsight | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(null);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "DRAFT" | "SUBMITTED">("ALL");
@@ -166,6 +176,11 @@ export default function WorkLogsPage() {
   const projects = useQuery({
     queryKey: ["projects"],
     queryFn: () => apiFetch<Project[]>("/projects")
+  });
+
+  const communicationDrafts = useQuery({
+    queryKey: ["wecom-log-drafts"],
+    queryFn: () => apiFetch<CommunicationInsight[]>("/wecom/log-drafts")
   });
 
   const projectOptions = useMemo(
@@ -222,6 +237,15 @@ export default function WorkLogsPage() {
       setPendingAttachments([]);
     }
   };
+
+  const communicationDraftPayload = (values: CommunicationDraftForm, submit: boolean) => ({
+    date: values.date.format("YYYY-MM-DD"),
+    title: values.title,
+    content: values.content,
+    hours: typeof values.hours === "number" && Number.isFinite(values.hours) ? values.hours : null,
+    projectId: values.projectId || null,
+    submit
+  });
 
   const addPendingFiles = (files: File[], source: "upload" | "paste") => {
     const accepted = files.reduce<PendingAttachment[]>((result, file, index) => {
@@ -341,6 +365,41 @@ export default function WorkLogsPage() {
     onSuccess: () => {
       message.success("已删除");
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    }
+  });
+
+  const confirmCommunicationDraft = useMutation({
+    mutationFn: ({ draft, values, submit }: { draft: CommunicationInsight; values: CommunicationDraftForm; submit: boolean }) =>
+      apiFetch<WorkLog>(`/wecom/log-drafts/${draft.id}/confirm`, {
+        method: "POST",
+        body: JSON.stringify(communicationDraftPayload(values, submit))
+      }),
+    onSuccess: (_, variables) => {
+      message.success(variables.submit ? "已确认提交沟通记录草稿。" : "已保存为日报草稿。");
+      setCommunicationDraft(null);
+      communicationDraftForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["wecom-log-drafts"] });
+      queryClient.invalidateQueries({ queryKey: ["wecom-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "候选草稿确认失败");
+    }
+  });
+
+  const ignoreCommunicationDraft = useMutation({
+    mutationFn: (draft: CommunicationInsight) => apiFetch<{ ok: boolean }>(`/wecom/log-drafts/${draft.id}/ignore`, { method: "POST" }),
+    onSuccess: () => {
+      message.success("已忽略该候选草稿");
+      setCommunicationDraft(null);
+      communicationDraftForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["wecom-log-drafts"] });
+      queryClient.invalidateQueries({ queryKey: ["wecom-overview"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "忽略候选草稿失败");
     }
   });
 
@@ -489,6 +548,26 @@ export default function WorkLogsPage() {
     setModalOpen(true);
   };
 
+  const openCommunicationDraft = (draft: CommunicationInsight) => {
+    const date = dayjs(draft.date);
+    communicationDraftForm.setFieldsValue({
+      date: date.isValid() ? date : dayjs(),
+      title: draft.title,
+      content: draft.content,
+      hours: typeof draft.hours === "number" ? draft.hours : null,
+      projectId: draft.projectId ?? undefined
+    });
+    setCommunicationDraft(draft);
+  };
+
+  const submitCommunicationDraft = (submit: boolean) => {
+    if (!communicationDraft) return;
+    communicationDraftForm
+      .validateFields()
+      .then((values) => confirmCommunicationDraft.mutate({ draft: communicationDraft, values, submit }))
+      .catch(() => message.warning("请先补全候选草稿"));
+  };
+
   const updateDraftPreviewItem = (index: number, patch: Partial<DraftPreviewItem>) => {
     setDraftPreview((current) =>
       current
@@ -527,6 +606,11 @@ export default function WorkLogsPage() {
           {record.attachments?.length ? (
             <Tag className="mt-2" icon={<Paperclip size={13} />}>
               附件 {record.attachments.length}
+            </Tag>
+          ) : null}
+          {record.sourceLinks?.length ? (
+            <Tag className="mt-2" color="cyan" icon={<MessageSquare size={13} />}>
+              沟通来源 {record.sourceLinks.length}
             </Tag>
           ) : null}
         </div>
@@ -589,6 +673,36 @@ export default function WorkLogsPage() {
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
           写日报/计划
         </Button>
+      </div>
+
+      <div className="surface-panel communication-draft-panel">
+        <div className="section-head">
+          <div>
+            <div className="section-title">沟通记录候选草稿</div>
+            <div className="section-subtitle">来自企业微信群的候选内容，确认后才会进入正式填报。</div>
+          </div>
+          <Button icon={<RotateCw size={16} />} onClick={() => communicationDrafts.refetch()} loading={communicationDrafts.isFetching}>
+            刷新候选
+          </Button>
+        </div>
+        {communicationDrafts.data?.length ? (
+          <div className="communication-draft-list">
+            {communicationDrafts.data.slice(0, 4).map((draft) => (
+              <button key={draft.id} type="button" className="communication-draft-item" onClick={() => openCommunicationDraft(draft)}>
+                <span>
+                  <strong>{draft.title}</strong>
+                  <em>{draft.suggestedUser?.name ?? "未映射成员"} · {dayjs(draft.date).format("YYYY-MM-DD")} · {draft.source?.name ?? "未知来源"}</em>
+                </span>
+                <span className="communication-draft-tags">
+                  <Tag color={draft.confidence >= 0.8 ? "green" : "orange"}>{Math.round(draft.confidence * 100)}%</Tag>
+                  {draft.missingFields?.length ? <Tag color="orange">需确认</Tag> : null}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无沟通记录候选草稿" />
+        )}
       </div>
 
       <section className="history-section">
@@ -929,6 +1043,24 @@ export default function WorkLogsPage() {
                 <WorkLogAttachmentViewer workLogId={detailRecord.id} attachments={detailRecord.attachments} />
               </div>
             ) : null}
+            {detailRecord.sourceLinks?.length ? (
+              <div className="rounded-[8px] bg-surface-container-low p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-ink">
+                  <MessageSquare size={16} />
+                  沟通来源证据
+                </div>
+                <div className="space-y-2">
+                  {detailRecord.sourceLinks.map((link) => (
+                      <div key={link.id} className="rounded-[8px] bg-white px-3 py-2 text-sm leading-6">
+                      <div className="font-medium text-ink">{link.source?.name ?? "企业微信群"}</div>
+                      <div className="text-muted">{link.evidenceSummary ?? link.message?.content ?? link.file?.aiSummary ?? link.file?.fileName ?? "来源消息已记录。"}</div>
+                      {link.file ? <Tag className="mt-1" color="cyan">文件：{link.file.fileName}</Tag> : null}
+                      {link.message?.sentAt ? <div className="mt-1 text-xs text-muted">发送时间：{dateTimeText(link.message.sentAt)}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {detailRecord.aiAnalysis ? (
               <div className="rounded-[8px] bg-surface-container-low p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
@@ -970,6 +1102,84 @@ export default function WorkLogsPage() {
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        title="确认沟通记录草稿"
+        open={Boolean(communicationDraft)}
+        onCancel={() => setCommunicationDraft(null)}
+        width={780}
+        footer={
+          communicationDraft
+            ? [
+                <Button key="ignore" danger loading={ignoreCommunicationDraft.isPending} onClick={() => ignoreCommunicationDraft.mutate(communicationDraft)}>
+                  忽略候选
+                </Button>,
+                <Button key="draft" loading={confirmCommunicationDraft.isPending} onClick={() => submitCommunicationDraft(false)}>
+                  保存为草稿
+                </Button>,
+                <Button key="submit" type="primary" loading={confirmCommunicationDraft.isPending} onClick={() => submitCommunicationDraft(true)}>
+                  确认提交
+                </Button>
+              ]
+            : null
+        }
+      >
+        {communicationDraft ? (
+          <div className="space-y-4">
+            <Alert
+              type={communicationDraft.missingFields?.length || communicationDraft.confidence < 0.8 ? "warning" : "info"}
+              showIcon
+              message="请确认后再写入日报"
+              description="来源内容只会生成候选草稿。你可以修改日期、项目、工时、标题和内容，再选择保存草稿或确认提交。"
+            />
+            <div className="communication-draft-evidence">
+              <span>归属人：{communicationDraft.suggestedUser?.name ?? "未映射"}</span>
+              <span>来源群：{communicationDraft.source?.name ?? "未知来源"}</span>
+              <span>来源消息：{communicationDraft.sourceMessageIds?.length ?? 0} 条</span>
+              <span>来源文件：{communicationDraft.sourceFiles?.length ?? communicationDraft.sourceFileIds?.length ?? 0} 个</span>
+              <span>置信度：{Math.round(communicationDraft.confidence * 100)}%</span>
+            </div>
+            <Form form={communicationDraftForm} layout="vertical">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <Form.Item name="date" label="日期" rules={[{ required: true }]}>
+                  <DatePicker className="w-full" />
+                </Form.Item>
+                <Form.Item name="hours" label="工时">
+                  <InputNumber className="w-full" min={0} max={24} step={0.5} placeholder="补充工时" />
+                </Form.Item>
+                <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
+                  <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" listHeight={280} loading={projects.isFetching} options={projectOptions} />
+                </Form.Item>
+              </div>
+              <Form.Item name="title" label="标题" rules={[{ required: true, min: 2 }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
+                <Input.TextArea rows={6} />
+              </Form.Item>
+            </Form>
+            <div className="communication-draft-ai">
+              <div>
+                <strong>结论</strong>
+                <span>{communicationDraft.title}</span>
+              </div>
+              <div>
+                <strong>依据</strong>
+                <span>
+                  {[
+                    communicationDraft.sourceMessages?.map((item) => item.content).join("；"),
+                    communicationDraft.sourceFiles?.map((item) => item.aiSummary ?? item.fileName).join("；")
+                  ].filter(Boolean).join("；") || communicationDraft.source?.name || "来源消息已记录"}
+                </span>
+              </div>
+              <div>
+                <strong>下一步动作</strong>
+                <span>{communicationDraft.nextActions?.join("；") || "补充工时并确认项目归属。"}</span>
+              </div>
+            </div>
           </div>
         ) : null}
       </Modal>

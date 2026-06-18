@@ -8,31 +8,15 @@
   </view>
 
   <view class="login-form">
-    <view class="privacy-panel">
-      <view class="privacy-title">用户信息使用说明</view>
-      <view class="privacy-desc">
-        登录时会使用你填写的邮箱或手机号进行账号识别、企业身份校验、日报归属和账号安全校验。相关信息仅用于 AIWorkCalendar 工作填报服务，不会用于无关用途。
-      </view>
-      <view class="agreement-row" bindtap="toggleAgreement">
-        <view class="agreement-check {{hasAgreed ? 'checked' : ''}}"></view>
-        <view class="agreement-copy">
-          <text>我已阅读并同意</text>
-          <button class="agreement-link" catchtap="showUserAgreement">《用户服务协议》</button>
-          <text>和</text>
-          <button class="agreement-link" catchtap="openPrivacyContract">《隐私政策》</button>
-        </view>
-      </view>
-    </view>
-
     <view class="field">
       <text class="field-label">邮箱或手机号</text>
-      <input class="input login-input" disabled="{{!hasAgreed}}" value="{{account}}" placeholder="{{hasAgreed ? '请输入邮箱或手机号' : '请先阅读并同意协议'}}" bindinput="onAccountInput" />
+      <input class="input login-input" value="{{account}}" placeholder="请输入邮箱或手机号" bindinput="onAccountInput" />
     </view>
 
     <view class="field">
       <text class="field-label">密码</text>
       <view class="password-row">
-        <input class="input password-input" disabled="{{!hasAgreed}}" password="{{!showPassword}}" value="{{password}}" placeholder="{{hasAgreed ? '请输入密码' : '请先阅读并同意协议'}}" bindinput="onPasswordInput" />
+        <input class="input password-input" password="{{!showPassword}}" value="{{password}}" placeholder="请输入密码" bindinput="onPasswordInput" />
         <button class="password-toggle {{showPassword ? 'active' : ''}}" aria-label="{{showPassword ? '隐藏密码' : '显示密码'}}" bindtap="togglePassword">
           <view class="visibility-icon {{showPassword ? 'shown' : 'hidden'}}">
             <view class="visibility-eye"></view>
@@ -51,6 +35,19 @@
     >
       登录
     </button>
+
+    <view class="login-agreement">
+      <view class="agreement-row" bindtap="toggleAgreement">
+        <view class="agreement-check {{hasAgreed ? 'checked' : ''}}"></view>
+        <view class="agreement-copy">
+          <text>我已阅读并同意</text>
+          <button class="agreement-link" catchtap="showUserAgreement">《用户服务协议》</button>
+          <text>和</text>
+          <button class="agreement-link" catchtap="openPrivacyContract">《隐私政策》</button>
+        </view>
+      </view>
+      <view class="privacy-note">邮箱或手机号仅用于账号登录、企业身份校验、日报归属和账号安全。</view>
+    </view>
   </view>
 
   <view class="login-footer">

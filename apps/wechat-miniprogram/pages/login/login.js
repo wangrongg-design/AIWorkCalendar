@@ -27,7 +27,7 @@ Page({
 
   updateLoginState() {
     this.setData({
-      canLogin: Boolean(this.data.hasAgreed && this.data.account && this.data.password)
+      canLogin: Boolean(this.data.account && this.data.password)
     });
   },
 
@@ -68,8 +68,8 @@ Page({
   },
 
   async login() {
-    const { account, password, hasAgreed, canLogin } = this.data;
-    if (!canLogin || this.data.loading) return;
+    const { account, password, hasAgreed } = this.data;
+    if (this.data.loading) return;
     if (!hasAgreed) {
       wx.showToast({ title: "请先阅读并同意协议", icon: "none" });
       return;

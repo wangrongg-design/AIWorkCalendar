@@ -45,7 +45,7 @@ button::after {
   border: 1rpx solid #E6E6E6;
   border-radius: 32rpx;
   background: #FFFFFF;
-  box-shadow: 0 6rpx 20rpx rgba(60, 64, 67, 0.045);
+  box-shadow: 0 4rpx 12rpx rgba(60, 64, 67, 0.04);
 }
 
 .muted {
@@ -207,7 +207,7 @@ button::after {
   border-radius: 32rpx;
   background: #FFFFFF;
   padding: 32rpx;
-  box-shadow: 0 6rpx 20rpx rgba(60, 64, 67, 0.045);
+  box-shadow: 0 4rpx 12rpx rgba(60, 64, 67, 0.04);
 }
 
 .ai-action-card {
@@ -309,7 +309,7 @@ button::after {
 .segmented-item.active {
   background: #FFFFFF;
   color: #0B57D0;
-  box-shadow: 0 4rpx 14rpx rgba(60, 64, 67, 0.08);
+  box-shadow: 0 3rpx 10rpx rgba(60, 64, 67, 0.07);
 }
 
 .empty-state {

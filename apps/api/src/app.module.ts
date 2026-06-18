@@ -20,6 +20,7 @@ import { ExportsModule } from "./modules/exports/exports.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { PrivacyModule } from "./modules/privacy/privacy.module";
 import { FeedbackModule } from "./modules/feedback/feedback.module";
+import { WecomModule } from "./modules/wecom/wecom.module";
 
 @Module({
   imports: [
@@ -49,7 +50,8 @@ import { FeedbackModule } from "./modules/feedback/feedback.module";
     ExportsModule,
     AuditModule,
     PrivacyModule,
-    FeedbackModule
+    FeedbackModule,
+    WecomModule
   ],
   controllers: [AppController],
   providers: [

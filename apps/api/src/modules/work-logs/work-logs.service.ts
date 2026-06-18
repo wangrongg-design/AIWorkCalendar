@@ -25,6 +25,13 @@ const attachmentPublicSelect = {
   updatedAt: true
 };
 
+const sourceLinksPublicInclude = {
+  source: true,
+  message: true,
+  file: true,
+  insight: true
+};
+
 function attachmentStorageRoot() {
   return process.env.WORK_LOG_ATTACHMENT_DIR ?? join(process.cwd(), "tmp", "work-log-attachments");
 }
@@ -171,6 +178,10 @@ export class WorkLogsService {
           where: { deletedAt: null },
           select: attachmentPublicSelect,
           orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
+          orderBy: [{ createdAt: "asc" }]
         }
       },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }]
@@ -207,6 +218,10 @@ export class WorkLogsService {
           where: { deletedAt: null },
           select: attachmentPublicSelect,
           orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
+          orderBy: [{ createdAt: "asc" }]
         }
       }
     });
@@ -222,6 +237,10 @@ export class WorkLogsService {
         attachments: {
           where: { deletedAt: null },
           select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
           orderBy: [{ createdAt: "asc" }]
         }
       }
@@ -260,6 +279,10 @@ export class WorkLogsService {
         attachments: {
           where: { deletedAt: null },
           select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
           orderBy: [{ createdAt: "asc" }]
         }
       }
@@ -300,6 +323,10 @@ export class WorkLogsService {
         attachments: {
           where: { deletedAt: null },
           select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
           orderBy: [{ createdAt: "asc" }]
         }
       }
@@ -417,6 +444,10 @@ export class WorkLogsService {
         attachments: {
           where: { deletedAt: null },
           select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
           orderBy: [{ createdAt: "asc" }]
         }
       },

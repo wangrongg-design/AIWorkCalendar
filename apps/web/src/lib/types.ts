@@ -17,6 +17,18 @@ export type ExportTaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
 export type FeedbackCategory = "BUG" | "ACCOUNT_PERMISSION" | "DATA_RIGHTS" | "BILLING" | "PRIVACY_SECURITY" | "SUGGESTION" | "OTHER";
 export type FeedbackPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 export type FeedbackStatus = "SUBMITTED" | "PROCESSING" | "RESOLVED" | "CLOSED";
+export type WecomIntegrationMode = "ZERO" | "LIGHT" | "PRECISE";
+export type WecomIntegrationStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ERROR";
+export type WecomUserMappingStatus = "AUTO" | "CONFIRMED" | "CONFLICT" | "UNMAPPED" | "EXTERNAL";
+export type CommunicationSourceType = "PROJECT" | "DEPARTMENT" | "GENERAL";
+export type CommunicationSyncStatus = "PENDING" | "SYNCING" | "OK" | "ERROR" | "PAUSED";
+export type CommunicationSenderType = "INTERNAL" | "EXTERNAL" | "BOT" | "UNKNOWN";
+export type CommunicationMessageType = "TEXT" | "FILE" | "IMAGE" | "VOICE" | "LINK" | "OTHER";
+export type CommunicationInsightStatus = "CANDIDATE" | "CONFIRMED" | "IGNORED";
+export type CommunicationFileKind = "FILE" | "IMAGE" | "VOICE" | "VIDEO" | "LINK" | "OTHER";
+export type CommunicationFileDownloadStatus = "PENDING" | "DOWNLOADING" | "DOWNLOADED" | "SKIPPED" | "FAILED";
+export type WecomExternalConsentStatus = "UNKNOWN" | "AGREED" | "DISAGREED" | "REVOKED";
+export type CommunicationProjectSuggestionStatus = "PENDING" | "CONFIRMED" | "REJECTED";
 
 export type AuthUser = {
   id: string;
@@ -242,6 +254,7 @@ export type WorkLog = {
   projectId?: string | null;
   project?: Project | null;
   attachments?: WorkLogAttachment[];
+  sourceLinks?: WorkLogSourceLink[];
   user?: {
     id: string;
     name: string;
@@ -250,6 +263,22 @@ export type WorkLog = {
     department?: Department | null;
   };
   aiAnalysis?: AiAnalysis | null;
+};
+
+export type WorkLogSourceLink = {
+  id: string;
+  workLogId: string;
+  insightId?: string | null;
+  messageId?: string | null;
+  fileId?: string | null;
+  sourceId?: string | null;
+  sourceType: string;
+  evidenceSummary?: string | null;
+  createdAt: string;
+  source?: CommunicationSource | null;
+  message?: CommunicationMessage | null;
+  file?: CommunicationFile | null;
+  insight?: CommunicationInsight | null;
 };
 
 export type WorkLogAttachment = {
@@ -412,4 +441,218 @@ export type Notification = {
   body: string;
   isRead: boolean;
   createdAt: string;
+};
+
+export type WecomIntegration = {
+  id: string;
+  tenantId: string;
+  corpId: string;
+  msgAuditSecretRef?: string;
+  rsaPrivateKeyRef?: string;
+  rsaPublicKeyConfigured: boolean;
+  trustedIpNote?: string | null;
+  mode: WecomIntegrationMode;
+  status: WecomIntegrationStatus;
+  syncDepartmentIds: string[];
+  syncUserIds: string[];
+  syncChatIds: string[];
+  syncFiles: boolean;
+  generateLogDrafts: boolean;
+  generateProjectRisks: boolean;
+  retentionDays: number;
+  lastSyncAt?: string | null;
+  lastSyncStatus: CommunicationSyncStatus;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WecomUserBinding = {
+  id: string;
+  tenantId: string;
+  userId?: string | null;
+  wecomCorpId: string;
+  wecomUserId: string;
+  wecomName: string;
+  mobile?: string | null;
+  email?: string | null;
+  departmentIds: string[];
+  mappingStatus: WecomUserMappingStatus;
+  confidence: number;
+  createdAt: string;
+  updatedAt: string;
+  user?: (OrgUser & { department?: Department | null }) | null;
+};
+
+export type CommunicationSource = {
+  id: string;
+  tenantId: string;
+  integrationId?: string | null;
+  name: string;
+  chatId: string;
+  sourceType: CommunicationSourceType;
+  projectIds: string[];
+  departmentIds: string[];
+  memberScopeUserIds: string[];
+  generateLogDrafts: boolean;
+  generateProjectRisks: boolean;
+  syncFiles: boolean;
+  retentionDays: number;
+  lastSyncAt?: string | null;
+  lastSyncStatus: CommunicationSyncStatus;
+  lastError?: string | null;
+  pendingDraftCount: number;
+  unclassifiedCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CommunicationMessage = {
+  id: string;
+  tenantId: string;
+  sourceId: string;
+  msgId: string;
+  senderWecomUserId?: string | null;
+  senderName?: string | null;
+  senderType: CommunicationSenderType;
+  mappedUserId?: string | null;
+  mappingStatus: WecomUserMappingStatus;
+  content: string;
+  msgType: CommunicationMessageType;
+  sentAt: string;
+  source?: CommunicationSource | null;
+};
+
+export type CommunicationFile = {
+  id: string;
+  tenantId: string;
+  sourceId: string;
+  messageId?: string | null;
+  sdkFileId: string;
+  fileName: string;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  kind: CommunicationFileKind;
+  downloadStatus: CommunicationFileDownloadStatus;
+  storagePath?: string | null;
+  textContent?: string | null;
+  aiSummary?: string | null;
+  uploadedByWecomUserId?: string | null;
+  mappedUserId?: string | null;
+  externalUserId?: string | null;
+  consentStatus: WecomExternalConsentStatus;
+  sentAt: string;
+  createdAt: string;
+  updatedAt: string;
+  source?: CommunicationSource | null;
+  message?: CommunicationMessage | null;
+  mappedUser?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone?: string | null;
+    department?: Department | null;
+  } | null;
+};
+
+export type WecomExternalContactConsent = {
+  id: string;
+  tenantId: string;
+  wecomCorpId: string;
+  externalUserId: string;
+  externalName?: string | null;
+  status: WecomExternalConsentStatus;
+  agreedAt?: string | null;
+  revokedAt?: string | null;
+  lastCheckedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CommunicationProjectSuggestion = {
+  id: string;
+  tenantId: string;
+  sourceId: string;
+  projectId: string;
+  status: CommunicationProjectSuggestionStatus;
+  confidence: number;
+  reason: string;
+  evidence?: unknown;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt?: string | null;
+  rejectedAt?: string | null;
+  source?: CommunicationSource | null;
+  project?: Project | null;
+};
+
+export type CommunicationInsight = {
+  id: string;
+  tenantId: string;
+  sourceId?: string | null;
+  suggestedUserId?: string | null;
+  type: "WORK_LOG_DRAFT" | "PROJECT_PROGRESS" | "PROJECT_RISK";
+  status: CommunicationInsightStatus;
+  date: string;
+  title: string;
+  content: string;
+  hours?: number | null;
+  projectId?: string | null;
+  projectHints: string[];
+  risks: string[];
+  blockers: string[];
+  nextActions: string[];
+  sourceMessageIds: string[];
+  sourceFileIds: string[];
+  confidence: number;
+  missingFields: string[];
+  needsProjectConfirmation: boolean;
+  needsUserMappingConfirmation: boolean;
+  confirmedWorkLogId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  source?: CommunicationSource | null;
+  project?: Project | null;
+  suggestedUser?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone?: string | null;
+    department?: Department | null;
+  } | null;
+  sourceMessages?: CommunicationMessage[];
+  sourceFiles?: CommunicationFile[];
+};
+
+export type WecomOverview = {
+  integrations: WecomIntegration[];
+  activeIntegration?: WecomIntegration | null;
+  workerRuntime?: {
+    mode: "official" | "mock" | string;
+    adapterConfigured: boolean;
+    adapterCommand?: string | null;
+    officialReady: boolean;
+    mockAllowed: boolean;
+  };
+  sources: CommunicationSource[];
+  bindings: WecomUserBinding[];
+  files: CommunicationFile[];
+  projectSuggestions: CommunicationProjectSuggestion[];
+  externalConsents: WecomExternalContactConsent[];
+  mappingSummary: Record<WecomUserMappingStatus | "total", number>;
+  drafts: CommunicationInsight[];
+  setupSummary: {
+    autoMatched: number;
+    needsConfirmation: number;
+    externalContacts: number;
+    chatCount: number;
+    suggestedProjectGroups: number;
+    pendingProjectSuggestions: number;
+    fileCount: number;
+    failedFileCount: number;
+    externalConsentIssues: number;
+    pendingDrafts: number;
+    lastSyncAt?: string | null;
+    syncStatus: CommunicationSyncStatus;
+  };
 };

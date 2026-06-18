@@ -151,6 +151,99 @@ enum WorkLogAttachmentKind {
   FILE
 }
 
+enum WecomIntegrationMode {
+  ZERO
+  LIGHT
+  PRECISE
+}
+
+enum WecomIntegrationStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ERROR
+}
+
+enum WecomUserMappingStatus {
+  AUTO
+  CONFIRMED
+  CONFLICT
+  UNMAPPED
+  EXTERNAL
+}
+
+enum CommunicationSourceType {
+  PROJECT
+  DEPARTMENT
+  GENERAL
+}
+
+enum CommunicationSyncStatus {
+  PENDING
+  SYNCING
+  OK
+  ERROR
+  PAUSED
+}
+
+enum CommunicationSenderType {
+  INTERNAL
+  EXTERNAL
+  BOT
+  UNKNOWN
+}
+
+enum CommunicationMessageType {
+  TEXT
+  FILE
+  IMAGE
+  VOICE
+  LINK
+  OTHER
+}
+
+enum CommunicationInsightType {
+  WORK_LOG_DRAFT
+  PROJECT_PROGRESS
+  PROJECT_RISK
+}
+
+enum CommunicationInsightStatus {
+  CANDIDATE
+  CONFIRMED
+  IGNORED
+}
+
+enum CommunicationFileKind {
+  FILE
+  IMAGE
+  VOICE
+  VIDEO
+  LINK
+  OTHER
+}
+
+enum CommunicationFileDownloadStatus {
+  PENDING
+  DOWNLOADING
+  DOWNLOADED
+  SKIPPED
+  FAILED
+}
+
+enum WecomExternalConsentStatus {
+  UNKNOWN
+  AGREED
+  DISAGREED
+  REVOKED
+}
+
+enum CommunicationProjectSuggestionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
 model Tenant {
   id                      String                   @id @default(cuid())
   name                    String
@@ -179,6 +272,16 @@ model Tenant {
   feedbackRequests        FeedbackRequest[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  wecomIntegrations       WecomIntegration[]
+  wecomSyncCheckpoints    WecomSyncCheckpoint[]
+  wecomUserBindings       WecomUserBinding[]
+  communicationSources    CommunicationSource[]
+  communicationMessages   CommunicationMessage[]
+  communicationFiles      CommunicationFile[]
+  communicationInsights   CommunicationInsight[]
+  communicationProjectSuggestions CommunicationProjectSuggestion[]
+  wecomExternalConsents   WecomExternalContactConsent[]
+  workLogSourceLinks      WorkLogSourceLink[]
 
   @@map("tenants")
 }
@@ -260,6 +363,10 @@ model User {
   dataDeletionRequests    DataDeletionRequest[]
   exportTasks             ExportTask[]               @relation("ExportTaskRequester")
   feedbackRequests        FeedbackRequest[]          @relation("FeedbackRequestRequester")
+  wecomUserBindings       WecomUserBinding[]          @relation("WecomBoundUser")
+  communicationMessages   CommunicationMessage[]      @relation("CommunicationMappedUser")
+  communicationFiles      CommunicationFile[]         @relation("CommunicationFileMappedUser")
+  communicationInsights   CommunicationInsight[]      @relation("CommunicationSuggestedUser")
 
   @@unique([tenantId, email])
   @@unique([tenantId, phone])
@@ -346,6 +453,8 @@ model Project {
   tenant      Tenant        @relation(fields: [tenantId], references: [id])
   owner       User?         @relation("ProjectOwner", fields: [ownerUserId], references: [id])
   workLogs    WorkLog[]
+  communicationInsights CommunicationInsight[]
+  communicationProjectSuggestions CommunicationProjectSuggestion[]
 
   @@index([tenantId, status, deletedAt])
   @@index([tenantId, ownerUserId])
@@ -376,6 +485,8 @@ model WorkLog {
   attachments WorkLogAttachment[]
   aiAnalysis  AiAnalysis?
   aiTasks     AiTask[]
+  sourceLinks WorkLogSourceLink[]
+  confirmedCommunicationInsights CommunicationInsight[] @relation("ConfirmedCommunicationInsight")
 
   @@index([tenantId, date, status])
   @@index([tenantId, userId, date])
@@ -406,6 +517,287 @@ model WorkLogAttachment {
   @@index([tenantId, workLogId, deletedAt])
   @@index([tenantId, uploaderId, createdAt])
   @@map("work_log_attachments")
+}
+
+model WecomIntegration {
+  id                     String                 @id @default(cuid())
+  tenantId               String                 @map("tenant_id")
+  corpId                 String                 @map("corp_id")
+  msgAuditSecretRef      String                 @map("msg_audit_secret_ref") @db.Text
+  rsaPrivateKeyRef       String                 @map("rsa_private_key_ref") @db.Text
+  rsaPublicKeyConfigured Boolean                @default(false) @map("rsa_public_key_configured")
+  trustedIpNote          String?                @map("trusted_ip_note") @db.Text
+  mode                   WecomIntegrationMode   @default(LIGHT)
+  status                 WecomIntegrationStatus @default(DRAFT)
+  syncDepartmentIds      String[]               @map("sync_department_ids")
+  syncUserIds            String[]               @map("sync_user_ids")
+  syncChatIds            String[]               @map("sync_chat_ids")
+  syncFiles              Boolean                @default(false) @map("sync_files")
+  generateLogDrafts      Boolean                @default(true) @map("generate_log_drafts")
+  generateProjectRisks   Boolean                @default(true) @map("generate_project_risks")
+  retentionDays          Int                    @default(180) @map("retention_days")
+  lastSyncAt             DateTime?              @map("last_sync_at")
+  lastSyncStatus         CommunicationSyncStatus @default(PENDING) @map("last_sync_status")
+  lastError              String?                @map("last_error") @db.Text
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+  deletedAt              DateTime?              @map("deleted_at")
+  tenant                 Tenant                 @relation(fields: [tenantId], references: [id])
+  checkpoints            WecomSyncCheckpoint[]
+  sources                CommunicationSource[]
+  messages               CommunicationMessage[]
+
+  @@unique([tenantId, corpId])
+  @@index([tenantId, status, deletedAt])
+  @@map("wecom_integrations")
+}
+
+model WecomSyncCheckpoint {
+  id            String                  @id @default(cuid())
+  tenantId      String                  @map("tenant_id")
+  integrationId String                  @map("integration_id")
+  seq           BigInt                  @default(0)
+  status        CommunicationSyncStatus @default(PENDING)
+  lastSyncedAt  DateTime?               @map("last_synced_at")
+  lastError     String?                 @map("last_error") @db.Text
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id])
+  integration   WecomIntegration        @relation(fields: [integrationId], references: [id])
+
+  @@unique([tenantId, integrationId])
+  @@index([tenantId, status])
+  @@map("wecom_sync_checkpoints")
+}
+
+model WecomUserBinding {
+  id             String                  @id @default(cuid())
+  tenantId       String                  @map("tenant_id")
+  userId         String?                 @map("user_id")
+  wecomCorpId    String                  @map("wecom_corp_id")
+  wecomUserId    String                  @map("wecom_user_id")
+  wecomName      String                  @map("wecom_name")
+  mobile         String?
+  email          String?
+  departmentIds  String[]                @map("department_ids")
+  mappingStatus  WecomUserMappingStatus  @default(UNMAPPED) @map("mapping_status")
+  confidence     Float                   @default(0)
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id])
+  user           User?                   @relation("WecomBoundUser", fields: [userId], references: [id])
+
+  @@unique([tenantId, wecomCorpId, wecomUserId])
+  @@index([tenantId, userId])
+  @@index([tenantId, mappingStatus])
+  @@map("wecom_user_bindings")
+}
+
+model CommunicationSource {
+  id                  String                  @id @default(cuid())
+  tenantId            String                  @map("tenant_id")
+  integrationId       String?                 @map("integration_id")
+  name                String
+  chatId              String                  @map("chat_id")
+  sourceType          CommunicationSourceType @default(GENERAL) @map("source_type")
+  projectIds          String[]                @map("project_ids")
+  departmentIds       String[]                @map("department_ids")
+  memberScopeUserIds  String[]                @map("member_scope_user_ids")
+  generateLogDrafts   Boolean                 @default(true) @map("generate_log_drafts")
+  generateProjectRisks Boolean                @default(true) @map("generate_project_risks")
+  syncFiles           Boolean                 @default(false) @map("sync_files")
+  retentionDays       Int                     @default(180) @map("retention_days")
+  lastSyncAt          DateTime?               @map("last_sync_at")
+  lastSyncStatus      CommunicationSyncStatus @default(PENDING) @map("last_sync_status")
+  lastError           String?                 @map("last_error") @db.Text
+  pendingDraftCount   Int                     @default(0) @map("pending_draft_count")
+  unclassifiedCount   Int                     @default(0) @map("unclassified_count")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  deletedAt           DateTime?               @map("deleted_at")
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id])
+  integration         WecomIntegration?       @relation(fields: [integrationId], references: [id])
+  messages            CommunicationMessage[]
+  files               CommunicationFile[]
+  insights            CommunicationInsight[]
+  projectSuggestions  CommunicationProjectSuggestion[]
+  workLogSourceLinks  WorkLogSourceLink[]
+
+  @@unique([tenantId, chatId])
+  @@index([tenantId, sourceType, deletedAt])
+  @@index([tenantId, lastSyncStatus])
+  @@map("communication_sources")
+}
+
+model CommunicationMessage {
+  id                     String                  @id @default(cuid())
+  tenantId               String                  @map("tenant_id")
+  integrationId          String?                 @map("integration_id")
+  sourceId               String                  @map("source_id")
+  msgId                  String                  @map("msg_id")
+  senderWecomUserId      String?                 @map("sender_wecom_user_id")
+  senderName             String?                 @map("sender_name")
+  senderType             CommunicationSenderType @default(UNKNOWN) @map("sender_type")
+  mappedUserId           String?                 @map("mapped_user_id")
+  mappingStatus          WecomUserMappingStatus  @default(UNMAPPED) @map("mapping_status")
+  content                String                  @db.Text
+  msgType                CommunicationMessageType @default(TEXT) @map("msg_type")
+  sentAt                 DateTime                @map("sent_at")
+  rawPayloadEncryptedRef String?                 @map("raw_payload_encrypted_ref") @db.Text
+  createdAt              DateTime                @default(now()) @map("created_at")
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id])
+  integration            WecomIntegration?       @relation(fields: [integrationId], references: [id])
+  source                 CommunicationSource     @relation(fields: [sourceId], references: [id])
+  mappedUser             User?                   @relation("CommunicationMappedUser", fields: [mappedUserId], references: [id])
+  files                  CommunicationFile[]
+  workLogSourceLinks     WorkLogSourceLink[]
+
+  @@unique([tenantId, msgId])
+  @@index([tenantId, sourceId, sentAt])
+  @@index([tenantId, mappedUserId, sentAt])
+  @@index([tenantId, mappingStatus])
+  @@map("communication_messages")
+}
+
+model CommunicationFile {
+  id                     String                          @id @default(cuid())
+  tenantId               String                          @map("tenant_id")
+  sourceId               String                          @map("source_id")
+  messageId              String?                         @map("message_id")
+  sdkFileId              String                          @map("sdk_file_id")
+  fileName               String                          @map("file_name")
+  mimeType               String?                         @map("mime_type")
+  fileSize               Int?                            @map("file_size")
+  kind                   CommunicationFileKind           @default(FILE)
+  downloadStatus         CommunicationFileDownloadStatus @default(PENDING) @map("download_status")
+  storagePath            String?                         @map("storage_path") @db.Text
+  textContent            String?                         @map("text_content") @db.Text
+  aiSummary              String?                         @map("ai_summary") @db.Text
+  uploadedByWecomUserId  String?                         @map("uploaded_by_wecom_user_id")
+  mappedUserId           String?                         @map("mapped_user_id")
+  externalUserId         String?                         @map("external_user_id")
+  consentStatus          WecomExternalConsentStatus      @default(UNKNOWN) @map("consent_status")
+  error                  String?                         @db.Text
+  sentAt                 DateTime                        @map("sent_at")
+  createdAt              DateTime                        @default(now()) @map("created_at")
+  updatedAt              DateTime                        @updatedAt @map("updated_at")
+  deletedAt              DateTime?                       @map("deleted_at")
+  tenant                 Tenant                          @relation(fields: [tenantId], references: [id])
+  source                 CommunicationSource             @relation(fields: [sourceId], references: [id])
+  message                CommunicationMessage?           @relation(fields: [messageId], references: [id])
+  mappedUser             User?                           @relation("CommunicationFileMappedUser", fields: [mappedUserId], references: [id])
+  workLogSourceLinks     WorkLogSourceLink[]
+
+  @@unique([tenantId, sdkFileId])
+  @@index([tenantId, sourceId, sentAt])
+  @@index([tenantId, mappedUserId, sentAt])
+  @@index([tenantId, downloadStatus])
+  @@map("communication_files")
+}
+
+model CommunicationInsight {
+  id                              String                     @id @default(cuid())
+  tenantId                        String                     @map("tenant_id")
+  sourceId                        String?                    @map("source_id")
+  suggestedUserId                 String?                    @map("suggested_user_id")
+  type                            CommunicationInsightType   @default(WORK_LOG_DRAFT)
+  status                          CommunicationInsightStatus @default(CANDIDATE)
+  date                            DateTime                   @db.Date
+  title                           String
+  content                         String                     @db.Text
+  hours                           Float?
+  projectId                       String?                    @map("project_id")
+  projectHints                    String[]                   @map("project_hints")
+  risks                           Json
+  blockers                        Json
+  nextActions                     Json                       @map("next_actions")
+  sourceMessageIds                String[]                   @map("source_message_ids")
+  sourceFileIds                   String[]                   @map("source_file_ids")
+  confidence                      Float                      @default(0)
+  missingFields                   Json                       @map("missing_fields")
+  needsProjectConfirmation        Boolean                    @default(false) @map("needs_project_confirmation")
+  needsUserMappingConfirmation    Boolean                    @default(false) @map("needs_user_mapping_confirmation")
+  confirmedWorkLogId              String?                    @map("confirmed_work_log_id")
+  createdAt                       DateTime                   @default(now()) @map("created_at")
+  updatedAt                       DateTime                   @updatedAt @map("updated_at")
+  deletedAt                       DateTime?                  @map("deleted_at")
+  tenant                          Tenant                     @relation(fields: [tenantId], references: [id])
+  source                          CommunicationSource?       @relation(fields: [sourceId], references: [id])
+  suggestedUser                   User?                      @relation("CommunicationSuggestedUser", fields: [suggestedUserId], references: [id])
+  project                         Project?                   @relation(fields: [projectId], references: [id])
+  confirmedWorkLog                WorkLog?                   @relation("ConfirmedCommunicationInsight", fields: [confirmedWorkLogId], references: [id])
+  sourceLinks                     WorkLogSourceLink[]
+
+  @@index([tenantId, type, status, date])
+  @@index([tenantId, suggestedUserId, status])
+  @@index([tenantId, projectId, status])
+  @@map("communication_insights")
+}
+
+model WecomExternalContactConsent {
+  id             String                     @id @default(cuid())
+  tenantId       String                     @map("tenant_id")
+  wecomCorpId    String                     @map("wecom_corp_id")
+  externalUserId String                     @map("external_user_id")
+  externalName   String?                    @map("external_name")
+  status         WecomExternalConsentStatus @default(UNKNOWN)
+  agreedAt       DateTime?                  @map("agreed_at")
+  revokedAt      DateTime?                  @map("revoked_at")
+  lastCheckedAt  DateTime?                  @map("last_checked_at")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+  tenant         Tenant                     @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, wecomCorpId, externalUserId])
+  @@index([tenantId, status])
+  @@map("wecom_external_contact_consents")
+}
+
+model CommunicationProjectSuggestion {
+  id              String                               @id @default(cuid())
+  tenantId        String                               @map("tenant_id")
+  sourceId        String                               @map("source_id")
+  projectId       String                               @map("project_id")
+  status          CommunicationProjectSuggestionStatus @default(PENDING)
+  confidence      Float                                @default(0)
+  reason          String                               @db.Text
+  evidence        Json
+  createdAt       DateTime                             @default(now()) @map("created_at")
+  updatedAt       DateTime                             @updatedAt @map("updated_at")
+  confirmedAt     DateTime?                            @map("confirmed_at")
+  rejectedAt      DateTime?                            @map("rejected_at")
+  tenant          Tenant                               @relation(fields: [tenantId], references: [id])
+  source          CommunicationSource                  @relation(fields: [sourceId], references: [id])
+  project         Project                              @relation(fields: [projectId], references: [id])
+
+  @@unique([tenantId, sourceId, projectId])
+  @@index([tenantId, status, confidence])
+  @@map("communication_project_suggestions")
+}
+
+model WorkLogSourceLink {
+  id              String                @id @default(cuid())
+  tenantId        String                @map("tenant_id")
+  workLogId       String                @map("work_log_id")
+  insightId       String?               @map("insight_id")
+  messageId       String?               @map("message_id")
+  fileId          String?               @map("file_id")
+  sourceId        String?               @map("source_id")
+  sourceType      String                @default("WECOM") @map("source_type")
+  evidenceSummary String?               @map("evidence_summary") @db.Text
+  createdAt       DateTime              @default(now()) @map("created_at")
+  tenant          Tenant                @relation(fields: [tenantId], references: [id])
+  workLog         WorkLog               @relation(fields: [workLogId], references: [id])
+  insight         CommunicationInsight? @relation(fields: [insightId], references: [id])
+  message         CommunicationMessage? @relation(fields: [messageId], references: [id])
+  file            CommunicationFile?    @relation(fields: [fileId], references: [id])
+  source          CommunicationSource?  @relation(fields: [sourceId], references: [id])
+
+  @@index([tenantId, workLogId])
+  @@index([tenantId, insightId])
+  @@index([tenantId, fileId])
+  @@index([tenantId, sourceId])
+  @@map("work_log_source_links")
 }
 
 model AiAnalysis {

@@ -1,14 +1,15 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, DatePicker, Empty, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Button, DatePicker, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
-import { Edit2, FolderKanban, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, Edit2, FolderKanban, MessageSquare, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
 import { apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
-import { OrgUser, Project, ProjectStatus, WorkLog } from "@/lib/types";
+import { CommunicationInsight, CommunicationSource, OrgUser, Project, ProjectStatus, WorkLog } from "@/lib/types";
 
 type OrgResponse = {
   users: OrgUser[];
@@ -22,6 +23,14 @@ type ProjectForm = {
   ownerUserId?: string;
   startDate?: Dayjs;
   endDate?: Dayjs;
+};
+
+type ProjectWorkLogForm = {
+  date: Dayjs;
+  title: string;
+  content: string;
+  hours?: number | null;
+  projectId?: string | null;
 };
 
 const statusOptions: Array<{ value: ProjectStatus; label: string; color: string }> = [
@@ -66,6 +75,16 @@ function toPayload(values: ProjectForm) {
     ownerUserId: values.ownerUserId || null,
     startDate: values.startDate?.format("YYYY-MM-DD") ?? null,
     endDate: values.endDate?.format("YYYY-MM-DD") ?? null
+  };
+}
+
+function workLogPayload(values: ProjectWorkLogForm) {
+  return {
+    date: values.date.format("YYYY-MM-DD"),
+    title: values.title,
+    content: values.content,
+    hours: typeof values.hours === "number" && Number.isFinite(values.hours) ? values.hours : null,
+    projectId: values.projectId || null
   };
 }
 
@@ -152,7 +171,10 @@ export default function ProjectsPage() {
   const canManage = hasAnyRole(user, ["SUPER_ADMIN", "COMPANY_ADMIN"]);
   const queryClient = useQueryClient();
   const [form] = Form.useForm<ProjectForm>();
+  const [workLogForm] = Form.useForm<ProjectWorkLogForm>();
   const [editing, setEditing] = useState<Project | null>(null);
+  const [detailLog, setDetailLog] = useState<WorkLog | null>(null);
+  const [detailEditing, setDetailEditing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "ALL">("ACTIVE");
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
@@ -193,10 +215,33 @@ export default function ProjectsPage() {
     enabled: Boolean(selectedProject?.id)
   });
 
+  const communicationSources = useQuery({
+    queryKey: ["wecom-sources"],
+    queryFn: () => apiFetch<CommunicationSource[]>("/wecom/sources")
+  });
+
+  const communicationDrafts = useQuery({
+    queryKey: ["wecom-log-drafts"],
+    queryFn: () => apiFetch<CommunicationInsight[]>("/wecom/log-drafts")
+  });
+
   const projectAnalysis = useMemo(() => {
     return summarizeProjectLogs(projectLogs.data ?? []);
   }, [projectLogs.data]);
   const projectActions = useMemo(() => (selectedProject ? projectNextActions(selectedProject, projectAnalysis) : []), [projectAnalysis, selectedProject]);
+  const selectedProjectSources = useMemo(
+    () => (selectedProject ? (communicationSources.data ?? []).filter((item) => item.projectIds.includes(selectedProject.id)) : []),
+    [communicationSources.data, selectedProject]
+  );
+  const selectedProjectDrafts = useMemo(
+    () =>
+      selectedProject
+        ? (communicationDrafts.data ?? []).filter(
+            (item) => item.projectId === selectedProject.id || item.projectHints?.some((hint) => hint.includes(selectedProject.name) || (selectedProject.code && hint.includes(selectedProject.code)))
+          )
+        : [],
+    [communicationDrafts.data, selectedProject]
+  );
 
   const saveProject = useMutation({
     mutationFn: (values: ProjectForm) => {
@@ -229,6 +274,29 @@ export default function ProjectsPage() {
     }
   });
 
+  const canEditWorkLog = (record: WorkLog) => {
+    return Boolean(record.userId === user?.id || hasAnyRole(user, ["SUPER_ADMIN", "COMPANY_ADMIN"]));
+  };
+
+  const updateProjectWorkLog = useMutation({
+    mutationFn: ({ id, values }: { id: string; values: ProjectWorkLogForm }) =>
+      apiFetch<WorkLog>(`/work-logs/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(workLogPayload(values))
+      }),
+    onSuccess: (updated) => {
+      message.success("日报已更新");
+      setDetailLog(updated);
+      setDetailEditing(false);
+      queryClient.invalidateQueries({ queryKey: ["project-work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "更新日报失败");
+    }
+  });
+
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
@@ -250,14 +318,33 @@ export default function ProjectsPage() {
     setModalOpen(true);
   };
 
+  const openLogDetail = (record: WorkLog) => {
+    setDetailLog(record);
+    setDetailEditing(false);
+  };
+
+  useEffect(() => {
+    if (!detailEditing || !detailLog) return;
+    workLogForm.setFieldsValue({
+      date: dayjs(detailLog.date),
+      title: detailLog.title,
+      content: detailLog.content,
+      hours: Number(detailLog.hours),
+      projectId: detailLog.projectId ?? selectedProject?.id ?? undefined
+    });
+  }, [detailEditing, detailLog, selectedProject?.id, workLogForm]);
+
   const logColumns: ColumnsType<WorkLog> = [
     { title: "日期", dataIndex: "date", width: 112, render: (value: string) => dayjs(value).format("MM-DD") },
     {
       title: "日报内容",
       render: (_, record) => (
         <div className="min-w-0">
-          <div className="font-medium text-ink">{record.title}</div>
+          <Button type="link" className="!h-auto !p-0 !text-left font-medium" onClick={() => openLogDetail(record)}>
+            {record.title}
+          </Button>
           <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{record.aiAnalysis?.summary ?? record.content}</div>
+          {record.sourceLinks?.length ? <Tag className="mt-2" color="cyan">沟通来源 {record.sourceLinks.length}</Tag> : null}
         </div>
       )
     },
@@ -424,6 +511,65 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
+              <div className="surface-panel project-communication-panel">
+                <div className="project-focus-head">
+                  <div className="min-w-0">
+                    <div className="section-title">沟通来源</div>
+                    <div className="section-subtitle">来自企业微信群的项目线索，确认后才会写入正式日报。</div>
+                  </div>
+                  <div className="project-focus-stats" aria-label="项目沟通来源数据">
+                    <span><strong>{selectedProjectSources.length}</strong>个群聊</span>
+                    <span><strong>{selectedProjectDrafts.length}</strong>条候选</span>
+                    <span><strong>{selectedProjectDrafts.reduce((sum, item) => sum + (item.risks?.length ?? 0), 0)}</strong>条风险</span>
+                  </div>
+                </div>
+                {selectedProjectSources.length || selectedProjectDrafts.length ? (
+                  <div className="project-communication-grid">
+                    <section>
+                      <div className="project-focus-title">
+                        <MessageSquare size={15} />
+                        已绑定群聊
+                      </div>
+                      {selectedProjectSources.length ? (
+                        <div className="project-source-list">
+                          {selectedProjectSources.map((source) => (
+                            <div key={source.id} className="project-source-item">
+                              <strong>{source.name}</strong>
+                              <span>{source.chatId}</span>
+                              <div>
+                                <Tag color={source.generateLogDrafts ? "green" : "default"}>{source.generateLogDrafts ? "生成草稿" : "不生成草稿"}</Tag>
+                                <Tag color={source.generateProjectRisks ? "orange" : "default"}>{source.generateProjectRisks ? "识别风险" : "不识别风险"}</Tag>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="project-focus-empty">暂无绑定群聊，可在企业微信集成页绑定项目群。</div>
+                      )}
+                    </section>
+                    <section>
+                      <div className="project-focus-title">
+                        <AlertTriangle size={15} />
+                        候选线索
+                      </div>
+                      {selectedProjectDrafts.length ? (
+                        <ul className="project-insight-list is-risk">
+                          {selectedProjectDrafts.slice(0, 4).map((draft) => (
+                            <li key={draft.id}>
+                              {draft.title} · {draft.risks?.[0] ?? draft.nextActions?.[0] ?? "待确认"}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="project-focus-empty">暂无来自群聊的项目候选内容。</div>
+                      )}
+                    </section>
+                  </div>
+                ) : (
+                  <Empty description="暂无沟通来源，后续可在企业微信集成页绑定项目群" />
+                )}
+              </div>
+
               <div className="project-log-section">
                 <div className="history-section-head">
                   <div>
@@ -438,6 +584,9 @@ export default function ProjectsPage() {
                   columns={logColumns}
                   locale={{ emptyText: <Empty description="当前项目暂无日报记录" /> }}
                   pagination={{ pageSize: 6 }}
+                  onRow={(record) => ({
+                    onDoubleClick: () => openLogDetail(record)
+                  })}
                 />
               </div>
             </>
@@ -483,6 +632,128 @@ export default function ProjectsPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <Drawer
+        title={detailLog ? `${dayjs(detailLog.date).format("YYYY-MM-DD")} · ${detailLog.title}` : "日报详情"}
+        open={Boolean(detailLog)}
+        onClose={() => {
+          setDetailLog(null);
+          setDetailEditing(false);
+        }}
+        width={720}
+        extra={
+          detailLog && canEditWorkLog(detailLog) ? (
+            detailEditing ? (
+              <Space>
+                <Button onClick={() => setDetailEditing(false)}>取消编辑</Button>
+                <Button type="primary" loading={updateProjectWorkLog.isPending} onClick={() => workLogForm.submit()}>
+                  保存修改
+                </Button>
+              </Space>
+            ) : (
+              <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
+                编辑记录
+              </Button>
+            )
+          ) : null
+        }
+      >
+        {detailLog ? (
+          <div className="project-log-detail">
+            {detailEditing ? (
+              <Form form={workLogForm} layout="vertical" onFinish={(values) => updateProjectWorkLog.mutate({ id: detailLog.id, values })}>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <Form.Item name="date" label="日期" rules={[{ required: true }]}>
+                    <DatePicker className="w-full" />
+                  </Form.Item>
+                  <Form.Item name="hours" label="工时">
+                    <InputNumber className="w-full" min={0} max={24} step={0.5} />
+                  </Form.Item>
+                  <Form.Item name="projectId" label="关联项目">
+                    <Select allowClear showSearch optionFilterProp="label" options={(projects.data ?? []).map((item) => ({ value: item.id, label: item.code ? `${item.code} · ${item.name}` : item.name }))} />
+                  </Form.Item>
+                </div>
+                <Form.Item name="title" label="标题" rules={[{ required: true, min: 2 }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
+                  <Input.TextArea rows={6} />
+                </Form.Item>
+              </Form>
+            ) : (
+              <>
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="metric-card">
+                    <div className="metric-label">人员</div>
+                    <div className="mt-2 text-sm font-medium text-ink">{detailLog.user?.name ?? "-"}</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-label">项目</div>
+                    <div className="mt-2 text-sm font-medium text-ink">{detailLog.project?.name ?? selectedProject?.name ?? "未关联"}</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-label">工时</div>
+                    <div className="metric-value">{Number(detailLog.hours).toFixed(1)}h</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-label">状态</div>
+                    <Tag className="mt-2" color={detailLog.status === "SUBMITTED" ? "green" : "default"}>
+                      {detailLog.status === "SUBMITTED" ? "已提交" : "草稿"}
+                    </Tag>
+                  </div>
+                </div>
+                <section className="project-log-detail-block">
+                  <div className="project-focus-title">工作内容</div>
+                  <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{detailLog.content}</div>
+                </section>
+                {detailLog.aiAnalysis ? (
+                  <section className="project-log-detail-block">
+                    <div className="project-focus-title">分析结果</div>
+                    <p className="mb-3 text-sm leading-6 text-muted">{detailLog.aiAnalysis.summary}</p>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div>
+                        <div className="mb-2 text-xs font-semibold text-muted">成果</div>
+                        <Space wrap>{detailLog.aiAnalysis.achievements?.length ? detailLog.aiAnalysis.achievements.map((item) => <Tag color="green" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
+                      </div>
+                      <div>
+                        <div className="mb-2 text-xs font-semibold text-muted">风险</div>
+                        <Space wrap>{detailLog.aiAnalysis.risks?.length ? detailLog.aiAnalysis.risks.map((item) => <Tag color="red" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
+                      </div>
+                      <div>
+                        <div className="mb-2 text-xs font-semibold text-muted">阻塞</div>
+                        <Space wrap>{detailLog.aiAnalysis.blockers?.length ? detailLog.aiAnalysis.blockers.map((item) => <Tag color="orange" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+                {detailLog.attachments?.length ? (
+                  <section className="project-log-detail-block">
+                    <div className="project-focus-title">附件</div>
+                    <WorkLogAttachmentViewer workLogId={detailLog.id} attachments={detailLog.attachments} />
+                  </section>
+                ) : null}
+                {detailLog.sourceLinks?.length ? (
+                  <section className="project-log-detail-block">
+                    <div className="project-focus-title">
+                      <MessageSquare size={15} />
+                      沟通来源证据
+                    </div>
+                    <div className="space-y-2">
+                      {detailLog.sourceLinks.map((link) => (
+                        <div key={link.id} className="project-source-item">
+                          <strong>{link.source?.name ?? "企业微信群"}</strong>
+                          <span>{link.evidenceSummary ?? link.message?.content ?? link.file?.aiSummary ?? link.file?.fileName ?? "来源消息已记录。"}</span>
+                          {link.file ? <Tag color="cyan">文件：{link.file.fileName}</Tag> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
 }

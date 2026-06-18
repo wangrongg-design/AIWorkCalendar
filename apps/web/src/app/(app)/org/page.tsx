@@ -8,6 +8,7 @@ import { CheckCircle2, CreditCard, Download, Edit2, FileLock2, History, KeyRound
 import { useEffect, useMemo, useState } from "react";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
+import { WecomIntegrationWorkspace } from "@/components/wecom/WecomIntegrationWorkspace";
 import { normalizeUnifiedSocialCreditCode, unifiedSocialCreditCodeMessage, unifiedSocialCreditCodePattern } from "@/lib/unified-social-credit-code";
 import {
   AuditLog,
@@ -1384,6 +1385,18 @@ export default function OrgPage() {
                         }
                       ]
                     : []),
+                  {
+                    key: "wecom",
+                    label: "企业微信集成",
+                    children: (
+                      <WecomIntegrationWorkspace
+                        canManage={canManage}
+                        departments={org.data?.departments ?? []}
+                        users={org.data?.users ?? []}
+                        departmentFullPath={departmentFullPath}
+                      />
+                    )
+                  },
                   {
                     key: "privacy",
                     label: "备份与数据",

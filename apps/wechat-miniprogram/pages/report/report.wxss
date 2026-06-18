@@ -376,7 +376,13 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 18rpx;
+}
+
+.draft-item-head > view:first-child {
+  min-width: 0;
+  flex: 1 1 320rpx;
 }
 
 .draft-item-title {
@@ -398,6 +404,7 @@
   min-height: 88rpx;
   align-items: center;
   gap: 10rpx;
+  flex: 0 0 auto;
   color: #0B57D0;
   font-size: 23rpx;
   font-weight: 800;

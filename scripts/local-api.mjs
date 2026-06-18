@@ -142,6 +142,15 @@ const exportTasks = [];
 const feedbackRequests = [];
 const auditLogs = [];
 const passwordResetTokens = new Map();
+const wecomIntegrations = [];
+const wecomUserBindings = [];
+const communicationSources = [];
+const communicationMessages = [];
+const communicationFiles = [];
+const communicationInsights = [];
+const communicationProjectSuggestions = [];
+const wecomExternalConsents = [];
+const workLogSourceLinks = [];
 
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin ?? "*";
@@ -228,6 +237,34 @@ const server = http.createServer(async (req, res) => {
     if (route === "POST /org/users") return json(res, createOrgUser(requireUser(currentUser), body));
     if (req.method === "PATCH" && url.pathname.startsWith("/org/users/")) {
       return json(res, updateOrgUser(requireUser(currentUser), lastPath(url.pathname), body));
+    }
+
+    if (route === "GET /wecom/overview") return json(res, wecomOverview(requireUser(currentUser)));
+    if (route === "POST /wecom/integrations") return json(res, saveWecomIntegration(requireUser(currentUser), body));
+    if (route === "POST /wecom/integrations/test") return json(res, testWecomIntegration(requireUser(currentUser)));
+    if (route === "POST /wecom/mappings/auto-match") return json(res, autoMatchWecomMembers(requireUser(currentUser)));
+    if (route === "GET /wecom/bindings") return json(res, listWecomBindings(requireUser(currentUser)));
+    if (req.method === "PATCH" && url.pathname.startsWith("/wecom/bindings/")) {
+      return json(res, updateWecomBinding(requireUser(currentUser), lastPath(url.pathname), body));
+    }
+    if (route === "GET /wecom/sources") return json(res, listCommunicationSources(requireUser(currentUser)));
+    if (route === "POST /wecom/sources") return json(res, saveCommunicationSource(requireUser(currentUser), body));
+    if (req.method === "PATCH" && url.pathname.startsWith("/wecom/sources/")) {
+      return json(res, saveCommunicationSource(requireUser(currentUser), body, lastPath(url.pathname)));
+    }
+    if (route === "POST /wecom/sync/text") return json(res, syncWecomTextMessages(requireUser(currentUser), body));
+    if (route === "POST /wecom/sync/archive") return json(res, syncWecomArchive(requireUser(currentUser), body));
+    if (route === "GET /wecom/files") return json(res, listCommunicationFiles(requireUser(currentUser)));
+    if (route === "GET /wecom/project-suggestions") return json(res, listCommunicationProjectSuggestions(requireUser(currentUser)));
+    if (req.method === "PATCH" && url.pathname.startsWith("/wecom/project-suggestions/")) {
+      return json(res, updateCommunicationProjectSuggestion(requireUser(currentUser), lastPath(url.pathname), body));
+    }
+    if (route === "GET /wecom/log-drafts") return json(res, listWecomLogDrafts(requireUser(currentUser)));
+    if (req.method === "POST" && url.pathname.startsWith("/wecom/log-drafts/") && url.pathname.endsWith("/confirm")) {
+      return json(res, confirmWecomLogDraft(requireUser(currentUser), url.pathname.split("/")[3], body));
+    }
+    if (req.method === "POST" && url.pathname.startsWith("/wecom/log-drafts/") && url.pathname.endsWith("/ignore")) {
+      return json(res, ignoreWecomLogDraft(requireUser(currentUser), url.pathname.split("/")[3]));
     }
 
     if (route === "GET /projects") return json(res, listProjects(requireUser(currentUser), url));
@@ -579,6 +616,15 @@ function clearLocalData(user) {
   feedbackRequests.length = 0;
   auditLogs.length = 0;
   passwordResetTokens.clear();
+  wecomIntegrations.length = 0;
+  wecomUserBindings.length = 0;
+  communicationSources.length = 0;
+  communicationMessages.length = 0;
+  communicationFiles.length = 0;
+  communicationInsights.length = 0;
+  communicationProjectSuggestions.length = 0;
+  wecomExternalConsents.length = 0;
+  workLogSourceLinks.length = 0;
 
   users.splice(
     0,
@@ -1527,6 +1573,852 @@ function deleteProject(user, id) {
   item.deletedAt = new Date().toISOString();
   item.updatedAt = new Date().toISOString();
   audit(user, "PROJECT_DELETED", "Project", item.id);
+  return { ok: true };
+}
+
+function wecomOverview(user) {
+  const integrations = wecomIntegrations.filter((item) => item.tenantId === user.tenantId && !item.deletedAt).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const bindings = listWecomBindings(user, false);
+  const sources = listCommunicationSources(user, false);
+  const drafts = listWecomLogDrafts(user, false).slice(0, 8);
+  const files = listCommunicationFiles(user, false).slice(0, 8);
+  const projectSuggestions = listCommunicationProjectSuggestions(user, false).slice(0, 8);
+  const externalConsents = hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]) ? wecomExternalConsents.filter((item) => item.tenantId === user.tenantId).slice(0, 8) : [];
+  const activeIntegration = integrations.find((item) => item.status === "ACTIVE") ?? integrations[0] ?? null;
+  const mappingSummary = {
+    total: bindings.length,
+    AUTO: bindings.filter((item) => item.mappingStatus === "AUTO").length,
+    CONFIRMED: bindings.filter((item) => item.mappingStatus === "CONFIRMED").length,
+    CONFLICT: bindings.filter((item) => item.mappingStatus === "CONFLICT").length,
+    UNMAPPED: bindings.filter((item) => item.mappingStatus === "UNMAPPED").length,
+    EXTERNAL: bindings.filter((item) => item.mappingStatus === "EXTERNAL").length
+  };
+  audit(user, "WECOM_OVERVIEW_VIEWED", "WecomIntegration", activeIntegration?.id);
+  return {
+    integrations,
+    activeIntegration,
+    workerRuntime: {
+      mode: "mock",
+      adapterConfigured: false,
+      adapterCommand: null,
+      officialReady: false,
+      mockAllowed: true
+    },
+    sources,
+    bindings,
+    files,
+    projectSuggestions,
+    externalConsents,
+    mappingSummary,
+    drafts,
+    setupSummary: {
+      autoMatched: mappingSummary.AUTO + mappingSummary.CONFIRMED,
+      needsConfirmation: mappingSummary.CONFLICT + mappingSummary.UNMAPPED,
+      externalContacts: mappingSummary.EXTERNAL,
+      chatCount: sources.length,
+      suggestedProjectGroups: sources.filter((item) => item.sourceType === "PROJECT").length,
+      pendingProjectSuggestions: projectSuggestions.filter((item) => item.status === "PENDING").length,
+      fileCount: files.length,
+      failedFileCount: files.filter((item) => item.downloadStatus === "FAILED").length,
+      externalConsentIssues: externalConsents.filter((item) => item.status !== "AGREED").length,
+      pendingDrafts: drafts.length,
+      lastSyncAt: activeIntegration?.lastSyncAt ?? null,
+      syncStatus: activeIntegration?.lastSyncStatus ?? "PENDING"
+    }
+  };
+}
+
+function saveWecomIntegration(user, body) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const corpId = String(body.corpId ?? "").trim();
+  if (corpId.length < 4) throw httpError(400, "corpid is required");
+  const now = new Date().toISOString();
+  const existing = wecomIntegrations.find((item) => item.tenantId === user.tenantId && item.corpId === corpId && !item.deletedAt);
+  const payload = {
+    tenantId: user.tenantId,
+    corpId,
+    msgAuditSecretRef: String(body.msgAuditSecretRef ?? "").trim(),
+    rsaPrivateKeyRef: String(body.rsaPrivateKeyRef ?? "").trim(),
+    rsaPublicKeyConfigured: Boolean(body.rsaPublicKeyConfigured),
+    trustedIpNote: normalizeOptional(body.trustedIpNote),
+    mode: body.mode ?? "LIGHT",
+    status: body.rsaPublicKeyConfigured ? "ACTIVE" : "DRAFT",
+    syncDepartmentIds: Array.isArray(body.syncDepartmentIds) ? body.syncDepartmentIds : [],
+    syncUserIds: Array.isArray(body.syncUserIds) ? body.syncUserIds : [],
+    syncChatIds: Array.isArray(body.syncChatIds) ? body.syncChatIds : [],
+    syncFiles: Boolean(body.syncFiles),
+    generateLogDrafts: body.generateLogDrafts !== false,
+    generateProjectRisks: body.generateProjectRisks !== false,
+    retentionDays: Number(body.retentionDays ?? 180),
+    lastSyncStatus: existing?.lastSyncStatus ?? "PENDING",
+    lastSyncAt: existing?.lastSyncAt ?? null,
+    lastError: null,
+    updatedAt: now,
+    deletedAt: null
+  };
+  if (existing) {
+    Object.assign(existing, payload);
+    audit(user, "WECOM_INTEGRATION_SAVED", "WecomIntegration", existing.id, { corpId, mode: existing.mode });
+    return existing;
+  }
+  const item = { id: `wecom-integration-${Date.now()}`, ...payload, createdAt: now };
+  wecomIntegrations.unshift(item);
+  audit(user, "WECOM_INTEGRATION_SAVED", "WecomIntegration", item.id, { corpId, mode: item.mode });
+  return item;
+}
+
+function testWecomIntegration(user) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const integration = activeWecomIntegration(user.tenantId);
+  const missing = [
+    integration.corpId ? null : "corpid",
+    integration.msgAuditSecretRef ? null : "会话内容存档 secret",
+    integration.rsaPrivateKeyRef ? null : "RSA 私钥或密钥引用",
+    integration.rsaPublicKeyConfigured ? null : "企业微信后台 RSA 公钥"
+  ].filter(Boolean);
+  const ok = missing.length === 0;
+  integration.status = ok ? "ACTIVE" : "ERROR";
+  integration.lastSyncStatus = ok ? "PENDING" : "ERROR";
+  integration.lastError = ok ? null : `缺少配置：${missing.join("、")}`;
+  integration.updatedAt = new Date().toISOString();
+  audit(user, "WECOM_INTEGRATION_TESTED", "WecomIntegration", integration.id, { ok, missing });
+  return {
+    ok,
+    integration,
+    message: ok ? "企业微信会话内容存档配置已具备同步条件。" : `请先补充：${missing.join("、")}`
+  };
+}
+
+function activeWecomIntegration(tenantId) {
+  const integration =
+    wecomIntegrations.find((item) => item.tenantId === tenantId && item.status === "ACTIVE" && !item.deletedAt) ??
+    wecomIntegrations.find((item) => item.tenantId === tenantId && !item.deletedAt);
+  if (!integration) throw httpError(400, "请先保存企业微信会话内容存档配置");
+  return integration;
+}
+
+function memberWecomUserId(member) {
+  if (member.email) return member.email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `u_${String(member.id).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+}
+
+function autoMatchWecomMembers(user) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const integration = activeWecomIntegration(user.tenantId);
+  const members = users.filter((item) => item.tenantId === user.tenantId && !item.deletedAt && item.isActive);
+  for (const member of members) {
+    const wecomUserId = memberWecomUserId(member);
+    const existing = wecomUserBindings.find((item) => item.tenantId === user.tenantId && item.wecomCorpId === integration.corpId && item.wecomUserId === wecomUserId);
+    const payload = {
+      tenantId: user.tenantId,
+      userId: member.id,
+      wecomCorpId: integration.corpId,
+      wecomUserId,
+      wecomName: member.name,
+      mobile: member.phone ?? null,
+      email: member.email ?? null,
+      departmentIds: member.departmentId ? [member.departmentId] : [],
+      mappingStatus: existing?.mappingStatus === "CONFIRMED" ? "CONFIRMED" : "AUTO",
+      confidence: member.phone ? 0.98 : member.email ? 0.94 : 0.76,
+      updatedAt: new Date().toISOString()
+    };
+    if (existing) Object.assign(existing, payload);
+    else wecomUserBindings.push({ id: `wecom-binding-${Date.now()}-${Math.random().toString(16).slice(2)}`, ...payload, createdAt: new Date().toISOString() });
+  }
+  ensureWecomExceptionBindings(user.tenantId, integration.corpId);
+  const bindings = listWecomBindings(user, false);
+  audit(user, "WECOM_MEMBER_AUTO_MATCHED", "WecomIntegration", integration.id, { matched: members.length });
+  return {
+    matched: members.length,
+    needsConfirmation: bindings.filter((item) => ["CONFLICT", "UNMAPPED"].includes(item.mappingStatus)).length,
+    externalContacts: bindings.filter((item) => item.mappingStatus === "EXTERNAL").length,
+    bindings
+  };
+}
+
+function ensureWecomExceptionBindings(tenantId, corpId) {
+  for (const example of [
+    { wecomUserId: "external_customer_a", wecomName: "客户A联系人", mappingStatus: "EXTERNAL", confidence: 0 },
+    { wecomUserId: "unknown_contractor", wecomName: "临时协作成员", mappingStatus: "UNMAPPED", confidence: 0.2 }
+  ]) {
+    if (wecomUserBindings.some((item) => item.tenantId === tenantId && item.wecomCorpId === corpId && item.wecomUserId === example.wecomUserId)) continue;
+    wecomUserBindings.push({
+      id: `wecom-binding-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId,
+      userId: null,
+      wecomCorpId: corpId,
+      wecomUserId: example.wecomUserId,
+      wecomName: example.wecomName,
+      mobile: null,
+      email: null,
+      departmentIds: [],
+      mappingStatus: example.mappingStatus,
+      confidence: example.confidence,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  }
+}
+
+function listWecomBindings(user, shouldAudit = true) {
+  let items = wecomUserBindings.filter((item) => item.tenantId === user.tenantId);
+  if (!hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) {
+    const visibleUserIds = new Set(users.filter((item) => canAccessUser(user, item.id)).map((item) => item.id));
+    items = items.filter((item) => item.userId && visibleUserIds.has(item.userId));
+  }
+  if (shouldAudit) audit(user, "WECOM_BINDINGS_VIEWED", "WecomUserBinding");
+  return items
+    .map((item) => ({
+      ...item,
+      user: item.userId ? orgUser(users.find((candidate) => candidate.id === item.userId) ?? {}) : null
+    }))
+    .sort((a, b) => a.mappingStatus.localeCompare(b.mappingStatus) || b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function updateWecomBinding(user, id, body) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const binding = wecomUserBindings.find((item) => item.id === id && item.tenantId === user.tenantId);
+  if (!binding) throw httpError(404, "WeCom binding not found");
+  const mappingStatus = body.mappingStatus ?? "CONFIRMED";
+  let userId = body.userId || null;
+  if (mappingStatus === "CONFIRMED") {
+    if (!userId) throw httpError(400, "确认映射时必须选择系统成员");
+    assertTenantUser(user.tenantId, userId);
+  }
+  if (["EXTERNAL", "UNMAPPED"].includes(mappingStatus)) userId = null;
+  binding.userId = userId;
+  binding.mappingStatus = mappingStatus;
+  binding.confidence = mappingStatus === "CONFIRMED" ? 1 : binding.confidence;
+  binding.updatedAt = new Date().toISOString();
+  audit(user, "WECOM_MEMBER_MAPPING_UPDATED", "WecomUserBinding", id, { userId, mappingStatus });
+  return { ...binding, user: userId ? orgUser(users.find((item) => item.id === userId)) : null };
+}
+
+function listCommunicationSources(user, shouldAudit = true) {
+  let items = communicationSources.filter((item) => item.tenantId === user.tenantId && !item.deletedAt);
+  if (!hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) {
+    items = items.filter(
+      (item) =>
+        item.memberScopeUserIds.includes(user.id) ||
+        (user.departmentId && item.departmentIds.includes(user.departmentId)) ||
+        communicationMessages.some((message) => message.sourceId === item.id && message.mappedUserId === user.id)
+    );
+  }
+  if (shouldAudit) audit(user, "COMMUNICATION_SOURCES_VIEWED", "CommunicationSource");
+  return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function saveCommunicationSource(user, body, id = null) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const integration = activeWecomIntegration(user.tenantId);
+  const now = new Date().toISOString();
+  const projectIds = Array.isArray(body.projectIds) ? body.projectIds : [];
+  for (const projectId of projectIds) assertProject(user, projectId);
+  const departmentIds = Array.isArray(body.departmentIds) ? body.departmentIds : [];
+  for (const departmentId of departmentIds) {
+    if (!departments.some((item) => item.id === departmentId && item.tenantId === user.tenantId && !item.deletedAt)) throw httpError(404, "Department not found");
+  }
+  const memberScopeUserIds = Array.isArray(body.memberScopeUserIds) ? body.memberScopeUserIds : [];
+  for (const memberId of memberScopeUserIds) assertTenantUser(user.tenantId, memberId);
+  const existing = id
+    ? communicationSources.find((item) => item.id === id && item.tenantId === user.tenantId && !item.deletedAt)
+    : communicationSources.find((item) => item.tenantId === user.tenantId && item.chatId === body.chatId && !item.deletedAt);
+  const payload = {
+    tenantId: user.tenantId,
+    integrationId: integration.id,
+    name: String(body.name ?? "").trim(),
+    chatId: String(body.chatId ?? "").trim(),
+    sourceType: body.sourceType ?? "GENERAL",
+    projectIds,
+    departmentIds,
+    memberScopeUserIds,
+    generateLogDrafts: body.generateLogDrafts !== false,
+    generateProjectRisks: body.generateProjectRisks !== false,
+    syncFiles: Boolean(body.syncFiles),
+    retentionDays: Number(body.retentionDays ?? 180),
+    lastSyncAt: existing?.lastSyncAt ?? null,
+    lastSyncStatus: existing?.lastSyncStatus ?? "PENDING",
+    lastError: null,
+    pendingDraftCount: existing?.pendingDraftCount ?? 0,
+    unclassifiedCount: existing?.unclassifiedCount ?? 0,
+    updatedAt: now,
+    deletedAt: null
+  };
+  if (payload.name.length < 2 || payload.chatId.length < 3) throw httpError(400, "Source name and chat_id are required");
+  if (existing) {
+    Object.assign(existing, payload);
+    audit(user, "COMMUNICATION_SOURCE_UPDATED", "CommunicationSource", existing.id, { chatId: existing.chatId, sourceType: existing.sourceType });
+    return existing;
+  }
+  const item = { id: `source-${Date.now()}`, ...payload, createdAt: now };
+  communicationSources.unshift(item);
+  audit(user, "COMMUNICATION_SOURCE_SAVED", "CommunicationSource", item.id, { chatId: item.chatId, sourceType: item.sourceType });
+  return item;
+}
+
+function syncWecomTextMessages(user, body) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const integration = activeWecomIntegration(user.tenantId);
+  const source = body.sourceId ? getCommunicationSource(user.tenantId, body.sourceId) : ensureDefaultCommunicationSource(user.tenantId, integration.id);
+  const inputs = Array.isArray(body.items) && body.items.length ? body.items : demoWecomMessages(user.tenantId, integration.corpId, source.id);
+  const created = [];
+  for (const input of inputs) {
+    const content = String(input.content ?? "").trim();
+    if (!content) continue;
+    const senderWecomUserId = String(input.senderWecomUserId ?? "unknown");
+    const binding = wecomUserBindings.find((item) => item.tenantId === user.tenantId && item.wecomCorpId === integration.corpId && item.wecomUserId === senderWecomUserId);
+    const mappingStatus = binding?.mappingStatus ?? "UNMAPPED";
+    const senderType = mappingStatus === "EXTERNAL" ? "EXTERNAL" : "INTERNAL";
+    const mappedUserId = ["AUTO", "CONFIRMED"].includes(mappingStatus) ? binding?.userId ?? null : null;
+    const msgId = input.msgId || `wecom-${source.chatId}-${senderWecomUserId}-${new Date(input.sentAt ?? Date.now()).getTime()}`;
+    if (communicationMessages.some((item) => item.tenantId === user.tenantId && item.msgId === msgId)) continue;
+    const message = {
+      id: `message-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId: user.tenantId,
+      integrationId: integration.id,
+      sourceId: source.id,
+      msgId,
+      senderWecomUserId,
+      senderName: input.senderName ?? binding?.wecomName ?? senderWecomUserId,
+      senderType,
+      mappedUserId,
+      mappingStatus,
+      content,
+      msgType: "TEXT",
+      sentAt: input.sentAt || new Date().toISOString(),
+      rawPayloadEncryptedRef: "wecom-msgaudit-worker://encrypted-payload",
+      createdAt: new Date().toISOString()
+    };
+    communicationMessages.push(message);
+    created.push(message);
+  }
+  const insights = generateCommunicationDrafts(user.tenantId, source, created);
+  generateCommunicationProjectSuggestions(user.tenantId, source.id);
+  refreshCommunicationSourceCounters(source.id);
+  integration.lastSyncAt = new Date().toISOString();
+  integration.lastSyncStatus = "OK";
+  integration.lastError = null;
+  integration.updatedAt = integration.lastSyncAt;
+  audit(user, "WECOM_TEXT_MESSAGES_SYNCED", "CommunicationSource", source.id, { messages: created.length, insights: insights.length });
+  return { messages: created.length, insights, skipped: inputs.length - created.length };
+}
+
+function syncWecomArchive(user, body) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const integration = activeWecomIntegration(user.tenantId);
+  const source = body.sourceId ? getCommunicationSource(user.tenantId, body.sourceId) : ensureDefaultCommunicationSource(user.tenantId, integration.id);
+  const inputs = Array.isArray(body.messages) && body.messages.length ? body.messages : demoWecomArchiveMessages(source.id);
+  const createdMessages = [];
+  const createdFiles = [];
+  let skippedExternal = 0;
+  for (const input of inputs) {
+    const senderType = input.senderType === "EXTERNAL" ? "EXTERNAL" : "INTERNAL";
+    const consentStatus = input.externalConsentStatus ?? "UNKNOWN";
+    if (senderType === "EXTERNAL" && input.externalUserId) {
+      upsertExternalConsent(user.tenantId, integration.corpId, input.externalUserId, input.externalName ?? input.senderName, consentStatus);
+      if (consentStatus !== "AGREED") {
+        skippedExternal += 1;
+        continue;
+      }
+    }
+    const senderWecomUserId = String(input.senderWecomUserId ?? input.externalUserId ?? "unknown");
+    const binding = senderType === "INTERNAL" ? wecomUserBindings.find((item) => item.tenantId === user.tenantId && item.wecomCorpId === integration.corpId && item.wecomUserId === senderWecomUserId) : null;
+    const mappingStatus = senderType === "EXTERNAL" ? "EXTERNAL" : binding?.mappingStatus ?? "UNMAPPED";
+    const mappedUserId = ["AUTO", "CONFIRMED"].includes(mappingStatus) ? binding?.userId ?? null : null;
+    const msgId = input.msgId || `archive-${source.id}-${senderWecomUserId}-${new Date(input.sentAt ?? Date.now()).getTime()}`;
+    if (communicationMessages.some((item) => item.tenantId === user.tenantId && item.msgId === msgId)) continue;
+    const message = {
+      id: `message-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId: user.tenantId,
+      integrationId: integration.id,
+      sourceId: source.id,
+      msgId,
+      senderWecomUserId,
+      senderName: input.senderName ?? binding?.wecomName ?? senderWecomUserId,
+      senderType,
+      mappedUserId,
+      mappingStatus,
+      content: String(input.content ?? fileMessageContent(input.files)).trim(),
+      msgType: input.msgType ?? "TEXT",
+      sentAt: input.sentAt || new Date().toISOString(),
+      rawPayloadEncryptedRef: "wecom-msgaudit-worker://encrypted-payload",
+      createdAt: new Date().toISOString()
+    };
+    communicationMessages.push(message);
+    createdMessages.push(message);
+    for (const fileInput of input.files ?? []) {
+      const sdkFileId = fileInput.sdkFileId || `sdk-${message.id}-${Math.random().toString(16).slice(2)}`;
+      if (communicationFiles.some((item) => item.tenantId === user.tenantId && item.sdkFileId === sdkFileId)) continue;
+      const file = {
+        id: `comm-file-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        tenantId: user.tenantId,
+        sourceId: source.id,
+        messageId: message.id,
+        sdkFileId,
+        fileName: fileInput.fileName || "企业微信文件",
+        mimeType: fileInput.mimeType ?? null,
+        fileSize: Number(fileInput.fileSize ?? 0) || null,
+        kind: fileInput.kind ?? inferFileKind(fileInput.mimeType, fileInput.fileName),
+        downloadStatus: fileInput.downloadStatus ?? "DOWNLOADED",
+        storagePath: fileInput.downloadStatus === "FAILED" ? null : `wecom-msgaudit-worker://${sdkFileId}`,
+        textContent: fileInput.textContent ?? null,
+        aiSummary: fileInput.aiSummary ?? summarizeCommunicationFile(fileInput),
+        uploadedByWecomUserId: senderWecomUserId,
+        mappedUserId,
+        externalUserId: input.externalUserId ?? null,
+        consentStatus: senderType === "EXTERNAL" ? consentStatus : "UNKNOWN",
+        sentAt: message.sentAt,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        deletedAt: null
+      };
+      communicationFiles.push(file);
+      createdFiles.push(enrichCommunicationFile(file));
+    }
+  }
+  const insights = generateCommunicationDrafts(user.tenantId, source, createdMessages);
+  const projectSuggestions = generateCommunicationProjectSuggestions(user.tenantId, source.id);
+  refreshCommunicationSourceCounters(source.id);
+  integration.lastSyncAt = new Date().toISOString();
+  integration.lastSyncStatus = "OK";
+  integration.lastError = null;
+  audit(user, "WECOM_ARCHIVE_SYNCED", "CommunicationSource", source.id, { messages: createdMessages.length, files: createdFiles.length, skippedExternal });
+  return { messages: createdMessages.length, files: createdFiles.length, skippedExternal, insights, projectSuggestions };
+}
+
+function demoWecomArchiveMessages(sourceId) {
+  return [
+    {
+      msgId: `archive-${sourceId}-${todayKey}-internal-1`,
+      senderWecomUserId: "employee",
+      senderName: "前端成员",
+      senderType: "INTERNAL",
+      sentAt: `${todayKey}T09:40:00.000Z`,
+      msgType: "TEXT",
+      content: "今天完成 AI 工作日历附件归档联调，文件摘要已经能作为日报证据，剩余风险是客户验收材料格式不统一。",
+      files: [
+        {
+          sdkFileId: `sdk-${sourceId}-${todayKey}-acceptance-doc`,
+          fileName: "AICAL-客户验收问题清单.docx",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          fileSize: 186432,
+          kind: "FILE",
+          downloadStatus: "DOWNLOADED",
+          textContent: "客户验收问题清单：登录态、附件归档、风险跟进人、导出格式。",
+          aiSummary: "验收文件列出登录态、附件归档、风险负责人和导出格式等待处理项。"
+        }
+      ]
+    },
+    {
+      msgId: `archive-${sourceId}-${todayKey}-external-1`,
+      senderWecomUserId: "external_customer_a",
+      senderName: "客户A联系人",
+      senderType: "EXTERNAL",
+      externalUserId: "external_customer_a",
+      externalName: "客户A联系人",
+      externalConsentStatus: "AGREED",
+      sentAt: `${todayKey}T10:10:00.000Z`,
+      msgType: "TEXT",
+      content: "客户反馈验收环境的导出按钮偶现失败，希望今天确认修复时间。"
+    },
+    {
+      msgId: `archive-${sourceId}-${todayKey}-external-denied`,
+      senderWecomUserId: "external_denied_user",
+      senderName: "未同意客户联系人",
+      senderType: "EXTERNAL",
+      externalUserId: "external_denied_user",
+      externalName: "未同意客户联系人",
+      externalConsentStatus: "DISAGREED",
+      sentAt: `${todayKey}T10:20:00.000Z`,
+      msgType: "TEXT",
+      content: "这条消息会被合规边界跳过，不进入分析。"
+    }
+  ];
+}
+
+function upsertExternalConsent(tenantId, wecomCorpId, externalUserId, externalName, status) {
+  const now = new Date().toISOString();
+  const existing = wecomExternalConsents.find((item) => item.tenantId === tenantId && item.wecomCorpId === wecomCorpId && item.externalUserId === externalUserId);
+  const patch = {
+    externalName: externalName ?? null,
+    status,
+    agreedAt: status === "AGREED" ? now : existing?.agreedAt ?? null,
+    revokedAt: ["DISAGREED", "REVOKED"].includes(status) ? now : existing?.revokedAt ?? null,
+    lastCheckedAt: now,
+    updatedAt: now
+  };
+  if (existing) Object.assign(existing, patch);
+  else {
+    wecomExternalConsents.unshift({
+      id: `external-consent-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId,
+      wecomCorpId,
+      externalUserId,
+      createdAt: now,
+      ...patch
+    });
+  }
+}
+
+function fileMessageContent(files) {
+  return (files ?? []).map((file) => `文件：${file.fileName ?? "企业微信文件"}`).join("\n") || "企业微信文件消息";
+}
+
+function inferFileKind(mimeType, fileName) {
+  const normalized = String(mimeType ?? "").toLowerCase();
+  if (normalized.startsWith("image/")) return "IMAGE";
+  if (normalized.startsWith("audio/")) return "VOICE";
+  if (normalized.startsWith("video/")) return "VIDEO";
+  if (/^https?:\/\//i.test(String(fileName ?? ""))) return "LINK";
+  return "FILE";
+}
+
+function summarizeCommunicationFile(file) {
+  const size = file.fileSize ? `，大小 ${Math.max(1, Math.round(Number(file.fileSize) / 1024))}KB` : "";
+  if (file.textContent) return `来源文件：${file.fileName ?? "企业微信文件"}，类型 ${file.mimeType ?? "未知"}${size}。摘要：${clampLocalText(file.textContent, 160)}`;
+  return `来源文件：${file.fileName ?? "企业微信文件"}，类型 ${file.mimeType ?? "未知"}${size}。`;
+}
+
+function listCommunicationFiles(user, shouldAudit = true) {
+  let items = communicationFiles.filter((item) => item.tenantId === user.tenantId && !item.deletedAt);
+  if (!hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) {
+    const visibleSourceIds = new Set(listCommunicationSources(user, false).map((item) => item.id));
+    items = items.filter((item) => visibleSourceIds.has(item.sourceId) || item.mappedUserId === user.id || (item.mappedUserId && canAccessUser(user, item.mappedUserId)));
+  }
+  if (shouldAudit) audit(user, "COMMUNICATION_FILES_VIEWED", "CommunicationFile");
+  return items.map(enrichCommunicationFile).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+}
+
+function enrichCommunicationFile(file) {
+  return {
+    ...file,
+    source: communicationSources.find((source) => source.id === file.sourceId && source.tenantId === file.tenantId) ?? null,
+    message: communicationMessages.find((message) => message.id === file.messageId && message.tenantId === file.tenantId) ?? null,
+    mappedUser: file.mappedUserId ? orgUser(users.find((user) => user.id === file.mappedUserId && user.tenantId === file.tenantId) ?? {}) : null
+  };
+}
+
+function generateCommunicationProjectSuggestions(tenantId, sourceId) {
+  const source = communicationSources.find((item) => item.id === sourceId && item.tenantId === tenantId && !item.deletedAt);
+  if (!source) return [];
+  const sourceMessages = communicationMessages.filter((item) => item.tenantId === tenantId && item.sourceId === sourceId).slice(-80);
+  const sourceFiles = communicationFiles.filter((item) => item.tenantId === tenantId && item.sourceId === sourceId && !item.deletedAt).slice(-80);
+  const corpus = `${source.name}\n${sourceMessages.map((item) => item.content).join("\n")}\n${sourceFiles.map((item) => `${item.fileName}\n${item.aiSummary ?? ""}`).join("\n")}`;
+  const created = [];
+  for (const project of projects.filter((item) => item.tenantId === tenantId && !item.deletedAt)) {
+    if (source.projectIds.includes(project.id)) continue;
+    const tokens = [project.code, project.name].filter(Boolean);
+    const groupNameHit = tokens.some((token) => source.name.includes(token));
+    const messageHit = tokens.some((token) => sourceMessages.some((message) => message.content.includes(token)));
+    const fileHit = tokens.some((token) => sourceFiles.some((file) => file.fileName.includes(token) || String(file.aiSummary ?? "").includes(token)));
+    const confidence = Math.min(0.98, (groupNameHit ? 0.54 : 0) + (messageHit ? 0.28 : 0) + (fileHit ? 0.22 : 0));
+    if (confidence < 0.4) continue;
+    const existing = communicationProjectSuggestions.find((item) => item.tenantId === tenantId && item.sourceId === sourceId && item.projectId === project.id);
+    const reason = [groupNameHit ? "群名命中项目编号或名称" : null, messageHit ? "消息内容命中项目关键词" : null, fileHit ? "文件名或摘要命中项目关键词" : null].filter(Boolean).join("；");
+    const payload = {
+      confidence,
+      reason,
+      evidence: { groupName: source.name, keywords: tokens, sample: clampLocalText(corpus, 240) },
+      updatedAt: new Date().toISOString()
+    };
+    if (existing) Object.assign(existing, payload);
+    else {
+      communicationProjectSuggestions.unshift({
+        id: `project-suggestion-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        tenantId,
+        sourceId,
+        projectId: project.id,
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+        confirmedAt: null,
+        rejectedAt: null,
+        ...payload
+      });
+    }
+    created.push(enrichCommunicationProjectSuggestion(existing ?? communicationProjectSuggestions[0]));
+  }
+  return created;
+}
+
+function listCommunicationProjectSuggestions(user, shouldAudit = true) {
+  let items = communicationProjectSuggestions.filter((item) => item.tenantId === user.tenantId);
+  if (!hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) {
+    const visibleSourceIds = new Set(listCommunicationSources(user, false).map((item) => item.id));
+    items = items.filter((item) => visibleSourceIds.has(item.sourceId));
+  }
+  if (shouldAudit) audit(user, "COMMUNICATION_PROJECT_SUGGESTIONS_VIEWED", "CommunicationProjectSuggestion");
+  return items.map(enrichCommunicationProjectSuggestion).sort((a, b) => a.status.localeCompare(b.status) || b.confidence - a.confidence);
+}
+
+function enrichCommunicationProjectSuggestion(item) {
+  return {
+    ...item,
+    source: communicationSources.find((source) => source.id === item.sourceId && source.tenantId === item.tenantId) ?? null,
+    project: projectWithOwner(projects.find((project) => project.id === item.projectId && project.tenantId === item.tenantId) ?? { id: item.projectId, tenantId: item.tenantId, name: "已删除项目" })
+  };
+}
+
+function updateCommunicationProjectSuggestion(user, id, body) {
+  requireRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"]);
+  const item = communicationProjectSuggestions.find((candidate) => candidate.id === id && candidate.tenantId === user.tenantId);
+  if (!item) throw httpError(404, "Project suggestion not found");
+  const status = body.status;
+  if (!["CONFIRMED", "REJECTED", "PENDING"].includes(status)) throw httpError(400, "Invalid suggestion status");
+  item.status = status;
+  item.updatedAt = new Date().toISOString();
+  if (status === "CONFIRMED") {
+    item.confirmedAt = item.updatedAt;
+    const source = communicationSources.find((candidate) => candidate.id === item.sourceId && candidate.tenantId === user.tenantId);
+    if (source && !source.projectIds.includes(item.projectId)) {
+      source.projectIds.push(item.projectId);
+      source.sourceType = "PROJECT";
+      source.updatedAt = item.updatedAt;
+    }
+  }
+  if (status === "REJECTED") item.rejectedAt = item.updatedAt;
+  audit(user, "COMMUNICATION_PROJECT_SUGGESTION_UPDATED", "CommunicationProjectSuggestion", id, { status, sourceId: item.sourceId, projectId: item.projectId });
+  return enrichCommunicationProjectSuggestion(item);
+}
+
+function ensureDefaultCommunicationSource(tenantId, integrationId) {
+  let source = communicationSources.find((item) => item.tenantId === tenantId && item.chatId === "demo-general-chat" && !item.deletedAt);
+  if (!source) {
+    source = {
+      id: `source-${Date.now()}`,
+      tenantId,
+      integrationId,
+      name: "通用沟通群",
+      chatId: "demo-general-chat",
+      sourceType: "GENERAL",
+      projectIds: [],
+      departmentIds: [],
+      memberScopeUserIds: [],
+      generateLogDrafts: true,
+      generateProjectRisks: true,
+      syncFiles: false,
+      retentionDays: 180,
+      lastSyncAt: null,
+      lastSyncStatus: "PENDING",
+      lastError: null,
+      pendingDraftCount: 0,
+      unclassifiedCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null
+    };
+    communicationSources.unshift(source);
+  }
+  return source;
+}
+
+function getCommunicationSource(tenantId, id) {
+  const source = communicationSources.find((item) => item.id === id && item.tenantId === tenantId && !item.deletedAt);
+  if (!source) throw httpError(404, "Communication source not found");
+  return source;
+}
+
+function demoWecomMessages(tenantId, corpId, sourceId) {
+  const source = getCommunicationSource(tenantId, sourceId);
+  const bindings = wecomUserBindings.filter((item) => item.tenantId === tenantId && item.wecomCorpId === corpId && item.userId && ["AUTO", "CONFIRMED"].includes(item.mappingStatus)).slice(0, 2);
+  return bindings.map((binding, index) => ({
+    msgId: `demo-wecom-${source.id}-${todayKey}-${binding.wecomUserId}-${index + 1}`,
+    senderWecomUserId: binding.wecomUserId,
+    senderName: binding.wecomName,
+    sentAt: `${todayKey}T0${9 + index}:30:00.000Z`,
+    content:
+      index === 0
+        ? `今天完成 ${source.projectIds[0] ? projectWithOwner(projects.find((item) => item.id === source.projectIds[0])).name : "AI 工作日历"} 支付回调联调，定位到证书配置问题，已提交修复方案；还有证书轮换流程未固化的风险。`
+        : "小程序改版验收反馈已整理，阻塞点是客户还未确认埋点口径，明天继续跟进。"
+  }));
+}
+
+function generateCommunicationDrafts(tenantId, source, messages) {
+  if (!source.generateLogDrafts) return [];
+  const groups = new Map();
+  for (const message of messages) {
+    if (message.senderType !== "INTERNAL" || !message.mappedUserId || !["AUTO", "CONFIRMED"].includes(message.mappingStatus)) continue;
+    const key = `${message.mappedUserId}:${String(message.sentAt).slice(0, 10)}`;
+    groups.set(key, [...(groups.get(key) ?? []), message]);
+  }
+  const created = [];
+  for (const [key, group] of groups.entries()) {
+    const [mappedUserId, date] = key.split(":");
+    const groupMessageIds = group.map((item) => item.id);
+    const sourceFiles = communicationFiles.filter((file) => file.tenantId === tenantId && groupMessageIds.includes(file.messageId) && !file.deletedAt);
+    const fileEvidence = sourceFiles.map((file) => file.aiSummary || file.textContent || file.fileName).filter(Boolean).join("\n");
+    const content = [group.map((item) => item.content).join("\n"), fileEvidence].filter(Boolean).join("\n");
+    const project = inferCommunicationProject(tenantId, source, content);
+    const risks = /风险|延期|问题|异常|投诉|返工/.test(content) ? [clampLocalText(content, 90)] : [];
+    const blockers = /阻塞|卡住|依赖|无法继续|未确认/.test(content) ? [clampLocalText(content, 90)] : [];
+    const item = {
+      id: `insight-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId,
+      sourceId: source.id,
+      suggestedUserId: mappedUserId,
+      type: "WORK_LOG_DRAFT",
+      status: "CANDIDATE",
+      date,
+      title: suggestCommunicationTitle(content, project?.name),
+      content: content.split(/\n+/).map((line) => `- ${line.trim()}`).join("\n"),
+      hours: null,
+      projectId: project?.id ?? null,
+      projectHints: project ? [project.code ? `${project.code} · ${project.name}` : project.name] : [],
+      risks,
+      blockers,
+      nextActions: risks.length || blockers.length ? ["确认影响范围、负责人和处理时间。"] : ["补充工时并确认项目归属后提交。"],
+      sourceMessageIds: groupMessageIds,
+      sourceFileIds: sourceFiles.map((file) => file.id),
+      confidence: project ? 0.86 : 0.72,
+      missingFields: project ? ["工时"] : ["工时", "项目"],
+      needsProjectConfirmation: !project,
+      needsUserMappingConfirmation: false,
+      confirmedWorkLogId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null
+    };
+    communicationInsights.unshift(item);
+    created.push(enrichCommunicationInsight(item));
+  }
+  return created;
+}
+
+function inferCommunicationProject(tenantId, source, content) {
+  if (source.sourceType === "PROJECT" && source.projectIds.length) {
+    return projects.find((item) => item.id === source.projectIds[0] && item.tenantId === tenantId && !item.deletedAt) ?? null;
+  }
+  return (
+    projects.find((project) => {
+      if (project.tenantId !== tenantId || project.deletedAt) return false;
+      return [project.code, project.name].filter(Boolean).some((value) => content.includes(value));
+    }) ?? null
+  );
+}
+
+function suggestCommunicationTitle(content, projectName) {
+  const first = String(content).split(/\n|。|；|;/).map((item) => item.trim()).find(Boolean) ?? "沟通记录候选日报";
+  const text = clampLocalText(first.replace(/^(今天|今日|上午|下午|晚上)/, ""), 28);
+  return projectName ? `${projectName}：${text}` : text;
+}
+
+function clampLocalText(value, limit) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function refreshCommunicationSourceCounters(sourceId) {
+  const source = communicationSources.find((item) => item.id === sourceId);
+  if (!source) return;
+  source.pendingDraftCount = communicationInsights.filter((item) => item.tenantId === source.tenantId && item.sourceId === sourceId && item.type === "WORK_LOG_DRAFT" && item.status === "CANDIDATE" && !item.deletedAt).length;
+  source.unclassifiedCount = communicationMessages.filter((item) => item.tenantId === source.tenantId && item.sourceId === sourceId && !item.mappedUserId && item.senderType !== "EXTERNAL").length;
+  source.lastSyncAt = new Date().toISOString();
+  source.lastSyncStatus = "OK";
+  source.updatedAt = source.lastSyncAt;
+}
+
+function listWecomLogDrafts(user, shouldAudit = true) {
+  let items = communicationInsights.filter((item) => item.tenantId === user.tenantId && item.type === "WORK_LOG_DRAFT" && item.status === "CANDIDATE" && !item.deletedAt);
+  if (!hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) {
+    items = items.filter((item) => item.suggestedUserId && canAccessUser(user, item.suggestedUserId));
+  }
+  if (shouldAudit) audit(user, "COMMUNICATION_LOG_DRAFTS_VIEWED", "CommunicationInsight");
+  return items.map(enrichCommunicationInsight).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+}
+
+function enrichCommunicationInsight(item) {
+  const source = item.sourceId ? communicationSources.find((source) => source.id === item.sourceId && source.tenantId === item.tenantId) ?? null : null;
+  const project = item.projectId ? projectWithOwner(projects.find((project) => project.id === item.projectId) ?? { id: item.projectId, tenantId: item.tenantId, name: "已删除项目" }) : null;
+  const suggestedUser = item.suggestedUserId ? users.find((user) => user.id === item.suggestedUserId && user.tenantId === item.tenantId) : null;
+  return {
+    ...item,
+    source,
+    project,
+    suggestedUser: suggestedUser
+      ? {
+          id: suggestedUser.id,
+          name: suggestedUser.name,
+          email: suggestedUser.email,
+          phone: suggestedUser.phone ?? null,
+          department: departments.find((department) => department.id === suggestedUser.departmentId && department.tenantId === suggestedUser.tenantId) ?? null
+      }
+      : null,
+    sourceMessages: item.sourceMessageIds.map((id) => communicationMessages.find((message) => message.id === id && message.tenantId === item.tenantId)).filter(Boolean),
+    sourceFiles: item.sourceFileIds.map((id) => communicationFiles.find((file) => file.id === id && file.tenantId === item.tenantId)).filter(Boolean).map(enrichCommunicationFile)
+  };
+}
+
+function confirmWecomLogDraft(user, id, body) {
+  const draft = communicationInsights.find((item) => item.id === id && item.tenantId === user.tenantId && item.status === "CANDIDATE" && !item.deletedAt);
+  if (!draft) throw httpError(404, "Communication draft not found");
+  if (!draft.suggestedUserId) throw httpError(400, "成员映射未确认，不能生成个人日报");
+  if (!canAccessUser(user, draft.suggestedUserId)) throw httpError(403, "Cannot access this draft");
+  if (body.projectId) assertProject(user, body.projectId);
+  const now = new Date().toISOString();
+  const log = {
+    id: `log-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    tenantId: user.tenantId,
+    userId: draft.suggestedUserId,
+    projectId: body.projectId || null,
+    date: body.date || draft.date,
+    title: String(body.title ?? draft.title),
+    content: String(body.content ?? draft.content),
+    startTime: null,
+    endTime: null,
+    hours: Number(body.hours ?? draft.hours ?? 0),
+    status: body.submit === false ? "DRAFT" : "SUBMITTED",
+    submittedAt: body.submit === false ? null : now,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null
+  };
+  workLogs.unshift(log);
+  if (log.status === "SUBMITTED") analyses.set(log.id, createAnalysis(log));
+  const messages = draft.sourceMessageIds.map((messageId) => communicationMessages.find((item) => item.id === messageId && item.tenantId === user.tenantId)).filter(Boolean);
+  for (const message of messages.length ? messages : [null]) {
+    workLogSourceLinks.push({
+      id: `source-link-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId: user.tenantId,
+      workLogId: log.id,
+      insightId: draft.id,
+      messageId: message?.id ?? null,
+      fileId: null,
+      sourceId: message?.sourceId ?? draft.sourceId ?? null,
+      sourceType: "WECOM",
+      evidenceSummary: message ? clampLocalText(message.content, 220) : "来自企业微信沟通候选草稿。",
+      createdAt: now
+    });
+  }
+  const files = draft.sourceFileIds.map((fileId) => communicationFiles.find((item) => item.id === fileId && item.tenantId === user.tenantId)).filter(Boolean);
+  for (const file of files) {
+    workLogSourceLinks.push({
+      id: `source-link-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      tenantId: user.tenantId,
+      workLogId: log.id,
+      insightId: draft.id,
+      messageId: null,
+      fileId: file.id,
+      sourceId: file.sourceId,
+      sourceType: "WECOM",
+      evidenceSummary: file.aiSummary ?? `来源文件：${file.fileName}`,
+      createdAt: now
+    });
+  }
+  draft.status = "CONFIRMED";
+  draft.confirmedWorkLogId = log.id;
+  draft.updatedAt = now;
+  if (draft.sourceId) refreshCommunicationSourceCounters(draft.sourceId);
+  audit(user, "COMMUNICATION_LOG_DRAFT_CONFIRMED", "CommunicationInsight", draft.id, { workLogId: log.id, submit: log.status === "SUBMITTED" });
+  return enrichLog(log);
+}
+
+function ignoreWecomLogDraft(user, id) {
+  const draft = communicationInsights.find((item) => item.id === id && item.tenantId === user.tenantId && item.status === "CANDIDATE" && !item.deletedAt);
+  if (!draft) throw httpError(404, "Communication draft not found");
+  if (draft.suggestedUserId && !canAccessUser(user, draft.suggestedUserId)) throw httpError(403, "Cannot access this draft");
+  draft.status = "IGNORED";
+  draft.updatedAt = new Date().toISOString();
+  if (draft.sourceId) refreshCommunicationSourceCounters(draft.sourceId);
+  audit(user, "COMMUNICATION_LOG_DRAFT_IGNORED", "CommunicationInsight", draft.id);
   return { ok: true };
 }
 
@@ -2550,7 +3442,17 @@ function enrichLog(log) {
     attachments: workLogAttachments
       .filter((item) => item.tenantId === log.tenantId && item.workLogId === log.id && !item.deletedAt)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .map(publicAttachment)
+      .map(publicAttachment),
+    sourceLinks: workLogSourceLinks
+      .filter((item) => item.tenantId === log.tenantId && item.workLogId === log.id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((link) => ({
+        ...link,
+        source: communicationSources.find((item) => item.id === link.sourceId && item.tenantId === log.tenantId) ?? null,
+        message: communicationMessages.find((item) => item.id === link.messageId && item.tenantId === log.tenantId) ?? null,
+        file: communicationFiles.find((item) => item.id === link.fileId && item.tenantId === log.tenantId) ?? null,
+        insight: communicationInsights.find((item) => item.id === link.insightId && item.tenantId === log.tenantId) ?? null
+      }))
   };
 }
 
@@ -2568,6 +3470,14 @@ function assertCanAccessLog(user, log) {
   if (log.userId === user.id) return;
   if (hasRole(user, ["DEPARTMENT_MANAGER"]) && owner?.departmentId === user.departmentId) return;
   throw httpError(403, "Cannot access this work log");
+}
+
+function canAccessUser(user, targetUserId) {
+  const target = users.find((item) => item.id === targetUserId && item.tenantId === user.tenantId && !item.deletedAt);
+  if (!target) return false;
+  if (hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) return true;
+  if (target.id === user.id) return true;
+  return Boolean(hasRole(user, ["DEPARTMENT_MANAGER"]) && target.departmentId && target.departmentId === user.departmentId);
 }
 
 function requireUser(user) {
