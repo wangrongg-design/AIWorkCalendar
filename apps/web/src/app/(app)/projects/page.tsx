@@ -275,7 +275,7 @@ export default function ProjectsPage() {
   });
 
   const canEditWorkLog = (record: WorkLog) => {
-    return Boolean(record.userId === user?.id || hasAnyRole(user, ["SUPER_ADMIN", "COMPANY_ADMIN"]));
+    return Boolean(record.userId === user?.id);
   };
 
   const updateProjectWorkLog = useMutation({
@@ -642,18 +642,22 @@ export default function ProjectsPage() {
         }}
         width={720}
         extra={
-          detailLog && canEditWorkLog(detailLog) ? (
-            detailEditing ? (
-              <Space>
-                <Button onClick={() => setDetailEditing(false)}>取消编辑</Button>
-                <Button type="primary" loading={updateProjectWorkLog.isPending} onClick={() => workLogForm.submit()}>
-                  保存修改
+          detailLog ? (
+            canEditWorkLog(detailLog) ? (
+              detailEditing ? (
+                <Space>
+                  <Button onClick={() => setDetailEditing(false)}>取消编辑</Button>
+                  <Button type="primary" loading={updateProjectWorkLog.isPending} onClick={() => workLogForm.submit()}>
+                    保存修改
+                  </Button>
+                </Space>
+              ) : (
+                <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
+                  编辑记录
                 </Button>
-              </Space>
+              )
             ) : (
-              <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
-                编辑记录
-              </Button>
+              <Tag>仅可查看</Tag>
             )
           ) : null
         }
