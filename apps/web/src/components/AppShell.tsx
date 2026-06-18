@@ -14,7 +14,7 @@ const { Sider, Content } = Layout;
 
 const dailyNavItems: MenuProps["items"] = [
   { key: "/calendar", icon: <CalendarDays size={19} />, label: "工作日历" },
-  { key: "/projects", icon: <FolderKanban size={19} />, label: "项目" },
+  { key: "/projects", icon: <FolderKanban size={19} />, label: "项目中心" },
   { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报记录" },
   { key: "/reports", icon: <FileText size={19} />, label: "AI报告" }
 ];
