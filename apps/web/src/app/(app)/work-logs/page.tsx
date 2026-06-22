@@ -5,11 +5,12 @@ import { Alert, Button, Checkbox, DatePicker, Empty, Form, Input, InputNumber, M
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
-import { Bot, Download, Edit2, MessageSquare, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
+import { Download, Edit2, MessageSquare, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import type { ClipboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
+import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 import { CommunicationInsight, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
@@ -148,6 +149,7 @@ function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
 
 export default function WorkLogsPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
   const [form] = Form.useForm<WorkLogForm>();
   const [communicationDraftForm] = Form.useForm<CommunicationDraftForm>();
   const [editing, setEditing] = useState<WorkLog | null>(null);
@@ -1000,110 +1002,14 @@ export default function WorkLogsPage() {
       </Modal>
 
       <Modal
-        title={detailRecord ? `${dayjs(detailRecord.date).format("YYYY-MM-DD")} · ${detailRecord.title}` : "填报详情"}
+        title={detailRecord ? <WorkLogDetailTitle record={detailRecord} readOnly={detailRecord.userId !== user?.id} /> : "填报详情"}
         open={Boolean(detailRecord)}
         onCancel={() => setDetailRecord(null)}
         footer={null}
         width={860}
+        className="work-log-detail-modal"
       >
-        {detailRecord ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-5">
-              <div className="metric-card">
-                <div className="metric-label">人员</div>
-                <div className="mt-2 text-sm font-medium text-ink">{detailRecord.user?.name ?? "-"}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">项目</div>
-                <div className="mt-2 text-sm font-medium text-ink">{detailRecord.project?.name ?? "未关联"}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">工时</div>
-                <div className="metric-value">{Number(detailRecord.hours).toFixed(1)}h</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">填报时间</div>
-                <div className="mt-2 text-sm font-medium leading-5 text-ink">{workLogTimeInfo(detailRecord).value}</div>
-                <div className="mt-1 text-xs text-muted">{workLogTimeInfo(detailRecord).label}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">状态</div>
-                <Tag className="mt-2" color={detailRecord.status === "SUBMITTED" ? "green" : "default"}>
-                  {detailRecord.status === "SUBMITTED" ? "已提交" : "草稿"}
-                </Tag>
-              </div>
-            </div>
-            <div className="rounded-[8px] bg-surface-container-low p-4">
-              <div className="mb-2 text-sm font-medium text-ink">工作内容 / 计划</div>
-              <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{detailRecord.content}</div>
-            </div>
-            {detailRecord.attachments?.length ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-2 text-sm font-medium text-ink">附件</div>
-                <WorkLogAttachmentViewer workLogId={detailRecord.id} attachments={detailRecord.attachments} />
-              </div>
-            ) : null}
-            {detailRecord.sourceLinks?.length ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-ink">
-                  <MessageSquare size={16} />
-                  沟通来源证据
-                </div>
-                <div className="space-y-2">
-                  {detailRecord.sourceLinks.map((link) => (
-                      <div key={link.id} className="rounded-[8px] bg-white px-3 py-2 text-sm leading-6">
-                      <div className="font-medium text-ink">{link.source?.name ?? "企业微信群"}</div>
-                      <div className="text-muted">{link.evidenceSummary ?? link.message?.content ?? link.file?.aiSummary ?? link.file?.fileName ?? "来源消息已记录。"}</div>
-                      {link.file ? <Tag className="mt-1" color="cyan">文件：{link.file.fileName}</Tag> : null}
-                      {link.message?.sentAt ? <div className="mt-1 text-xs text-muted">发送时间：{dateTimeText(link.message.sentAt)}</div> : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {detailRecord.aiAnalysis ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-                  <Bot size={16} />
-                  分析结果
-                </div>
-                <div className="mb-4 rounded-[12px] bg-surface-container-low p-3 text-sm leading-6 text-muted">{detailRecord.aiAnalysis.summary}</div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div>
-                    <div className="mb-2 text-xs font-semibold text-muted">成果</div>
-                    <Space wrap>{detailRecord.aiAnalysis.achievements?.length ? detailRecord.aiAnalysis.achievements.map((item) => <Tag color="green" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
-                  </div>
-                  <div>
-                    <div className="mb-2 text-xs font-semibold text-muted">风险</div>
-                    <Space wrap>{detailRecord.aiAnalysis.risks?.length ? detailRecord.aiAnalysis.risks.map((item) => <Tag color="red" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
-                  </div>
-                  <div>
-                    <div className="mb-2 text-xs font-semibold text-muted">阻塞</div>
-                    <Space wrap>{detailRecord.aiAnalysis.blockers?.length ? detailRecord.aiAnalysis.blockers.map((item) => <Tag color="orange" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
-                  </div>
-                </div>
-                <Space className="mt-4" wrap>
-                  <Tag color="blue">{detailRecord.aiAnalysis.category}</Tag>
-                  {detailRecord.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-                </Space>
-              </div>
-            ) : detailRecord.status === "SUBMITTED" ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-                  <Bot size={16} />
-                  分析生成中
-                </div>
-                <div className="quickfill-draft-waiting mb-0" role="status" aria-live="polite">
-                  <span className="quickfill-draft-spinner" />
-                  <div>
-                    <strong>正在分析这条填报</strong>
-                    <p>系统已提交分析任务，真实模型可能需要几十秒；稍后刷新或返回列表查看结果。</p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {detailRecord ? <WorkLogDetailView record={detailRecord} /> : null}
       </Modal>
 
       <Modal

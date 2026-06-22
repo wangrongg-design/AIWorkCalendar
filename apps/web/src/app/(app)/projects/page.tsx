@@ -6,7 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { AlertTriangle, Edit2, FolderKanban, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
+import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
 import { CommunicationInsight, CommunicationSource, OrgUser, Project, ProjectStatus, WorkLog } from "@/lib/types";
@@ -634,7 +634,7 @@ export default function ProjectsPage() {
       </Modal>
 
       <Drawer
-        title={detailLog ? `${dayjs(detailLog.date).format("YYYY-MM-DD")} · ${detailLog.title}` : "日报详情"}
+        title={detailLog ? <WorkLogDetailTitle record={detailLog} readOnly={!canEditWorkLog(detailLog)} /> : "日报详情"}
         open={Boolean(detailLog)}
         onClose={() => {
           setDetailLog(null);
@@ -642,22 +642,18 @@ export default function ProjectsPage() {
         }}
         width={720}
         extra={
-          detailLog ? (
-            canEditWorkLog(detailLog) ? (
-              detailEditing ? (
-                <Space>
-                  <Button onClick={() => setDetailEditing(false)}>取消编辑</Button>
-                  <Button type="primary" loading={updateProjectWorkLog.isPending} onClick={() => workLogForm.submit()}>
-                    保存修改
-                  </Button>
-                </Space>
-              ) : (
-                <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
-                  编辑记录
+          detailLog && canEditWorkLog(detailLog) ? (
+            detailEditing ? (
+              <Space>
+                <Button onClick={() => setDetailEditing(false)}>取消编辑</Button>
+                <Button type="primary" loading={updateProjectWorkLog.isPending} onClick={() => workLogForm.submit()}>
+                  保存修改
                 </Button>
-              )
+              </Space>
             ) : (
-              <Tag>仅可查看</Tag>
+              <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
+                编辑记录
+              </Button>
             )
           ) : null
         }
@@ -685,75 +681,7 @@ export default function ProjectsPage() {
                 </Form.Item>
               </Form>
             ) : (
-              <>
-                <div className="grid gap-3 md:grid-cols-4">
-                  <div className="metric-card">
-                    <div className="metric-label">人员</div>
-                    <div className="mt-2 text-sm font-medium text-ink">{detailLog.user?.name ?? "-"}</div>
-                  </div>
-                  <div className="metric-card">
-                    <div className="metric-label">项目</div>
-                    <div className="mt-2 text-sm font-medium text-ink">{detailLog.project?.name ?? selectedProject?.name ?? "未关联"}</div>
-                  </div>
-                  <div className="metric-card">
-                    <div className="metric-label">工时</div>
-                    <div className="metric-value">{Number(detailLog.hours).toFixed(1)}h</div>
-                  </div>
-                  <div className="metric-card">
-                    <div className="metric-label">状态</div>
-                    <Tag className="mt-2" color={detailLog.status === "SUBMITTED" ? "green" : "default"}>
-                      {detailLog.status === "SUBMITTED" ? "已提交" : "草稿"}
-                    </Tag>
-                  </div>
-                </div>
-                <section className="project-log-detail-block">
-                  <div className="project-focus-title">工作内容</div>
-                  <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{detailLog.content}</div>
-                </section>
-                {detailLog.aiAnalysis ? (
-                  <section className="project-log-detail-block">
-                    <div className="project-focus-title">分析结果</div>
-                    <p className="mb-3 text-sm leading-6 text-muted">{detailLog.aiAnalysis.summary}</p>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div>
-                        <div className="mb-2 text-xs font-semibold text-muted">成果</div>
-                        <Space wrap>{detailLog.aiAnalysis.achievements?.length ? detailLog.aiAnalysis.achievements.map((item) => <Tag color="green" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
-                      </div>
-                      <div>
-                        <div className="mb-2 text-xs font-semibold text-muted">风险</div>
-                        <Space wrap>{detailLog.aiAnalysis.risks?.length ? detailLog.aiAnalysis.risks.map((item) => <Tag color="red" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
-                      </div>
-                      <div>
-                        <div className="mb-2 text-xs font-semibold text-muted">阻塞</div>
-                        <Space wrap>{detailLog.aiAnalysis.blockers?.length ? detailLog.aiAnalysis.blockers.map((item) => <Tag color="orange" key={item}>{item}</Tag>) : <Tag>暂无</Tag>}</Space>
-                      </div>
-                    </div>
-                  </section>
-                ) : null}
-                {detailLog.attachments?.length ? (
-                  <section className="project-log-detail-block">
-                    <div className="project-focus-title">附件</div>
-                    <WorkLogAttachmentViewer workLogId={detailLog.id} attachments={detailLog.attachments} />
-                  </section>
-                ) : null}
-                {detailLog.sourceLinks?.length ? (
-                  <section className="project-log-detail-block">
-                    <div className="project-focus-title">
-                      <MessageSquare size={15} />
-                      沟通来源证据
-                    </div>
-                    <div className="space-y-2">
-                      {detailLog.sourceLinks.map((link) => (
-                        <div key={link.id} className="project-source-item">
-                          <strong>{link.source?.name ?? "企业微信群"}</strong>
-                          <span>{link.evidenceSummary ?? link.message?.content ?? link.file?.aiSummary ?? link.file?.fileName ?? "来源消息已记录。"}</span>
-                          {link.file ? <Tag color="cyan">文件：{link.file.fileName}</Tag> : null}
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-              </>
+              <WorkLogDetailView record={detailLog} projectNameFallback={selectedProject?.name} showTimeInfo={false} />
             )}
           </div>
         ) : null}

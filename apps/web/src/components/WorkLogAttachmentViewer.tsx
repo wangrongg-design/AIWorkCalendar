@@ -34,10 +34,12 @@ function triggerDownload(url: string, filename: string) {
 
 export function WorkLogAttachmentViewer({
   workLogId,
-  attachments
+  attachments,
+  compact = false
 }: {
   workLogId: string;
   attachments?: WorkLogAttachment[];
+  compact?: boolean;
 }) {
   const [preview, setPreview] = useState<AttachmentPreview | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function WorkLogAttachmentViewer({
 
   return (
     <>
-      <div className="attachment-viewer-grid">
+      <div className={`attachment-viewer-grid ${compact ? "is-compact" : ""}`}>
         {attachments.map((attachment) => {
           const isImage = attachment.mimeType.startsWith("image/");
           return (
