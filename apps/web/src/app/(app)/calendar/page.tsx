@@ -297,6 +297,7 @@ export default function CalendarPage() {
   const [selectedWorkLog, setSelectedWorkLog] = useState<WorkLog | null>(null);
   const [quickFillOpen, setQuickFillOpen] = useState(false);
   const [quickFillAiInput, setQuickFillAiInput] = useState("");
+  const [lastQuickFillAiInput, setLastQuickFillAiInput] = useState("");
   const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([
     {
       role: "assistant",
@@ -750,6 +751,7 @@ export default function CalendarPage() {
       hours: null
     });
     setQuickFillAiInput("");
+    setLastQuickFillAiInput("");
     setQuickFillAiMessages([
       {
         role: "assistant",
@@ -800,10 +802,16 @@ export default function CalendarPage() {
     const text = quickFillAiInput.trim();
     if (!text) return;
     const nextMessages = [...quickFillAiMessages, { role: "user" as const, content: text }];
+    setLastQuickFillAiInput(text);
     setQuickFillAiMessages(nextMessages);
     setQuickFillAiInput("");
     setDraftPreview(null);
     draftWorkLog.mutate(nextMessages);
+  };
+
+  const continueEditingQuickFillPrompt = () => {
+    setQuickFillAiInput((current) => current || lastQuickFillAiInput);
+    setDraftPreview(null);
   };
 
   const updateDraftPreviewItem = (index: number, patch: Partial<DraftPreviewItem>) => {
@@ -1157,10 +1165,13 @@ export default function CalendarPage() {
                           <span>项目</span>
                           <Select
                             allowClear
+                            showSearch
+                            optionFilterProp="label"
                             value={item.projectId}
                             placeholder="未关联"
                             loading={projects.isFetching}
                             listHeight={280}
+                            dropdownStyle={{ zIndex: 1800 }}
                             options={projectOptions}
                             onChange={(value) => updateDraftPreviewItem(index, { projectId: value })}
                           />
@@ -1185,7 +1196,7 @@ export default function CalendarPage() {
                   ))}
                 </div>
                 <div className="quickfill-draft-actions">
-                  <Button onClick={() => setDraftPreview(null)}>继续编辑</Button>
+                  <Button onClick={continueEditingQuickFillPrompt}>继续编辑</Button>
                   <Button
                     type="primary"
                     loading={confirmDraftWorkLog.isPending}
@@ -1217,7 +1228,7 @@ export default function CalendarPage() {
               <Input />
             </Form.Item>
             <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-              <Select allowClear placeholder="选择项目" loading={projects.isFetching} listHeight={280} options={projectOptions} />
+              <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" loading={projects.isFetching} listHeight={280} dropdownStyle={{ zIndex: 1800 }} options={projectOptions} />
             </Form.Item>
           </div>
           <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
@@ -1532,6 +1543,8 @@ export default function CalendarPage() {
         onCancel={() => setSelectedWorkLog(null)}
         footer={null}
         width={860}
+        zIndex={1500}
+        className="work-log-detail-modal"
       >
         {selectedWorkLog ? (
           <div className="space-y-4">

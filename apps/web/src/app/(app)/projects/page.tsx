@@ -641,6 +641,7 @@ export default function ProjectsPage() {
           setDetailEditing(false);
         }}
         width={720}
+        zIndex={1500}
         extra={
           detailLog && canEditWorkLog(detailLog) ? (
             detailEditing ? (
@@ -670,7 +671,7 @@ export default function ProjectsPage() {
                     <InputNumber className="w-full" min={0} max={24} step={0.5} />
                   </Form.Item>
                   <Form.Item name="projectId" label="关联项目">
-                    <Select allowClear showSearch optionFilterProp="label" options={(projects.data ?? []).map((item) => ({ value: item.id, label: item.code ? `${item.code} · ${item.name}` : item.name }))} />
+                    <Select allowClear showSearch optionFilterProp="label" dropdownStyle={{ zIndex: 1800 }} options={(projects.data ?? []).map((item) => ({ value: item.id, label: item.code ? `${item.code} · ${item.name}` : item.name }))} />
                   </Form.Item>
                 </div>
                 <Form.Item name="title" label="标题" rules={[{ required: true, min: 2 }]}>

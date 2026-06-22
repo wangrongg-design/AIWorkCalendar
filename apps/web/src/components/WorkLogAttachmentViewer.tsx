@@ -148,6 +148,7 @@ export function WorkLogAttachmentViewer({
           ) : null
         }
         width={preview?.mode === "file" ? 560 : 920}
+        zIndex={1900}
       >
         {preview?.mode === "image" ? (
           <img src={preview.url} alt={preview.attachment.fileName} className="attachment-preview-image" />

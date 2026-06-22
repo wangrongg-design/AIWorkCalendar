@@ -829,17 +829,28 @@ export class OpenAiService {
   private normalizeDraftItem(result: Partial<WorkLogDraftItem>, fallback: WorkLogDraftItem, today: string): WorkLogDraftItem {
     const date = result.date && /^\d{4}-\d{2}-\d{2}$/.test(result.date) ? result.date : fallback.date;
     const hours = Number.isFinite(Number(result.hours)) ? Math.min(Math.max(Number(result.hours), 0), 24) : fallback.hours;
+    const content = this.preferDetailedDraftContent(result.content, fallback.content);
     return {
       date,
       kind: date > today || result.kind === "PLAN" ? "PLAN" : "DAILY",
       title: result.title?.trim() || fallback.title,
-      content: result.content?.trim() || fallback.content,
+      content,
       hours,
       startTime: result.startTime ?? fallback.startTime ?? null,
       endTime: result.endTime ?? fallback.endTime ?? null,
       confidence: Number.isFinite(Number(result.confidence)) ? Math.min(Math.max(Number(result.confidence), 0), 1) : fallback.confidence,
       missingFields: Array.isArray(result.missingFields) ? result.missingFields.map(String) : fallback.missingFields
     };
+  }
+
+  private preferDetailedDraftContent(resultContent: string | null | undefined, fallbackContent: string) {
+    const normalized = resultContent?.trim();
+    if (!normalized) return fallbackContent;
+    const fallback = fallbackContent.trim();
+    if (fallback.length >= 40 && (normalized.length < 24 || normalized.length < fallback.length * 0.45)) {
+      return fallback;
+    }
+    return normalized;
   }
 
   private localReport(input: ReportInput): ReportResult {

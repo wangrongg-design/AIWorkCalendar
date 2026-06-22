@@ -161,6 +161,7 @@ export default function WorkLogsPage() {
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
   const initialOpenHandled = useRef(false);
   const [aiInput, setAiInput] = useState("");
+  const [lastAiInput, setLastAiInput] = useState("");
   const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
     {
       role: "assistant",
@@ -487,10 +488,16 @@ export default function WorkLogsPage() {
     const text = aiInput.trim();
     if (!text) return;
     const nextMessages = [...aiMessages, { role: "user" as const, content: text }];
+    setLastAiInput(text);
     setAiMessages(nextMessages);
     setAiInput("");
     setDraftPreview(null);
     draftLog.mutate(nextMessages);
+  };
+
+  const continueEditingDraftPrompt = () => {
+    setAiInput((current) => current || lastAiInput);
+    setDraftPreview(null);
   };
 
   const openCreate = (dateValue = dayjs()) => {
@@ -506,6 +513,7 @@ export default function WorkLogsPage() {
       hours: null
     });
     setAiInput("");
+    setLastAiInput("");
     setAiMessages([
       {
         role: "assistant",
@@ -540,6 +548,7 @@ export default function WorkLogsPage() {
       projectId: record.projectId ?? undefined
     });
     setAiInput("");
+    setLastAiInput("");
     setAiMessages([
       {
         role: "assistant",
@@ -887,10 +896,13 @@ export default function WorkLogsPage() {
                           <span>项目</span>
                           <Select
                             allowClear
+                            showSearch
+                            optionFilterProp="label"
                             value={item.projectId}
                             placeholder="未关联"
                             loading={projects.isFetching}
                             listHeight={280}
+                            dropdownStyle={{ zIndex: 1800 }}
                             options={projectOptions}
                             onChange={(value) => updateDraftPreviewItem(index, { projectId: value })}
                           />
@@ -915,7 +927,7 @@ export default function WorkLogsPage() {
                   ))}
                 </div>
                 <div className="quickfill-draft-actions">
-                  <Button onClick={() => setDraftPreview(null)}>继续修改描述</Button>
+                  <Button onClick={continueEditingDraftPrompt}>继续修改描述</Button>
                   <Button
                     type="primary"
                     loading={confirmDraftLog.isPending}
@@ -947,7 +959,7 @@ export default function WorkLogsPage() {
               <Input />
             </Form.Item>
             <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-              <Select allowClear placeholder="选择项目" loading={projects.isFetching} listHeight={280} options={projectOptions} />
+              <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" loading={projects.isFetching} listHeight={280} dropdownStyle={{ zIndex: 1800 }} options={projectOptions} />
             </Form.Item>
           </div>
           <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
@@ -1007,6 +1019,7 @@ export default function WorkLogsPage() {
         onCancel={() => setDetailRecord(null)}
         footer={null}
         width={860}
+        zIndex={1500}
         className="work-log-detail-modal"
       >
         {detailRecord ? <WorkLogDetailView record={detailRecord} /> : null}
@@ -1057,7 +1070,7 @@ export default function WorkLogsPage() {
                   <InputNumber className="w-full" min={0} max={24} step={0.5} placeholder="补充工时" />
                 </Form.Item>
                 <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-                  <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" listHeight={280} loading={projects.isFetching} options={projectOptions} />
+                  <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" listHeight={280} loading={projects.isFetching} dropdownStyle={{ zIndex: 1800 }} options={projectOptions} />
                 </Form.Item>
               </div>
               <Form.Item name="title" label="标题" rules={[{ required: true, min: 2 }]}>
