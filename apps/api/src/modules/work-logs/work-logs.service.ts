@@ -89,7 +89,7 @@ function normalizeTiming(startTime: Date | null, endTime: Date | null, hours: nu
   let normalizedEndTime = endTime;
   let normalizedHours = hours;
 
-  if (normalizedStartTime && normalizedEndTime) {
+  if (normalizedStartTime && normalizedEndTime && (normalizedHours === null || !Number.isFinite(normalizedHours) || normalizedHours <= 0)) {
     normalizedHours = durationHours(normalizedStartTime, normalizedEndTime);
   } else if (normalizedStartTime && normalizedHours !== null) {
     normalizedEndTime = addHours(normalizedStartTime, normalizedHours);

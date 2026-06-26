@@ -511,6 +511,26 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
+              <div className="project-log-section">
+                <div className="history-section-head">
+                  <div>
+                    <div className="section-title">近期日报</div>
+                    <div className="section-subtitle">{projectAnalysis.totalLogs ? `${projectAnalysis.totalLogs} 条记录` : "暂无记录"}</div>
+                  </div>
+                </div>
+                <Table
+                  rowKey="id"
+                  loading={projectLogs.isFetching}
+                  dataSource={projectLogs.data ?? []}
+                  columns={logColumns}
+                  locale={{ emptyText: <Empty description="当前项目暂无日报记录" /> }}
+                  pagination={{ pageSize: 6 }}
+                  onRow={(record) => ({
+                    onDoubleClick: () => openLogDetail(record)
+                  })}
+                />
+              </div>
+
               <div className="surface-panel project-communication-panel">
                 <div className="project-focus-head">
                   <div className="min-w-0">
@@ -568,26 +588,6 @@ export default function ProjectsPage() {
                 ) : (
                   <Empty description="暂无沟通来源，后续可在企业微信集成页绑定项目群" />
                 )}
-              </div>
-
-              <div className="project-log-section">
-                <div className="history-section-head">
-                  <div>
-                    <div className="section-title">近期日报</div>
-                    <div className="section-subtitle">{projectAnalysis.totalLogs ? `${projectAnalysis.totalLogs} 条记录` : "暂无记录"}</div>
-                  </div>
-                </div>
-                <Table
-                  rowKey="id"
-                  loading={projectLogs.isFetching}
-                  dataSource={projectLogs.data ?? []}
-                  columns={logColumns}
-                  locale={{ emptyText: <Empty description="当前项目暂无日报记录" /> }}
-                  pagination={{ pageSize: 6 }}
-                  onRow={(record) => ({
-                    onDoubleClick: () => openLogDetail(record)
-                  })}
-                />
               </div>
             </>
           ) : (

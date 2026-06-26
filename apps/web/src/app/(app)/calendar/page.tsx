@@ -1498,16 +1498,20 @@ export default function CalendarPage() {
         {selectedDate ? (
           <div className={`workday-summary-sentence ${detailRiskBlockerCount(detailStats) > 0 ? "has-risk" : ""}`}>
             <div>
-              <strong>{detailLogCount}</strong>
-              <span>记录</span>
+              <strong>{detailStats?.totalEmployees ?? 0}</strong>
+              <span>{selectedDateKind === "future" ? "需计划人数" : "需填报人数"}</span>
             </div>
             <div>
-              <strong>{detailStats?.totalHours ?? 0}h</strong>
-              <span>工时</span>
+              <strong>{detailStats?.filledCount ?? 0}</strong>
+              <span>{selectedDateKind === "future" ? "已计划人数" : "已填报人数"}</span>
             </div>
             <div>
               <strong>{detailStats?.missingCount ?? 0}</strong>
-              <span>{selectedDateKind === "future" ? "未计划" : "未填报"}</span>
+              <span>{selectedDateKind === "future" ? "未计划人数" : "未填报人数"}</span>
+            </div>
+            <div>
+              <strong>{detailLogCount}</strong>
+              <span>记录</span>
             </div>
             <div className={detailRiskBlockerCount(detailStats) > 0 ? "is-danger" : ""}>
               <strong>{detailRiskBlockerCount(detailStats)}</strong>

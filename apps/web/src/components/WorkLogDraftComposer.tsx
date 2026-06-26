@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, Send, Trash2, UploadCloud } from "lucide-react"
 import type { ClipboardEvent } from "react";
 import { useState } from "react";
 import type { Project, WorkLogDraftItem } from "@/lib/types";
+import { workLogDurationHours } from "@/lib/work-log-time";
 
 export type DraftComposerMessage = {
   role: "user" | "assistant";
@@ -215,7 +216,6 @@ export function validateDraftComposerState(preview: WorkLogDraftComposerState | 
   if (!entries.length) {
     return { ok: false as const, message: "请至少选择一条日报项。", index: -1 };
   }
-  const seenProjectIds = new Map<string, number>();
   for (const { item, index } of entries) {
     if (!dayjs(item.date).isValid()) {
       return { ok: false as const, message: `第 ${index + 1} 条日期无效，请重新选择。`, index };
@@ -227,20 +227,13 @@ export function validateDraftComposerState(preview: WorkLogDraftComposerState | 
       return { ok: false as const, message: `第 ${index + 1} 条缺少工作内容。`, index };
     }
     if (!Number.isFinite(Number(item.hours)) || Number(item.hours) <= 0 || Number(item.hours) > 24) {
-      return { ok: false as const, message: `第 ${index + 1} 条需要补充 0 到 24 之间的工时。`, index };
+      return { ok: false as const, message: `第 ${index + 1} 条缺少工时。选择开始和结束时间可自动计算，也可以直接填写工时。`, index };
     }
     if (!item.projectId && !item.projectConfirmed) {
       return { ok: false as const, message: `第 ${index + 1} 条项目待确认，请选择项目或确认未关联项目。`, index };
     }
     if (item.status === "submitted" || item.status === "ignored") {
       return { ok: false as const, message: `第 ${index + 1} 条已经${item.status === "submitted" ? "提交" : "忽略"}，不能重复提交。`, index };
-    }
-    if (item.projectId) {
-      const previous = seenProjectIds.get(item.projectId);
-      if (previous !== undefined) {
-        return { ok: false as const, message: `第 ${previous + 1} 条和第 ${index + 1} 条选择了同一个项目，请合并内容或取消其中一条。`, index };
-      }
-      seenProjectIds.set(item.projectId, index);
     }
   }
   return { ok: true as const, entries };
@@ -309,6 +302,20 @@ function timePickerValue(value?: string | null) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value ?? "");
   if (!match) return null;
   return dayjs().hour(Number(match[1])).minute(Number(match[2])).second(0).millisecond(0);
+}
+
+function itemTimingPatch(item: WorkLogDraftComposerItem, patch: Partial<Pick<WorkLogDraftComposerItem, "startTime" | "endTime">>) {
+  const nextStartTime = Object.prototype.hasOwnProperty.call(patch, "startTime") ? patch.startTime : item.startTime;
+  const nextEndTime = Object.prototype.hasOwnProperty.call(patch, "endTime") ? patch.endTime : item.endTime;
+  const startValue = timePickerValue(nextStartTime);
+  const endValue = timePickerValue(nextEndTime);
+  if (!startValue || !endValue) {
+    return patch;
+  }
+  return {
+    ...patch,
+    hours: workLogDurationHours(startValue, endValue)
+  };
 }
 
 function missingFieldText(fields: string[]) {
@@ -542,7 +549,7 @@ export function WorkLogDraftComposer({
                             />
                           </label>
                           <label>
-                            <span>工时</span>
+                            <span>工时（可修改）</span>
                             <InputNumber
                               className="w-full"
                               min={0}
@@ -550,9 +557,10 @@ export function WorkLogDraftComposer({
                               step={0.5}
                               value={item.hours}
                               disabled={locked}
-                              placeholder="待补充"
+                              placeholder="选择时间后自动计算"
                               onChange={(value) => onUpdateItem(index, { hours: Number(value ?? 0), status: item.status === "generated" ? "editing" : item.status })}
                             />
+                            <small className="today-log-field-note">开始和结束时间会自动带出工时，午休等情况可直接改。</small>
                           </label>
                           <label>
                             <span>开始时间</span>
@@ -561,7 +569,12 @@ export function WorkLogDraftComposer({
                               format="HH:mm"
                               value={timePickerValue(item.startTime)}
                               disabled={locked}
-                              onChange={(value: Dayjs | null) => onUpdateItem(index, { startTime: value ? value.format("HH:mm") : null })}
+                              onChange={(value: Dayjs | null) =>
+                                onUpdateItem(index, {
+                                  ...itemTimingPatch(item, { startTime: value ? value.format("HH:mm") : null }),
+                                  status: item.status === "generated" ? "editing" : item.status
+                                })
+                              }
                             />
                           </label>
                           <label>
@@ -571,7 +584,12 @@ export function WorkLogDraftComposer({
                               format="HH:mm"
                               value={timePickerValue(item.endTime)}
                               disabled={locked}
-                              onChange={(value: Dayjs | null) => onUpdateItem(index, { endTime: value ? value.format("HH:mm") : null })}
+                              onChange={(value: Dayjs | null) =>
+                                onUpdateItem(index, {
+                                  ...itemTimingPatch(item, { endTime: value ? value.format("HH:mm") : null }),
+                                  status: item.status === "generated" ? "editing" : item.status
+                                })
+                              }
                             />
                           </label>
                           <label className="today-log-title-field">
