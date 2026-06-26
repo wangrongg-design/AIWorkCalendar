@@ -1,6 +1,7 @@
 import { Controller, Get, Header, Param, Post, Query, Res, StreamableFile } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
+import { attachmentDisposition } from "../../common/http/content-disposition";
 import { CurrentUser } from "../../common/types/current-user";
 import { ExportQueryDto } from "./dto/export-query.dto";
 import { ExportsService } from "./exports.service";
@@ -36,7 +37,7 @@ export class ExportsController {
     const download = await this.exportsService.openDownload(user, id);
     response.setHeader("Content-Type", download.contentType);
     response.setHeader("Content-Length", download.fileSize);
-    response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(download.fileName)}"`);
+    response.setHeader("Content-Disposition", attachmentDisposition(download.fileName));
     return new StreamableFile(download.stream);
   }
 }

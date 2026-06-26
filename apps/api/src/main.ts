@@ -9,15 +9,16 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(",") ?? true,
-    credentials: true
+    credentials: true,
+    exposedHeaders: ["Content-Disposition", "Content-Length", "Content-Type"]
   });
   app.useBodyParser("json", {
-    limit: "12mb",
+    limit: "16mb",
     verify: (req: { rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
       req.rawBody = Buffer.from(buf);
     }
   });
-  app.useBodyParser("urlencoded", { extended: true, limit: "12mb" });
+  app.useBodyParser("urlencoded", { extended: true, limit: "16mb" });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

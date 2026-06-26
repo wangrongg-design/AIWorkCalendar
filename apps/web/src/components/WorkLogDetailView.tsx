@@ -41,9 +41,13 @@ export function workLogDetailStatus(record: WorkLog) {
   return { label: "草稿", color: "default" as const };
 }
 
+function workLogKindLabel(record: WorkLog) {
+  return (record.kind ?? "DAILY") === "PLAN" ? "工作计划" : "工作日报";
+}
+
 export function WorkLogDetailTitle({ record, readOnly }: { record: WorkLog; readOnly?: boolean }) {
   const status = workLogDetailStatus(record);
-  const detailKind = dayjs(record.date).isAfter(dayjs(), "day") ? "工作计划" : "工作日报";
+  const detailKind = workLogKindLabel(record);
   return (
     <div className="work-log-detail-titlebar">
       <div className="work-log-detail-title-copy">
@@ -107,6 +111,7 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
   const timeInfo = workLogTimeInfo(record);
   const status = workLogDetailStatus(record);
   const projectName = record.project?.name ?? projectNameFallback ?? "未关联";
+  const detailKind = workLogKindLabel(record);
 
   return (
     <div className="work-log-detail-shell">
@@ -122,6 +127,10 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
         <div className="work-log-info-item">
           <span>工时</span>
           <strong>{Number(record.hours).toFixed(1)}h</strong>
+        </div>
+        <div className="work-log-info-item">
+          <span>类型</span>
+          <strong>{detailKind}</strong>
         </div>
         {showTimeInfo ? (
           <div className="work-log-info-item">

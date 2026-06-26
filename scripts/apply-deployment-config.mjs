@@ -99,6 +99,7 @@ writeFileSync(
 
 const webServerName = config.nginx?.webServerName ?? hostFromUrl(config.domains.webUrl);
 const apiServerName = config.nginx?.apiServerName ?? hostFromUrl(config.domains.apiUrl);
+const clientMaxBodySize = config.nginx?.clientMaxBodySize ?? "16m";
 const nginx = `server {
   listen 80;
   server_name ${webServerName};
@@ -118,6 +119,7 @@ const nginx = `server {
 server {
   listen 80;
   server_name ${apiServerName};
+  client_max_body_size ${clientMaxBodySize};
 
   location / {
     proxy_pass http://127.0.0.1:3001;

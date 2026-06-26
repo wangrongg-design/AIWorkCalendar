@@ -1,5 +1,6 @@
 export type RoleCode = "SUPER_ADMIN" | "COMPANY_ADMIN" | "DEPARTMENT_MANAGER" | "EMPLOYEE";
 export type WorkLogStatus = "DRAFT" | "SUBMITTED";
+export type WorkLogKind = "DAILY" | "PLAN";
 export type WorkLogAttachmentKind = "IMAGE" | "FILE";
 export type ProjectStatus = "ACTIVE" | "PAUSED" | "ARCHIVED";
 export type ReportType = "PERSONAL_DAILY" | "PERSONAL_WEEKLY" | "DEPARTMENT_DAILY" | "DEPARTMENT_WEEKLY";
@@ -248,6 +249,7 @@ export type WorkLog = {
   endTime?: string | null;
   hours: string | number;
   status: WorkLogStatus;
+  kind?: WorkLogKind;
   submittedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -302,6 +304,7 @@ export type WorkLogDraftItem = {
   hours: number;
   startTime?: string | null;
   endTime?: string | null;
+  projectHint?: string | null;
   confidence: number;
   missingFields: string[];
 };
@@ -325,6 +328,7 @@ export type AiAnalysis = {
 
 export type CalendarDay = {
   date: string;
+  primaryKind?: WorkLogKind;
   filledCount: number;
   missingCount: number;
   remindCount?: number;
@@ -332,6 +336,8 @@ export type CalendarDay = {
   riskCount: number;
   blockerCount?: number;
   totalHours?: number;
+  dailyLogCount?: number;
+  planLogCount?: number;
 };
 
 export type CalendarResponse = {
@@ -342,6 +348,7 @@ export type CalendarResponse = {
 
 export type CalendarDayDetail = {
   date: string;
+  primaryKind?: WorkLogKind;
   filledEmployees: Array<{
     id: string;
     name: string;
@@ -366,6 +373,8 @@ export type CalendarDayDetail = {
     totalHours: number;
     riskCount: number;
     blockerCount?: number;
+    dailyLogCount?: number;
+    planLogCount?: number;
   };
 };
 

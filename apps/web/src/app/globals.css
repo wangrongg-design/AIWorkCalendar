@@ -543,22 +543,70 @@ body {
   gap: 14px;
 }
 
-.wecom-runtime-alert {
-  margin-top: -2px;
-}
-
+.wecom-status-panel,
 .wecom-setup-panel,
 .wecom-config-panel,
 .wecom-summary-panel,
+.wecom-tabs-panel,
 .wecom-table-panel,
 .wecom-guide-panel {
   min-width: 0;
   padding: 16px;
 }
 
+.wecom-status-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-color: var(--md-outline-variant);
+}
+
+.wecom-status-panel.is-success {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: var(--color-success-bg);
+}
+
+.wecom-status-panel.is-warning {
+  border-color: rgba(217, 119, 6, 0.26);
+  background: var(--color-warning-bg);
+}
+
+.wecom-status-panel.is-danger {
+  border-color: rgba(238, 59, 43, 0.26);
+  background: var(--color-danger-bg);
+}
+
+.wecom-status-main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wecom-status-main .ant-tag {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.wecom-status-title {
+  color: var(--md-on-surface);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.wecom-status-copy {
+  margin-top: 2px;
+  max-width: 780px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 21px;
+}
+
 .wecom-step-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -615,6 +663,25 @@ body {
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
   gap: 14px;
   align-items: start;
+}
+
+.wecom-advanced-settings {
+  margin: 0 0 14px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-container-low);
+}
+
+.wecom-advanced-settings .ant-collapse-header {
+  align-items: center !important;
+  padding: 10px 12px !important;
+  color: var(--md-on-surface) !important;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.wecom-advanced-settings .ant-collapse-content-box {
+  padding: 2px 12px 12px !important;
 }
 
 .wecom-mode-list,
@@ -676,6 +743,84 @@ body {
   flex: 0 0 auto;
   margin-top: 2px;
   color: var(--md-primary);
+}
+
+.wecom-tabs-panel {
+  padding-top: 10px;
+}
+
+.wecom-tabs-panel .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.wecom-tab-content {
+  min-width: 0;
+}
+
+.wecom-todo-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.wecom-todo-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-container-low);
+  padding: 12px;
+}
+
+.wecom-todo-card.has-count {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: var(--color-warning-bg);
+}
+
+.wecom-todo-card strong {
+  min-width: 30px;
+  color: var(--md-on-surface);
+  font-size: 22px;
+  font-weight: 760;
+  line-height: 28px;
+}
+
+.wecom-todo-card span {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.wecom-todo-card p {
+  margin: 2px 0 0;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.wecom-todo-details,
+.wecom-records-stack,
+.wecom-help-content {
+  display: grid;
+  gap: 14px;
+}
+
+.wecom-todo-details > section,
+.wecom-records-stack > section {
+  min-width: 0;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-bright);
+  padding: 12px;
+}
+
+.wecom-help-content .wecom-guide-section {
+  background: var(--md-surface-container-low);
 }
 
 .wecom-guide-head {
@@ -747,8 +892,14 @@ body {
 }
 
 @media (max-width: 1080px) {
+  .wecom-status-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .wecom-step-list,
   .wecom-mode-list,
+  .wecom-todo-list,
   .wecom-guide-grid,
   .wecom-grid {
     grid-template-columns: 1fr;
@@ -5543,6 +5694,19 @@ body {
   color: var(--color-ai);
 }
 
+.ai-soft-button.ant-btn:disabled,
+.ai-soft-button.ant-btn.ant-btn-disabled {
+  background: var(--color-gray-1) !important;
+  border: 1px solid var(--color-gray-2) !important;
+  color: var(--md-on-surface-variant) !important;
+  opacity: 0.72;
+}
+
+.ai-soft-button.ant-btn:disabled svg,
+.ai-soft-button.ant-btn.ant-btn-disabled svg {
+  color: var(--md-on-surface-variant) !important;
+}
+
 .ai-soft-button.ant-btn:not(:disabled):hover {
   background: var(--color-ai-soft) !important;
   border-color: transparent !important;
@@ -6002,6 +6166,577 @@ body {
 .paste-upload-zone:focus-visible {
   outline: 2px solid var(--md-primary);
   outline-offset: 3px;
+}
+
+.today-log-modal-title {
+  display: grid;
+  gap: 2px;
+}
+
+.today-log-modal-title strong {
+  color: var(--md-on-surface);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.today-log-modal-title span {
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.today-log-modal .ant-modal-content {
+  overflow: hidden;
+}
+
+.today-log-modal .ant-modal-body {
+  max-height: min(78vh, 820px);
+  overflow: auto;
+}
+
+.today-log-modal-shell {
+  min-width: 0;
+}
+
+.today-log-modal .worklog-chat-composer {
+  max-height: none;
+}
+
+.today-log-modal .worklog-chat-thread {
+  min-height: 0;
+  max-height: min(42vh, 420px);
+}
+
+.today-log-composer {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.worklog-chat-composer {
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  max-height: calc(100vh - 178px);
+}
+
+.worklog-chat-thread {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 280px;
+  min-width: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.worklog-draft-message {
+  display: grid;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-ai-soft);
+  border-radius: 12px;
+  background: var(--color-white);
+  padding: 12px;
+}
+
+.today-log-quick-entry,
+.today-log-empty-start,
+.today-log-drafts,
+.today-log-attachments {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 12px;
+}
+
+.today-log-modal .today-log-quick-entry {
+  border-color: var(--md-outline-variant);
+  background: var(--md-surface-bright);
+}
+
+.today-log-quick-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.today-log-quick-head strong {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.today-log-quick-head span {
+  display: block;
+  margin-top: 2px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.today-log-quick-head em {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--color-gray-1);
+  padding: 4px 9px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.today-log-quick-input {
+  line-height: 1.65;
+}
+
+.today-log-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.today-log-quick-actions > span {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.today-log-empty-start {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  background: var(--color-gray-1);
+}
+
+.today-log-empty-start .ant-empty {
+  margin: 0;
+}
+
+.today-log-empty-start .ant-empty-image {
+  height: 48px;
+  margin-bottom: 0;
+}
+
+.today-log-empty-start strong {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.today-log-empty-start span {
+  display: block;
+  margin-top: 3px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.today-log-action-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 12px;
+}
+
+.today-log-action-title {
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.today-log-action-copy {
+  margin-top: 2px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.today-log-action-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.today-log-ai-head,
+.today-log-drafts-head,
+.today-log-attachments-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.today-log-ai-head {
+  justify-content: flex-start;
+  align-items: center;
+  color: var(--color-ai-pressed);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.today-log-ai-thread {
+  display: grid;
+  max-height: 142px;
+  gap: 6px;
+  overflow: auto;
+}
+
+.today-log-ai-message {
+  max-width: 78%;
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.today-log-error-message {
+  max-width: 100%;
+}
+
+.today-log-ai-message.is-assistant {
+  justify-self: start;
+  background: var(--color-gray-1);
+  color: var(--md-on-surface-variant);
+}
+
+.today-log-ai-message.is-user {
+  justify-self: end;
+  background: var(--md-primary);
+  color: var(--color-white);
+}
+
+.today-log-ai-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.today-log-drafts-title {
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.today-log-drafts-copy,
+.today-log-attachments-head span {
+  margin-top: 2px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.today-log-attachments-head {
+  align-items: center;
+}
+
+.today-log-attachments-head > div {
+  min-width: 0;
+}
+
+.today-log-attachments-head strong {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.today-log-attachments-head .ant-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
+.today-log-item-list {
+  display: grid;
+  gap: 8px;
+}
+
+.today-log-item {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 10px;
+}
+
+.today-log-item.is-muted {
+  opacity: 0.62;
+}
+
+.today-log-item.is-submitted {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: var(--color-success-bg);
+}
+
+.today-log-item.is-failed {
+  border-color: rgba(238, 59, 43, 0.28);
+  background: var(--color-danger-bg);
+}
+
+.today-log-item.is-ignored {
+  background: var(--color-gray-1);
+}
+
+.today-log-item-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.today-log-item-copy {
+  min-width: 0;
+}
+
+.today-log-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.today-log-item-title-row strong {
+  min-width: 0;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.today-log-item-copy p {
+  display: -webkit-box;
+  margin: 5px 0 0;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.today-log-item-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(96px, 0.55fr) minmax(160px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.today-log-item-fields label,
+.today-log-item-editor label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.today-log-item-fields label > span,
+.today-log-item-editor label > span {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.today-log-item-state {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 3px;
+}
+
+.today-log-item-state > span {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.today-log-item-state > span.is-warning {
+  color: var(--color-warning);
+  font-weight: 650;
+}
+
+.today-log-structured-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.today-log-structured-list {
+  min-width: 0;
+  border-radius: 8px;
+  background: var(--color-gray-1);
+  padding: 8px;
+}
+
+.today-log-structured-list strong {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+.today-log-structured-list ul {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding-left: 16px;
+}
+
+.today-log-structured-list li,
+.today-log-structured-list span {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-structured-list.is-risk {
+  background: var(--color-danger-bg);
+}
+
+.today-log-structured-list.is-blocker {
+  background: var(--color-warning-bg);
+}
+
+.today-log-structured-list.is-success,
+.today-log-structured-list.is-next {
+  background: var(--color-ai-bg);
+}
+
+.today-log-project-help {
+  border-radius: 8px;
+  background: var(--color-ai-bg);
+  padding: 7px 9px;
+  color: var(--color-ai-pressed);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.today-log-item-editor {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--color-gray-2);
+  padding-top: 9px;
+}
+
+.today-log-title-field,
+.today-log-content-field,
+.today-log-list-field {
+  grid-column: 1 / -1;
+}
+
+.today-log-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.today-log-item-meta span {
+  border-radius: 999px;
+  background: var(--color-white);
+  padding: 3px 8px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.today-log-attachments .ant-upload-wrapper .ant-upload-drag {
+  padding: 8px;
+}
+
+.today-log-attachments .ant-upload-drag-icon {
+  margin-bottom: 4px;
+}
+
+.today-log-attachments .ant-upload-text {
+  margin-bottom: 2px;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.today-log-attachments .ant-upload-hint {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+}
+
+.today-log-footer {
+  position: sticky;
+  bottom: -24px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -24px -24px;
+  border-top: 1px solid var(--color-gray-2);
+  background: rgba(255, 255, 255, 0.98);
+  padding: 10px 24px;
+}
+
+.today-log-footer strong,
+.today-log-footer span {
+  display: block;
+}
+
+.today-log-footer strong {
+  color: var(--md-on-surface);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.today-log-footer span {
+  margin-top: 2px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+}
+
+.today-log-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.today-log-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.worklog-chat-inputbar {
+  position: relative;
+  z-index: 5;
 }
 
 .quickfill-draft-list {
@@ -6855,6 +7590,70 @@ body {
   line-height: 18px;
 }
 
+.workday-detail-modal .workday-project-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  padding: 10px;
+}
+
+.workday-detail-modal .workday-project-summary-head,
+.workday-detail-modal .workday-project-summary-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.workday-detail-modal .workday-project-summary-head strong {
+  color: var(--md-on-surface);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.workday-detail-modal .workday-project-summary-head span {
+  grid-column: 2 / -1;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workday-detail-modal .workday-project-summary-list {
+  display: grid;
+  gap: 6px;
+}
+
+.workday-detail-modal .workday-project-summary-item {
+  border-radius: 8px;
+  background: var(--color-gray-1);
+  padding: 7px 9px;
+}
+
+.workday-detail-modal .workday-project-summary-item span {
+  min-width: 0;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-project-summary-item strong {
+  color: var(--md-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.workday-detail-modal .workday-project-summary-item em {
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
 .workday-detail-modal .workday-records-list {
   display: flex;
   max-height: min(68vh, 760px);
@@ -6862,6 +7661,39 @@ body {
   gap: 10px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.workday-detail-modal .workday-kind-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workday-detail-modal .workday-kind-section + .workday-kind-section {
+  border-top: 1px solid var(--color-gray-2);
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.workday-detail-modal .workday-kind-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workday-detail-modal .workday-kind-section-head strong {
+  color: var(--color-black);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 22px;
+}
+
+.workday-detail-modal .workday-kind-section-head span {
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
 }
 
 .workday-detail-modal .workday-employee-record {
@@ -6928,6 +7760,9 @@ body {
 }
 
 .workday-detail-modal .workday-log-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   color: var(--color-black);
   font-size: 15px;
@@ -10890,6 +11725,107 @@ body {
 }
 
 @media (max-width: 560px) {
+  .today-log-modal {
+    top: 0;
+    width: 100vw !important;
+    max-width: 100vw;
+    margin: 0;
+    padding-bottom: 0;
+  }
+
+  .today-log-modal .ant-modal-content {
+    width: 100vw;
+    height: 100dvh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    border-radius: 0;
+  }
+
+  .today-log-modal .ant-modal-header {
+    padding: 16px 56px 8px 16px !important;
+  }
+
+  .today-log-modal .ant-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    padding: 0 12px 12px !important;
+  }
+
+  .today-log-modal-shell {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .today-log-modal .worklog-chat-composer {
+    height: 100%;
+    min-height: 0;
+    padding-bottom: 0;
+  }
+
+  .today-log-modal .worklog-chat-thread {
+    gap: 8px;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+  }
+
+  .worklog-draft-message,
+  .today-log-quick-entry,
+  .today-log-drafts,
+  .today-log-attachments {
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .today-log-modal .worklog-chat-inputbar {
+    position: static;
+    z-index: 1;
+    margin: 0 -12px -12px;
+    border-top: 1px solid var(--color-gray-2);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+    background: var(--color-white);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 20px rgba(26, 26, 26, 0.08);
+  }
+
+  .today-log-shortcut-hint {
+    display: none;
+  }
+
+  .today-log-ai-message {
+    max-width: 92%;
+  }
+
+  .today-log-structured-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .today-log-card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .today-log-item-title-row {
+    flex-wrap: wrap;
+  }
+
+  .today-log-item-title-row strong {
+    flex: 1 0 100%;
+    font-size: 15px;
+    line-height: 21px;
+  }
+
+  .today-log-card-actions .ant-btn,
+  .today-log-modal .worklog-chat-inputbar .ant-btn {
+    min-height: 44px;
+  }
+
   .dashboard-calendar-grid .calendar-cell,
   .dashboard-calendar-grid .calendar-empty-cell,
   .calendar-cell,
@@ -10926,6 +11862,76 @@ body {
 
   .quickfill-draft-edit-grid {
     grid-template-columns: 1fr;
+  }
+
+  .today-log-quick-head,
+  .today-log-action-strip,
+  .today-log-drafts-head,
+  .today-log-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .today-log-quick-head em {
+    width: fit-content;
+  }
+
+  .today-log-empty-start {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .today-log-empty-start .ant-empty {
+    display: none;
+  }
+
+  .today-log-quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .today-log-quick-actions > span,
+  .today-log-quick-actions .ant-btn-link {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .today-log-action-buttons,
+  .today-log-footer-actions {
+    width: 100%;
+  }
+
+  .today-log-action-buttons .ant-btn,
+  .today-log-quick-actions .ant-btn:not(.ant-btn-link),
+  .today-log-footer-actions .ant-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .today-log-ai-input-row,
+  .today-log-item-fields,
+  .today-log-item-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .today-log-item-main {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .today-log-footer {
+    position: static;
+    margin: 0;
+    padding: 10px 0 0;
+  }
+
+  .workday-detail-modal .workday-project-summary-head,
+  .workday-detail-modal .workday-project-summary-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workday-detail-modal .workday-project-summary-head span,
+  .workday-detail-modal .workday-project-summary-item em {
+    grid-column: 1 / -1;
   }
 
   .quickfill-attachment-target {
@@ -11218,6 +12224,1838 @@ body {
   .workbench-action.ai-assistant-entry-button::before,
   .workbench-action.ai-assistant-entry-button svg {
     animation: none !important;
+  }
+}
+
+/* Date detail modal clarity pass */
+.workday-detail-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.workday-detail-modal * {
+  min-width: 0;
+}
+
+.workday-detail-modal .ant-modal-content {
+  max-height: min(92vh, 860px);
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--color-white);
+  box-shadow: 0 18px 46px rgba(26, 26, 26, 0.16);
+}
+
+.workday-detail-modal .ant-modal-body {
+  max-height: min(92vh, 860px);
+  overflow: auto;
+  padding: 18px 22px 20px;
+  background: var(--color-white);
+}
+
+.workday-detail-modal .ant-modal-close {
+  top: 12px;
+  right: 14px;
+}
+
+.workday-detail-modal .workday-detail-hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 0 42px 14px 0;
+  border-bottom: 1px solid var(--color-gray-2);
+}
+
+.workday-detail-modal .workday-product {
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workday-detail-modal .workday-date {
+  margin-top: 2px;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.workday-detail-modal .workday-subtitle {
+  color: var(--color-gray-6);
+}
+
+.workday-detail-modal .workday-content-grid {
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.workday-detail-modal .workday-detail-data,
+.workday-detail-modal .workday-ai-panel,
+.workday-detail-modal .workday-empty-state {
+  border: 1px solid var(--color-gray-2);
+  border-radius: 12px;
+  background: var(--color-white);
+}
+
+.workday-detail-modal .workday-detail-data {
+  padding: 12px;
+}
+
+.workday-detail-modal .workday-records-heading {
+  margin-bottom: 10px;
+}
+
+.workday-detail-modal .workday-section-heading {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.workday-detail-modal .workday-records-subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-project-summary {
+  gap: 7px;
+  margin-bottom: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-gray-1);
+  padding: 9px;
+}
+
+.workday-detail-modal .workday-project-summary-head strong {
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-project-summary-head span {
+  color: var(--color-gray-6);
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-project-summary-list {
+  gap: 5px;
+}
+
+.workday-detail-modal .workday-project-summary-item {
+  border-radius: 8px;
+  background: var(--color-white);
+  padding: 6px 8px;
+}
+
+.workday-detail-modal .workday-project-summary-item span {
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-project-summary-item strong,
+.workday-detail-modal .workday-project-summary-item em {
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-project-summary-more {
+  border-radius: 8px;
+  background: transparent;
+  padding: 4px 8px 2px;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-records-list {
+  max-height: min(58vh, 560px);
+  gap: 12px;
+  padding-right: 2px;
+}
+
+.workday-detail-modal .workday-kind-section {
+  gap: 8px;
+}
+
+.workday-detail-modal .workday-kind-section + .workday-kind-section {
+  margin-top: 0;
+  padding-top: 12px;
+}
+
+.workday-detail-modal .workday-kind-section-head strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-kind-section-head span {
+  max-width: 52ch;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-log-stack {
+  gap: 7px;
+}
+
+.workday-detail-modal .workday-log-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 10px 11px;
+  box-shadow: none;
+}
+
+.workday-detail-modal .workday-log-card:hover {
+  border-color: var(--color-gray-3);
+  background: var(--color-white);
+  box-shadow: none;
+  transform: none;
+}
+
+.workday-detail-modal .workday-log-card:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.workday-detail-modal .workday-log-card:focus-visible {
+  outline: 2px solid rgba(11, 87, 208, 0.28);
+  outline-offset: 2px;
+}
+
+.workday-detail-modal .workday-log-person {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 2px;
+}
+
+.workday-detail-modal .workday-employee-name {
+  color: var(--color-black);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-employee-dept {
+  margin-top: 0;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-log-title-row {
+  gap: 10px;
+}
+
+.workday-detail-modal .workday-log-title {
+  gap: 6px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-log-title .ant-tag {
+  flex: 0 0 auto;
+  margin-inline-end: 0;
+}
+
+.workday-detail-modal .workday-log-title-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-log-meta {
+  gap: 6px;
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-log-content {
+  margin-top: 5px;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 20px;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-log-tags {
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.workday-detail-modal .workday-log-tags span {
+  max-width: 100%;
+  border-radius: 7px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.workday-detail-modal .workday-ai-panel {
+  position: sticky;
+  top: 0;
+  gap: 10px;
+  padding: 12px;
+}
+
+.workday-detail-modal .workday-section-kicker {
+  color: var(--color-gray-5);
+}
+
+.workday-detail-modal .workday-ai-title {
+  font-size: 15px;
+  line-height: 21px;
+}
+
+.workday-detail-modal .workday-ai-title-action {
+  height: 30px;
+  border-radius: 8px;
+  padding: 0 9px;
+}
+
+.workday-detail-modal .workday-ai-stat-grid {
+  gap: 6px;
+}
+
+.workday-detail-modal .workday-ai-stat {
+  border-radius: 9px;
+  background: var(--color-gray-1);
+  padding: 7px 8px;
+}
+
+.workday-detail-modal .workday-ai-stat strong {
+  margin-top: 1px;
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.workday-detail-modal .workday-ai-risk-summary,
+.workday-detail-modal .workday-ai-missing-summary,
+.workday-detail-modal .workday-ai-observation-block {
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 10px;
+}
+
+.workday-detail-modal .workday-ai-risk-summary {
+  background: var(--color-warning-bg);
+}
+
+.workday-detail-modal .workday-ai-risk-summary.has-risk {
+  background: var(--color-danger-bg);
+}
+
+.workday-detail-modal .workday-ai-risk-summary strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-ai-risk-summary p {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-ai-missing-list {
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.workday-detail-modal .workday-ai-missing-list .ant-tag {
+  max-width: 100%;
+  border-radius: 7px;
+  margin-inline-end: 0;
+  padding: 2px 7px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-ai-list {
+  gap: 5px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-ai-pills {
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.workday-detail-modal .workday-ai-pill {
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-ai-context-note {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .workday-detail-modal {
+    max-width: calc(100vw - 16px);
+  }
+
+  .workday-detail-modal .ant-modal-body {
+    padding: 14px 14px 16px;
+  }
+
+  .workday-detail-modal .workday-detail-hero,
+  .workday-detail-modal .workday-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workday-detail-modal .workday-detail-hero {
+    padding-right: 38px;
+  }
+
+  .workday-detail-modal .workday-hero-actions {
+    align-items: stretch;
+  }
+
+  .workday-detail-modal .workday-ai-panel {
+    position: static;
+  }
+
+  .workday-detail-modal .workday-log-card {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .workday-detail-modal .workday-log-person {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 560px) {
+  .workday-detail-modal {
+    top: 0;
+    max-width: 100vw;
+    margin: 0;
+    padding-bottom: 0;
+  }
+
+  .workday-detail-modal .ant-modal-content {
+    min-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .workday-detail-modal .ant-modal-body {
+    max-height: 100dvh;
+    padding: 12px;
+  }
+
+  .workday-detail-modal .workday-date {
+    font-size: 18px;
+    line-height: 25px;
+  }
+
+  .workday-detail-modal .workday-project-summary-head,
+  .workday-detail-modal .workday-project-summary-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workday-detail-modal .workday-project-summary-head span,
+  .workday-detail-modal .workday-project-summary-item em {
+    grid-column: 1 / -1;
+  }
+
+  .workday-detail-modal .workday-ai-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workday-detail-modal .workday-log-title-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .workday-detail-modal .workday-log-meta {
+    flex-wrap: wrap;
+  }
+}
+
+/* Date detail modal subtraction pass */
+.workday-detail-modal .ant-modal-content {
+  max-height: min(90vh, 820px);
+}
+
+.workday-detail-modal .ant-modal-body {
+  max-height: min(90vh, 820px);
+  padding: 18px 22px;
+}
+
+.workday-detail-modal .workday-detail-hero {
+  padding-bottom: 12px;
+}
+
+.workday-detail-modal .workday-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-gray-2);
+  padding: 10px 0 12px;
+}
+
+.workday-detail-modal .workday-status-strip span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 8px;
+  background: var(--color-gray-1);
+  padding: 4px 9px;
+  color: var(--color-gray-6);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-status-strip strong {
+  color: var(--color-black);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-status-strip .is-danger strong {
+  color: var(--color-danger);
+}
+
+.workday-detail-modal .workday-content-grid {
+  display: block;
+  padding-top: 12px;
+}
+
+.workday-detail-modal .workday-detail-data,
+.workday-detail-modal .workday-empty-state {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.workday-detail-modal .workday-records-heading {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--color-gray-2);
+  margin-bottom: 0;
+  padding-bottom: 10px;
+}
+
+.workday-detail-modal .workday-project-inline {
+  margin-top: 5px;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-project-summary {
+  display: none;
+}
+
+.workday-detail-modal .workday-records-list {
+  max-height: min(62vh, 590px);
+  gap: 0;
+  padding-right: 0;
+}
+
+.workday-detail-modal .workday-kind-section {
+  gap: 0;
+}
+
+.workday-detail-modal .workday-log-stack {
+  gap: 0;
+}
+
+.workday-detail-modal .workday-log-card {
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-gray-2);
+  border-radius: 0;
+  padding: 12px 0;
+}
+
+.workday-detail-modal .workday-log-card:hover {
+  background: var(--color-gray-1);
+}
+
+.workday-detail-modal .workday-log-title-row {
+  align-items: baseline;
+}
+
+.workday-detail-modal .workday-log-content {
+  margin-top: 4px;
+  -webkit-line-clamp: 1;
+}
+
+.workday-detail-modal .workday-log-tags {
+  margin-top: 6px;
+}
+
+.workday-detail-modal .workday-log-tags span {
+  border-radius: 6px;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workday-detail-modal .workday-log-project {
+  color: var(--color-primary);
+}
+
+.workday-detail-modal .workday-log-achievement {
+  display: none;
+}
+
+.workday-detail-modal .workday-log-risk {
+  color: var(--color-danger);
+}
+
+@media (max-width: 900px) {
+  .workday-detail-modal .workday-status-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workday-detail-modal .workday-log-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Date detail modal table redesign */
+.workday-detail-modal {
+  max-width: calc(100vw - 24px);
+}
+
+.workday-detail-modal .ant-modal-content {
+  max-height: min(88vh, 780px);
+  border-radius: 14px;
+}
+
+.workday-detail-modal .ant-modal-body {
+  max-height: min(88vh, 780px);
+  padding: 20px 24px 22px;
+}
+
+.workday-detail-modal .workday-detail-hero {
+  align-items: start;
+  gap: 16px;
+  padding: 0 40px 14px 0;
+}
+
+.workday-detail-modal .workday-date {
+  margin-top: 0;
+  font-size: 21px;
+  font-weight: 780;
+  line-height: 29px;
+}
+
+.workday-detail-modal .workday-subtitle {
+  margin-top: 3px;
+}
+
+.workday-detail-modal .workday-hero-actions .ant-btn {
+  height: 38px;
+  border-radius: 10px;
+}
+
+.workday-detail-modal .workday-summary-sentence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  border-top: 1px solid var(--color-gray-2);
+  border-bottom: 1px solid var(--color-gray-2);
+  padding: 10px 0;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-summary-sentence strong {
+  color: var(--color-black);
+  font-weight: 780;
+}
+
+.workday-detail-modal .workday-status-strip {
+  display: none;
+}
+
+.workday-detail-modal .workday-content-grid {
+  padding-top: 14px;
+}
+
+.workday-detail-modal .workday-records-heading {
+  display: flex;
+  border-bottom: 0;
+  padding-bottom: 10px;
+}
+
+.workday-detail-modal .workday-section-heading {
+  font-size: 17px;
+  line-height: 23px;
+}
+
+.workday-detail-modal .workday-project-inline {
+  color: var(--color-gray-5);
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-records-list {
+  max-height: min(58vh, 520px);
+  overflow: auto;
+}
+
+.workday-detail-modal .workday-record-table-head,
+.workday-detail-modal .workday-record-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) minmax(130px, 170px) 64px;
+  gap: 12px;
+  align-items: center;
+}
+
+.workday-detail-modal .workday-record-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-top: 1px solid var(--color-gray-2);
+  border-bottom: 1px solid var(--color-gray-2);
+  background: var(--color-white);
+  padding: 8px 0;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-record-table {
+  display: grid;
+}
+
+.workday-detail-modal .workday-record-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--color-gray-2);
+  background: transparent;
+  padding: 11px 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workday-detail-modal .workday-record-row:hover {
+  background: #fafafa;
+}
+
+.workday-detail-modal .workday-record-person {
+  display: grid;
+  gap: 2px;
+}
+
+.workday-detail-modal .workday-record-person strong {
+  color: var(--color-black);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-record-person em,
+.workday-detail-modal .workday-record-project {
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.workday-detail-modal .workday-record-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workday-detail-modal .workday-record-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.workday-detail-modal .workday-record-title .ant-tag {
+  margin-inline-end: 0;
+}
+
+.workday-detail-modal .workday-record-title strong {
+  min-width: 0;
+  color: var(--color-black);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-title em {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  color: var(--color-gray-5);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.workday-detail-modal .workday-record-content {
+  display: block;
+  overflow: hidden;
+  color: var(--color-gray-6);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-risk {
+  display: block;
+  overflow: hidden;
+  color: var(--color-danger);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-hours {
+  justify-self: end;
+  color: var(--color-gray-6);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+@media (max-width: 720px) {
+  .workday-detail-modal .ant-modal-body {
+    padding: 18px 18px 20px;
+  }
+
+  .workday-detail-modal .workday-detail-hero {
+    grid-template-columns: 1fr;
+    padding-right: 36px;
+  }
+
+  .workday-detail-modal .workday-record-table-head {
+    display: none;
+  }
+
+  .workday-detail-modal .workday-record-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 13px 0;
+  }
+
+  .workday-detail-modal .workday-record-person {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .workday-detail-modal .workday-record-project {
+    color: var(--color-primary);
+  }
+
+  .workday-detail-modal .workday-record-hours {
+    justify-self: start;
+  }
+}
+
+/* Date detail modal: Apple-inspired grouped list */
+.workday-detail-modal .ant-modal-content {
+  max-height: min(92vh, 880px);
+  border-radius: 18px;
+  background: #f5f5f7;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+}
+
+.workday-detail-modal .ant-modal-body {
+  max-height: min(92vh, 880px);
+  padding: 22px 26px 24px;
+  background: #f5f5f7;
+}
+
+.workday-detail-modal .ant-modal-close {
+  top: 16px;
+  right: 18px;
+}
+
+.workday-detail-modal .workday-detail-hero {
+  align-items: center;
+  border-bottom: 0;
+  padding: 0 42px 14px 0;
+}
+
+.workday-detail-modal .workday-date {
+  color: #1d1d1f;
+  font-size: 26px;
+  font-weight: 780;
+  line-height: 34px;
+}
+
+.workday-detail-modal .workday-subtitle {
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.workday-detail-modal .workday-hero-actions .ant-btn {
+  height: 40px;
+  border-radius: 12px;
+  padding-inline: 16px;
+}
+
+.workday-detail-modal .workday-summary-sentence {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border: 0;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 0;
+  overflow: hidden;
+}
+
+.workday-detail-modal .workday-summary-sentence div {
+  display: grid;
+  gap: 2px;
+  min-height: 58px;
+  align-content: center;
+  border-left: 1px solid #e5e5ea;
+  padding: 10px 14px;
+}
+
+.workday-detail-modal .workday-summary-sentence div:first-child {
+  border-left: 0;
+}
+
+.workday-detail-modal .workday-summary-sentence strong {
+  color: #1d1d1f;
+  font-size: 18px;
+  font-weight: 780;
+  line-height: 22px;
+}
+
+.workday-detail-modal .workday-summary-sentence span {
+  color: #6e6e73;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.workday-detail-modal .workday-summary-sentence .is-danger strong,
+.workday-detail-modal .workday-summary-sentence .is-danger span {
+  color: #ff3b30;
+}
+
+.workday-detail-modal .workday-content-grid {
+  padding-top: 14px;
+}
+
+.workday-detail-modal .workday-detail-data {
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 16px 0 0;
+  overflow: hidden;
+}
+
+.workday-detail-modal .workday-records-heading {
+  border-bottom: 1px solid #e5e5ea;
+  padding: 0 18px 13px;
+}
+
+.workday-detail-modal .workday-section-heading {
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 760;
+  line-height: 24px;
+}
+
+.workday-detail-modal .workday-records-subtitle,
+.workday-detail-modal .workday-project-inline {
+  color: #6e6e73;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-records-list {
+  max-height: min(64vh, 595px);
+  overflow: auto;
+}
+
+.workday-detail-modal .workday-record-table-head,
+.workday-detail-modal .workday-record-table,
+.workday-detail-modal .workday-record-project {
+  display: none;
+}
+
+.workday-detail-modal .workday-record-list {
+  display: grid;
+}
+
+.workday-detail-modal .workday-record-row {
+  display: grid;
+  grid-template-columns: 154px minmax(0, 1fr) 68px;
+  gap: 14px;
+  align-items: start;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #e5e5ea;
+  background: #ffffff;
+  padding: 14px 18px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 160ms ease;
+}
+
+.workday-detail-modal .workday-record-row:hover {
+  background: #fbfbfd;
+}
+
+.workday-detail-modal .workday-record-person {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.workday-detail-modal .workday-record-avatar {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e8f0fe;
+  color: #0b57d0;
+  font-size: 15px;
+  font-weight: 760;
+}
+
+.workday-detail-modal .workday-record-person strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-record-person em {
+  display: block;
+  overflow: hidden;
+  color: #86868b;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-main {
+  display: grid;
+  gap: 5px;
+}
+
+.workday-detail-modal .workday-record-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.workday-detail-modal .workday-record-title strong {
+  min-width: 0;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-title .ant-tag {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  margin-inline-end: 0;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-record-content {
+  display: block;
+  overflow: hidden;
+  color: #424245;
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: #86868b;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.workday-detail-modal .workday-record-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-meta em {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-style: normal;
+}
+
+.workday-detail-modal .workday-record-risk {
+  display: block;
+  overflow: hidden;
+  color: #ff3b30;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-record-hours {
+  justify-self: end;
+  border-radius: 999px;
+  background: #f5f5f7;
+  padding: 4px 9px;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+@media (max-width: 720px) {
+  .workday-detail-modal {
+    top: 0;
+    width: 100vw !important;
+    max-width: 100vw;
+    margin: 0;
+    padding-bottom: 0;
+  }
+
+  .workday-detail-modal .ant-modal-content {
+    width: 100vw;
+    min-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .workday-detail-modal .ant-modal-body {
+    min-height: 100dvh;
+    max-height: 100dvh;
+    padding: 20px 16px 20px;
+  }
+
+  .workday-detail-modal .ant-modal-close {
+    top: 14px;
+    right: 14px;
+  }
+
+  .workday-detail-modal .workday-detail-hero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 0 34px 12px 0;
+  }
+
+  .workday-detail-modal .workday-hero-actions {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .workday-detail-modal .workday-hero-actions .ant-btn {
+    width: 100%;
+  }
+
+  .workday-detail-modal .workday-date {
+    font-size: 22px;
+    line-height: 29px;
+  }
+
+  .workday-detail-modal .workday-summary-sentence {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workday-detail-modal .workday-summary-sentence div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .workday-detail-modal .workday-summary-sentence div:nth-child(n + 3) {
+    border-top: 1px solid #e5e5ea;
+  }
+
+  .workday-detail-modal .workday-detail-data {
+    border-radius: 16px;
+  }
+
+  .workday-detail-modal .workday-record-row {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .workday-detail-modal .workday-record-hours {
+    justify-self: start;
+  }
+}
+
+/* Work log chat modal: large dialog, conversation-first flow */
+.today-log-modal .ant-modal-content {
+  display: flex;
+  height: min(88vh, 900px);
+  max-height: calc(100vh - 32px);
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.today-log-modal .ant-modal-header {
+  flex: 0 0 auto;
+}
+
+.today-log-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+
+.today-log-modal-title {
+  gap: 4px;
+}
+
+.today-log-modal-title strong {
+  font-size: 22px;
+  line-height: 30px;
+}
+
+.today-log-modal-title span {
+  max-width: 72ch;
+  color: var(--color-gray-6);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.today-log-modal-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.today-log-modal .worklog-chat-composer {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+  max-height: none;
+}
+
+.today-log-modal .worklog-chat-thread {
+  min-height: 0;
+  max-height: none;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 14px;
+  background: var(--color-gray-1);
+  padding: 14px;
+  overflow: auto;
+}
+
+.today-log-modal .today-log-ai-message {
+  max-width: min(78%, 760px);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.today-log-modal .worklog-draft-message {
+  border-color: var(--color-gray-2);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.today-log-modal .today-log-drafts-head {
+  align-items: flex-start;
+}
+
+.today-log-modal .today-log-attachments {
+  flex: 0 0 auto;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.today-log-modal .today-log-footer {
+  position: static;
+  margin: 0;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 12px;
+  background: var(--color-white);
+  padding: 10px 12px;
+}
+
+.today-log-modal .worklog-chat-inputbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid var(--color-gray-2);
+  border-radius: 14px;
+  background: var(--color-white);
+  padding: 12px;
+  box-shadow: 0 -6px 16px rgba(26, 26, 26, 0.05);
+}
+
+.today-log-modal .today-log-quick-input {
+  min-height: 76px;
+  line-height: 22px;
+}
+
+.today-log-modal .today-log-quick-input textarea {
+  line-height: 22px;
+}
+
+.today-log-modal .today-log-quick-actions {
+  display: flex;
+  width: auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.today-log-modal .today-log-icon-button,
+.today-log-modal .today-log-send-button {
+  min-height: 44px;
+  border-radius: 10px;
+  font-weight: 750;
+}
+
+.today-log-modal .today-log-icon-button {
+  min-width: 44px;
+  padding-inline: 10px;
+}
+
+.today-log-modal .today-log-send-button {
+  min-width: 96px;
+}
+
+.today-log-modal .today-log-shortcut-hint {
+  display: none;
+}
+
+.today-log-modal .today-log-card-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .today-log-modal .ant-modal-content {
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .today-log-modal .ant-modal-header {
+    padding: 16px 52px 8px 16px !important;
+  }
+
+  .today-log-modal .ant-modal-body {
+    padding: 0 12px 12px !important;
+  }
+
+  .today-log-modal-title strong {
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  .today-log-modal-title span {
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  .today-log-modal .worklog-chat-composer {
+    gap: 10px;
+  }
+
+  .today-log-modal .worklog-chat-thread {
+    border-radius: 12px;
+    padding: 10px;
+  }
+
+  .today-log-modal .worklog-chat-inputbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin: 0 -12px -12px;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 12px 12px 0 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .today-log-modal .today-log-quick-actions {
+    justify-content: space-between;
+  }
+
+  .today-log-modal .today-log-send-button {
+    flex: 1 1 auto;
+  }
+
+  .today-log-modal .today-log-shortcut-hint {
+    display: none;
+  }
+}
+
+/* Work log fill modal: Apple-inspired conversation sheet */
+.today-log-modal {
+  top: 24px;
+}
+
+.today-log-modal .ant-modal-content {
+  height: min(86vh, 820px);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 0;
+  border-radius: 18px;
+  background: #f5f5f7;
+  padding: 0;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+}
+
+.today-log-modal .ant-modal-header {
+  background: #f5f5f7 !important;
+}
+
+.today-log-modal .ant-modal-body {
+  background: #f5f5f7 !important;
+}
+
+.today-log-modal .ant-modal-close {
+  top: 16px;
+  right: 18px;
+  color: #86868b;
+}
+
+.today-log-modal-title {
+  gap: 4px;
+  padding-right: 42px;
+}
+
+.today-log-modal-title strong {
+  color: #1d1d1f;
+  font-size: 26px;
+  font-weight: 780;
+  line-height: 34px;
+}
+
+.today-log-modal-title span {
+  max-width: 72ch;
+  color: #6e6e73;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.today-log-modal-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.today-log-modal .worklog-chat-composer {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+  max-height: none;
+}
+
+.today-log-modal .worklog-chat-thread {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.today-log-modal .today-log-ai-message {
+  max-width: min(72%, 620px);
+  border-radius: 16px;
+  padding: 11px 14px;
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .today-log-ai-message.is-assistant {
+  background: #ffffff;
+  color: #424245;
+}
+
+.today-log-modal .today-log-ai-message.is-user {
+  background: #0b57d0;
+  color: #ffffff;
+}
+
+.today-log-modal .quickfill-draft-waiting {
+  max-width: min(72%, 620px);
+  border: 0;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 12px 14px;
+}
+
+.today-log-modal .worklog-draft-message {
+  display: grid;
+  gap: 10px;
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.today-log-modal .today-log-drafts-head,
+.today-log-modal .quickfill-attachment-target,
+.today-log-modal .today-log-attachments,
+.today-log-modal .today-log-footer {
+  border: 0;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.today-log-modal .today-log-drafts-head {
+  padding: 14px 16px;
+}
+
+.today-log-modal .today-log-drafts-title {
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 22px;
+}
+
+.today-log-modal .today-log-drafts-copy,
+.today-log-modal .today-log-attachments-head span {
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .today-log-item-list {
+  gap: 10px;
+}
+
+.today-log-modal .today-log-item {
+  border: 0;
+  border-radius: 16px;
+  background: #ffffff;
+  gap: 12px;
+  padding: 16px;
+}
+
+.today-log-modal .today-log-item-main {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.today-log-modal .today-log-item-title-row {
+  gap: 8px;
+}
+
+.today-log-modal .today-log-item-title-row strong {
+  color: #1d1d1f;
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 23px;
+}
+
+.today-log-modal .today-log-item-title-row span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eefbf8;
+  padding: 2px 8px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.today-log-modal .today-log-item-title-row span + span {
+  background: #f5f5f7;
+  color: #6e6e73;
+}
+
+.today-log-modal .today-log-item-copy p {
+  max-width: 75ch;
+  margin-top: 7px;
+  color: #424245;
+  font-size: 14px;
+  line-height: 22px;
+  -webkit-line-clamp: 2;
+}
+
+.today-log-modal .today-log-item-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.today-log-modal .today-log-item-summary {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.today-log-modal .today-log-item-summary span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  background: #f5f5f7;
+  padding: 4px 10px;
+  color: #424245;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.today-log-modal .today-log-item-summary span.is-warning {
+  background: #fff7e6;
+  color: #d46b08;
+  font-weight: 700;
+}
+
+.today-log-modal .today-log-item-state {
+  padding-bottom: 0;
+}
+
+.today-log-modal .today-log-item-state:empty {
+  display: none;
+}
+
+.today-log-modal .today-log-card-actions {
+  flex-wrap: nowrap;
+}
+
+.today-log-modal .today-log-card-actions .ant-btn {
+  min-height: 40px;
+  border-radius: 12px;
+  font-weight: 740;
+}
+
+.today-log-modal .today-log-detail-editor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e5e5ea;
+  padding-top: 12px;
+}
+
+.today-log-modal .today-log-item.is-submitted {
+  background: #effaf3;
+}
+
+.today-log-modal .today-log-item.is-failed {
+  background: #fff1f0;
+}
+
+.today-log-modal .today-log-item.is-ignored {
+  background: #e5e5ea;
+}
+
+.today-log-modal .today-log-structured-list {
+  border-radius: 12px;
+  background: #f5f5f7;
+}
+
+.today-log-modal .today-log-structured-list.is-risk {
+  background: #fff1f0;
+}
+
+.today-log-modal .today-log-structured-list.is-blocker {
+  background: #fff7e6;
+}
+
+.today-log-modal .today-log-structured-list.is-success,
+.today-log-modal .today-log-structured-list.is-next {
+  background: #eefbf8;
+}
+
+.today-log-modal .today-log-footer {
+  position: static;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.today-log-modal .worklog-chat-inputbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid #e5e5ea;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.today-log-modal .today-log-quick-input {
+  min-height: 54px;
+  border: 0;
+  background: transparent;
+  padding: 6px 4px;
+  color: #1d1d1f;
+  font-size: 14px;
+  line-height: 22px;
+  box-shadow: none;
+}
+
+.today-log-modal .today-log-quick-input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.today-log-modal .today-log-quick-input::placeholder {
+  color: #6e6e73;
+}
+
+.today-log-modal .today-log-quick-actions {
+  display: flex;
+  width: auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.today-log-modal .today-log-icon-button,
+.today-log-modal .today-log-send-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0;
+}
+
+.today-log-modal .today-log-icon-button {
+  border-color: #e5e5ea;
+  background: #ffffff;
+  color: #1d1d1f;
+}
+
+.today-log-modal .today-log-send-button {
+  border-color: #0b57d0;
+  background: #0b57d0;
+  color: #ffffff;
+}
+
+.today-log-modal .today-log-send-button[disabled],
+.today-log-modal .today-log-send-button.ant-btn-disabled {
+  border-color: transparent;
+  background: #f5f5f7;
+  color: #86868b;
+}
+
+.today-log-modal .today-log-shortcut-hint {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .today-log-modal {
+    top: 0;
+    width: 100vw !important;
+    max-width: 100vw;
+    margin: 0;
+    padding-bottom: 0;
+  }
+
+  .today-log-modal .ant-modal-content {
+    width: 100vw;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .today-log-modal .ant-modal-header {
+    padding: 18px 52px 10px 16px !important;
+  }
+
+  .today-log-modal .ant-modal-body {
+    padding: 0 16px 16px !important;
+  }
+
+  .today-log-modal-title {
+    padding-right: 0;
+  }
+
+  .today-log-modal-title strong {
+    font-size: 22px;
+    line-height: 29px;
+  }
+
+  .today-log-modal-title span {
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  .today-log-modal .worklog-chat-composer {
+    gap: 10px;
+  }
+
+  .today-log-modal .today-log-ai-message,
+  .today-log-modal .quickfill-draft-waiting {
+    max-width: 88%;
+  }
+
+  .today-log-modal .today-log-item-fields,
+  .today-log-modal .today-log-item-editor,
+  .today-log-modal .today-log-structured-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .today-log-modal .worklog-chat-inputbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin: 0 -16px -16px;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .today-log-modal .today-log-quick-input {
+    min-height: 46px;
+  }
+
+  .today-log-modal .today-log-quick-actions {
+    align-self: end;
   }
 }
 

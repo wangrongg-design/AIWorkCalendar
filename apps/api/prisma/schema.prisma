@@ -19,6 +19,11 @@ enum WorkLogStatus {
   SUBMITTED
 }
 
+enum WorkLogKind {
+  DAILY
+  PLAN
+}
+
 enum ProjectStatus {
   ACTIVE
   PAUSED
@@ -471,6 +476,7 @@ model WorkLog {
   date        DateTime      @db.Date
   title       String
   content     String        @db.Text
+  kind        WorkLogKind   @default(DAILY)
   startTime   DateTime?     @map("start_time")
   endTime     DateTime?     @map("end_time")
   hours       Decimal       @db.Decimal(5, 2)
@@ -489,6 +495,7 @@ model WorkLog {
   confirmedCommunicationInsights CommunicationInsight[] @relation("ConfirmedCommunicationInsight")
 
   @@index([tenantId, date, status])
+  @@index([tenantId, kind, date])
   @@index([tenantId, userId, date])
   @@index([tenantId, projectId, date])
   @@index([tenantId, deletedAt])

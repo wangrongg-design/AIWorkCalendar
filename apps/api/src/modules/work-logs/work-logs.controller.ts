@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, StreamableFile } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
+import { attachmentDisposition } from "../../common/http/content-disposition";
 import { CurrentUser } from "../../common/types/current-user";
 import { CreateWorkLogAttachmentDto, CreateWorkLogDto, UpdateWorkLogDto, WorkLogQueryDto } from "./dto/work-log.dto";
 import { WorkLogsService } from "./work-logs.service";
@@ -65,7 +66,7 @@ export class WorkLogsController {
     const download = await this.workLogsService.openAttachmentDownload(user, id, attachmentId);
     response.setHeader("Content-Type", download.mimeType);
     response.setHeader("Content-Length", download.fileSize);
-    response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(download.fileName)}"`);
+    response.setHeader("Content-Disposition", attachmentDisposition(download.fileName));
     return new StreamableFile(download.stream);
   }
 

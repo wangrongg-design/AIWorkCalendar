@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from "@nestjs/common";
-import { WorkLogAttachmentKind, WorkLogStatus } from "@prisma/client";
+import { WorkLogAttachmentKind, WorkLogKind, WorkLogStatus } from "@prisma/client";
 import { createReadStream, type ReadStream } from "fs";
 import { mkdir, stat, writeFile } from "fs/promises";
 import { basename, join } from "path";
@@ -39,6 +39,20 @@ function attachmentStorageRoot() {
 function parseDateOnly(value: string) {
   const date = new Date(value);
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function dateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function todayKeyInShanghai() {
+  const shanghai = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return dateKey(new Date(Date.UTC(shanghai.getUTCFullYear(), shanghai.getUTCMonth(), shanghai.getUTCDate())));
+}
+
+function resolveWorkLogKind(date: Date, kind?: WorkLogKind | null) {
+  if (kind) return kind;
+  return dateKey(date) > todayKeyInShanghai() ? WorkLogKind.PLAN : WorkLogKind.DAILY;
 }
 
 function parseOptionalDate(value: string | null | undefined) {
@@ -159,6 +173,9 @@ export class WorkLogsService {
       await this.assertProjectInTenant(user.tenantId, query.projectId);
       where.projectId = query.projectId;
     }
+    if (query.kind) {
+      where.kind = query.kind;
+    }
     if (query.date) {
       where.date = parseDateOnly(query.date);
     } else if (query.from || query.to) {
@@ -196,13 +213,15 @@ export class WorkLogsService {
     });
     this.access.assertCanAccessUser(user, target);
     await this.assertProjectInTenant(user.tenantId, dto.projectId);
+    const workDate = parseDateOnly(dto.date);
     const timing = normalizeTiming(parseOptionalDate(dto.startTime), parseOptionalDate(dto.endTime), dto.hours ?? null);
     return this.prisma.workLog.create({
       data: {
         tenantId: user.tenantId,
         userId: targetUserId,
         projectId: dto.projectId || null,
-        date: parseDateOnly(dto.date),
+        date: workDate,
+        kind: resolveWorkLogKind(workDate, dto.kind),
         title: dto.title,
         content: dto.content,
         startTime: timing.startTime,
@@ -266,6 +285,7 @@ export class WorkLogsService {
       data: {
         projectId: dto.projectId === undefined ? undefined : dto.projectId || null,
         date: dto.date ? parseDateOnly(dto.date) : undefined,
+        kind: dto.kind,
         title: dto.title,
         content: dto.content,
         startTime: timing.startTime,

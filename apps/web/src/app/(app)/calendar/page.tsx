@@ -1,19 +1,31 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Checkbox, DatePicker, Drawer, Form, Input, InputNumber, Modal, Progress, Select, Space, Tag, TimePicker, Tooltip, Typography, Upload, message } from "antd";
+import { Alert, Button, DatePicker, Input, Modal, Progress, Select, Space, Tag, Tooltip, Typography, Upload, message } from "antd";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, Paperclip, RefreshCw, Send, UploadCloud, UsersRound, WandSparkles } from "lucide-react";
+import { AlertTriangle, Bot, CalendarPlus, CheckCircle2, Paperclip, RefreshCw, Send, UsersRound, WandSparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ClipboardEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TextAreaRef } from "antd/es/input/TextArea";
-import { WorkLogAttachmentViewer } from "@/components/WorkLogAttachmentViewer";
+import {
+  WorkLogDraftComposer,
+  composeDraftComposerContent,
+  createEmptyDraftComposerItem,
+  draftComposerItemFromAi,
+  projectIdFromDraftItem,
+  projectIdFromText,
+  selectedDraftComposerEntries,
+  validateDraftComposerState,
+  workLogDraftDateLabel,
+  type WorkLogDraftComposerItem,
+  type WorkLogDraftComposerState
+} from "@/components/WorkLogDraftComposer";
+import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
-import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
+import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 
 type OrgResponse = {
   departments: Department[];
@@ -43,6 +55,7 @@ type WorkLogForm = {
   endTime?: dayjs.Dayjs;
   hours?: number | null;
   projectId?: string;
+  kind?: WorkLogKind;
 };
 
 type AiDraftMessage = {
@@ -55,17 +68,14 @@ type PendingAttachment = {
   file: File;
 };
 
-type DraftPreviewItem = WorkLogDraftItem & {
-  projectId?: string;
-  selected: boolean;
+type AttachmentUploadResult = {
+  uploadedCount: number;
+  failedCount: number;
+  error?: Error;
 };
 
-type DraftPreview = {
-  assistantMessage: string;
-  items: DraftPreviewItem[];
-  attachedToFirst: boolean;
-  attachmentTargetIndex: number;
-};
+type DraftPreviewItem = WorkLogDraftComposerItem;
+type DraftPreview = WorkLogDraftComposerState;
 
 const attachmentMaxBytes = 8 * 1024 * 1024;
 const quickQuestions = ["本周风险/阻塞", "项目进度", "人员负载", "异常工时"];
@@ -239,7 +249,8 @@ function toWorkLogPayload(values: WorkLogForm) {
       ? date.hour(values.endTime.hour()).minute(values.endTime.minute()).second(0).millisecond(0).toISOString()
       : undefined,
     hours,
-    projectId: values.projectId || undefined
+    projectId: values.projectId || undefined,
+    kind: values.kind ?? (date.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY")
   };
 }
 
@@ -256,24 +267,28 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
     title: item.title || "工作填报",
     content: item.content || item.title || "工作填报",
     hours: Number.isFinite(hours) ? hours : null,
-    startTime: parseWorkLogTime(item.startTime, safeDate),
-    endTime: parseWorkLogTime(item.endTime, safeDate)
+    kind: item.kind,
+    startTime: draftTimeToDayjs(item.startTime, safeDate),
+    endTime: draftTimeToDayjs(item.endTime, safeDate)
   };
 }
 
 function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
   return {
     ...draftItemToForm(item),
+    content: composeDraftComposerContent(item),
     projectId: item.projectId
   };
 }
 
-function formDateKey(value: Dayjs | Date | string | number | null | undefined, fallback = dayjs().format("YYYY-MM-DD")) {
-  if (dayjs.isDayjs(value)) {
-    return value.isValid() ? value.format("YYYY-MM-DD") : fallback;
+function draftTimeToDayjs(value: string | null | undefined, date: Dayjs) {
+  if (!value) return undefined;
+  const clock = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (clock) {
+    return date.hour(Number(clock[1])).minute(Number(clock[2])).second(0).millisecond(0);
   }
   const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("YYYY-MM-DD") : fallback;
+  return parsed.isValid() ? parsed : undefined;
 }
 
 export default function CalendarPage() {
@@ -281,8 +296,8 @@ export default function CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
-  const [quickFillForm] = Form.useForm<WorkLogForm>();
   const today = dayjs().format("YYYY-MM-DD");
+  const [quickFillDate, setQuickFillDate] = useState(dayjs());
   const [month, setMonth] = useState(dayjs());
   const [scope, setScope] = useState<"self" | "department" | "company">(
     user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN")
@@ -363,54 +378,49 @@ export default function CalendarPage() {
     [pendingAttachments]
   );
 
-  const uploadPendingAttachments = async (workLogId: string) => {
+  const uploadPendingAttachments = async (workLogId: string): Promise<AttachmentUploadResult> => {
     const files = [...pendingAttachments];
+    let uploadedCount = 0;
     for (const item of files) {
-      const contentBase64 = await fileToBase64(item.file);
-      await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
-        method: "POST",
-        body: JSON.stringify({
-          fileName: item.file.name,
-          mimeType: item.file.type || "application/octet-stream",
-          fileSize: item.file.size,
-          contentBase64
-        })
-      });
+      try {
+        const contentBase64 = await fileToBase64(item.file);
+        await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
+          method: "POST",
+          body: JSON.stringify({
+            fileName: item.file.name,
+            mimeType: item.file.type || "application/octet-stream",
+            fileSize: item.file.size,
+            contentBase64
+          })
+        });
+        uploadedCount += 1;
+      } catch (error) {
+        return {
+          uploadedCount,
+          failedCount: files.length - uploadedCount,
+          error: error instanceof Error ? error : new Error("附件上传失败")
+        };
+      }
     }
     if (files.length) {
       setPendingAttachments([]);
     }
+    return { uploadedCount, failedCount: 0 };
   };
 
-  const createAndSubmitWorkLog = async (values: WorkLogForm, withAttachments: boolean) => {
+  const createWorkLogRecord = async (values: WorkLogForm, withAttachments: boolean, submit: boolean) => {
     const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toWorkLogPayload(values)) });
+    let attachmentUpload: AttachmentUploadResult | null = null;
     if (withAttachments) {
-      await uploadPendingAttachments(workLog.id);
+      attachmentUpload = await uploadPendingAttachments(workLog.id);
     }
-    return apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" });
+    const savedWorkLog = submit ? await apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" }) : workLog;
+    return { workLog: savedWorkLog, attachmentUpload };
   };
-
-  const createWorkLog = useMutation({
-    mutationFn: (values: WorkLogForm) => createAndSubmitWorkLog(values, true),
-    onSuccess: () => {
-      message.success("已提交，将自动分析。");
-      setQuickFillOpen(false);
-      setDraftPreview(null);
-      setPendingAttachments([]);
-      quickFillForm.resetFields();
-      queryClient.invalidateQueries({ queryKey: ["calendar"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-day"] });
-      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : "填报失败，请检查内容后重试。");
-    }
-  });
 
   const draftWorkLog = useMutation({
     mutationFn: async (messages: AiDraftMessage[]) => {
-      const currentDate = formDateKey(quickFillForm.getFieldValue("date"));
+      const currentDate = quickFillDate.format("YYYY-MM-DD");
       const draft = await apiFetch<WorkLogDraft>("/ai/work-log-draft", {
         method: "POST",
         body: JSON.stringify({
@@ -420,9 +430,10 @@ export default function CalendarPage() {
       });
       const items = normalizedDraftItems(draft);
       const attachedToFirst = pendingAttachments.length > 0 && items.length > 1;
+      const conversationProjectId = projectIdFromText(projects.data, messages.filter((item) => item.role === "user").map((item) => item.content).join(" "));
       return {
         assistantMessage: draft.assistantMessage,
-        items: items.map((item) => ({ ...item, projectId: quickFillForm.getFieldValue("projectId"), selected: true })),
+        items: items.map((item, index) => draftComposerItemFromAi(item, index, projectIdFromDraftItem(projects.data, item) ?? conversationProjectId)),
         attachedToFirst,
         attachmentTargetIndex: 0
       };
@@ -430,45 +441,92 @@ export default function CalendarPage() {
     onSuccess: (preview) => {
       setDraftPreview(preview);
       setQuickFillAiMessages((messages) => [...messages, { role: "assistant", content: `${preview.assistantMessage} 请确认草稿内容后提交。` }]);
-      if (preview.items.length === 1) {
-        quickFillForm.setFieldsValue(draftItemToForm(preview.items[0]));
-      }
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "草稿生成失败，请调整描述后重试。");
     }
   });
 
-  const confirmDraftWorkLog = useMutation({
-    mutationFn: async (preview: DraftPreview) => {
-      const selectedEntries = preview.items.map((item, index) => ({ item, index })).filter((entry) => entry.item.selected);
+  const persistDraftWorkLog = useMutation({
+    mutationFn: async ({ preview, submit }: { preview: DraftPreview; submit: boolean }) => {
+      const selectedEntries = selectedDraftComposerEntries(preview);
       if (!selectedEntries.length) {
-        throw new Error("请至少确认一条草稿。");
+        throw new Error("请至少选择一条日报项。");
       }
       const hasAttachments = pendingAttachments.length > 0;
       const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
       const uploadTargetIndex = selectedEntries.some((entry) => entry.index === requestedTargetIndex) ? requestedTargetIndex : selectedEntries[0].index;
+      let attachmentUpload: AttachmentUploadResult | null = null;
+      const persistedItems: Array<{ localId: string; workLog: WorkLog; index: number }> = [];
       for (const { item, index } of selectedEntries) {
-        await createAndSubmitWorkLog(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex);
+        const result = await createWorkLogRecord(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex, submit);
+        persistedItems.push({ localId: item.localId, workLog: result.workLog, index });
+        if (result.attachmentUpload) {
+          attachmentUpload = result.attachmentUpload;
+        }
       }
-      return { ...preview, submittedCount: selectedEntries.length, hasAttachments, uploadTargetIndex };
+      return { ...preview, persistedCount: selectedEntries.length, persistedItems, hasAttachments, uploadTargetIndex, submit, attachmentUpload };
     },
     onSuccess: (preview) => {
-      message.success(preview.submittedCount > 1 ? `已提交 ${preview.submittedCount} 条填报。` : "已提交填报。");
-      if (preview.hasAttachments && preview.submittedCount > 1) {
+      message.success(preview.submit ? `已提交 ${preview.persistedCount} 条日报。` : `已保存 ${preview.persistedCount} 条草稿。`);
+      if (preview.attachmentUpload?.failedCount) {
+        message.warning(
+          `${preview.submit ? "日报已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
+        );
+      } else if (preview.hasAttachments && preview.persistedCount > 1) {
         message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
       }
-      setDraftPreview(null);
-      setQuickFillOpen(false);
+      const persistedByLocalId = new Map(preview.persistedItems.map((item) => [item.localId, item.workLog]));
+      setDraftPreview((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => {
+                const workLog = persistedByLocalId.get(item.localId);
+                return workLog
+                  ? {
+                      ...item,
+                      workLogId: workLog.id,
+                      status: preview.submit ? ("submitted" as const) : ("saved" as const),
+                      submittedAt: preview.submit ? (workLog.submittedAt ?? new Date().toISOString()) : item.submittedAt,
+                      selected: false,
+                      errorMessage: undefined
+                    }
+                  : item;
+              })
+            }
+          : current
+      );
+      const firstWorkLog = preview.persistedItems[0]?.workLog;
+      setQuickFillAiMessages((messages) => [
+        ...messages,
+        {
+          role: "assistant",
+          content: preview.submit
+            ? `已提交到 ${firstWorkLog?.date ?? quickFillDate.format("YYYY-MM-DD")} 工作日报，稍后会进入分析队列。`
+            : `已保存 ${preview.persistedCount} 条草稿，可以在填报记录中继续处理。`
+        }
+      ]);
       setPendingAttachments([]);
-      quickFillForm.resetFields();
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
       queryClient.invalidateQueries({ queryKey: ["calendar-day"] });
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "提交草稿失败，请检查后重试。");
+      setDraftPreview((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) =>
+                item.selected && item.status !== "submitted" && item.status !== "ignored"
+                  ? { ...item, status: "failed" as const, errorMessage: error instanceof Error ? error.message : "保存日报项失败，请检查后重试。" }
+                  : item
+              )
+            }
+          : current
+      );
+      message.error(error instanceof Error ? error.message : "保存日报项失败，请检查后重试。");
     }
   });
 
@@ -610,8 +668,48 @@ export default function CalendarPage() {
   const detailFilledEmployees = dayDetail.data?.filledEmployees ?? [];
   const detailMissingEmployees = dayDetail.data?.missingEmployees ?? [];
   const detailLogCount = detailFilledEmployees.reduce((sum, employee) => sum + employee.logs.length, 0);
+  const detailLogs = useMemo(() => detailFilledEmployees.flatMap((employee) => employee.logs), [detailFilledEmployees]);
+  const detailDailyLogCount = detailLogs.filter((log) => (log.kind ?? "DAILY") === "DAILY").length;
+  const detailPlanLogCount = detailLogs.filter((log) => (log.kind ?? "DAILY") === "PLAN").length;
+  const detailRecordSections = useMemo(
+    () =>
+      [
+        {
+          key: "DAILY" as const,
+          title: "日报记录",
+          subtitle: "当天实际完成的工作记录",
+          employees: detailFilledEmployees
+            .map((employee) => ({ ...employee, logs: employee.logs.filter((log) => (log.kind ?? "DAILY") === "DAILY") }))
+            .filter((employee) => employee.logs.length > 0)
+        },
+        {
+          key: "PLAN" as const,
+          title: selectedDate && dateKind(selectedDate) === "future" ? "计划记录" : "历史计划",
+          subtitle: selectedDate && dateKind(selectedDate) === "future" ? "成员提前提交的工作安排" : "过去曾提前写入的计划记录",
+          employees: detailFilledEmployees
+            .map((employee) => ({ ...employee, logs: employee.logs.filter((log) => (log.kind ?? "DAILY") === "PLAN") }))
+            .filter((employee) => employee.logs.length > 0)
+        }
+      ].filter((section) => section.employees.length > 0),
+    [detailFilledEmployees, selectedDate]
+  );
+  const detailProjectGroups = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; hours: number; count: number }>();
+    for (const log of detailLogs) {
+      const key = log.projectId ?? "unassigned";
+      const name = log.project ? (log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name) : "日常工作";
+      const current = map.get(key) ?? { key, name, hours: 0, count: 0 };
+      current.hours += Number(log.hours) || 0;
+      current.count += 1;
+      map.set(key, current);
+    }
+    return Array.from(map.values())
+      .map((item) => ({ ...item, hours: Number(item.hours.toFixed(1)) }))
+      .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));
+  }, [detailLogs]);
   const selectedDateKind = selectedDate ? dateKind(selectedDate) : "today";
-  const detailTitle = selectedDateKind === "future" ? "团队计划情况" : "今日团队填报情况";
+  const hasHistoricalPlans = selectedDateKind !== "future" && detailPlanLogCount > 0;
+  const detailTitle = selectedDateKind === "future" ? "团队计划情况" : hasHistoricalPlans ? "团队填报与历史计划" : "团队填报情况";
   const detailRemindCount = detailStats?.remindCount ?? (selectedDateKind === "future" ? 0 : detailMissingEmployees.length);
   const detailPlanReminderCount = selectedDateKind === "future" ? detailMissingEmployees.length : 0;
   const detailReminderActionCount = selectedDateKind === "future" ? detailPlanReminderCount : detailRemindCount;
@@ -628,7 +726,12 @@ export default function CalendarPage() {
     if (dayDetail.isFetching) return ["正在分析团队日报…"];
     const stats = dayDetail.data?.stats;
     if (!stats) return ["等待团队数据同步后生成洞察。"];
+    const planLogCount = stats.planLogCount ?? 0;
+    const dailyLogCount = stats.dailyLogCount ?? 0;
     if (stats.filledCount === 0) {
+      if (selectedDateKind !== "future" && planLogCount > 0) {
+        return [`这一天有 ${planLogCount} 条历史计划，但暂无对应日报记录。`];
+      }
       return [selectedDateKind === "future" ? "这一天还没有团队成员提交计划。" : "今天还没有团队成员提交日报。"];
     }
     const missingOrRemindCount = selectedDateKind === "future" ? stats.missingCount : stats.remindCount ?? stats.missingCount;
@@ -639,6 +742,9 @@ export default function CalendarPage() {
       detailRiskBlockerCount(stats) > 0 ? `发现 ${detailRiskBlockerCount(stats)} 条风险/阻塞信号，建议先查看异常记录。` : "暂未发现明显风险/阻塞信号。",
       stats.totalHours > 0 ? `当前记录工时合计 ${stats.totalHours}h，可继续按项目核对投入。` : "当前暂无可分析工时。"
     ];
+    if (selectedDateKind !== "future" && planLogCount > 0) {
+      observations.push(`另有 ${planLogCount} 条历史计划${dailyLogCount > 0 ? "，可对照实际日报检查兑现情况。" : "，但暂无日报可对照。"}`);
+    }
     const firstProject = dayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).find((log) => log.project)?.project?.name;
     if (firstProject) {
       observations.push(`${firstProject} 已出现在今日记录中，可进一步询问项目进展。`);
@@ -740,25 +846,18 @@ export default function CalendarPage() {
 
   const openQuickFill = (date: string) => {
     const dateValue = dayjs(date);
-    const isFuture = date > today;
     setSelectedDate(null);
+    setQuickFillDate(dateValue);
     setPendingAttachments([]);
-    quickFillForm.resetFields();
-    quickFillForm.setFieldsValue({
-      date: dateValue,
-      title: isFuture ? "工作计划" : "工作日报",
-      content: "",
-      hours: null
-    });
     setQuickFillAiInput("");
     setLastQuickFillAiInput("");
-    setQuickFillAiMessages([
-      {
-        role: "assistant",
-        content: `当前填报日期是 ${dateValue.format("YYYY年M月D日")}。如果不写日期，我会按这一天生成草稿。`
-      }
-    ]);
-    setDraftPreview(null);
+    setQuickFillAiMessages([]);
+    setDraftPreview({
+      assistantMessage: "今日日报项",
+      items: [],
+      attachedToFirst: false,
+      attachmentTargetIndex: 0
+    });
     setQuickFillOpen(true);
   };
 
@@ -805,13 +904,24 @@ export default function CalendarPage() {
     setLastQuickFillAiInput(text);
     setQuickFillAiMessages(nextMessages);
     setQuickFillAiInput("");
-    setDraftPreview(null);
     draftWorkLog.mutate(nextMessages);
+  };
+
+  const regenerateQuickFillDraft = () => {
+    if (!quickFillAiMessages.some((item) => item.role === "user")) return;
+    setDraftPreview((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item) => (item.status === "submitted" ? item : { ...item, status: "ignored" as const, selected: false }))
+          }
+        : current
+    );
+    draftWorkLog.mutate(quickFillAiMessages);
   };
 
   const continueEditingQuickFillPrompt = () => {
     setQuickFillAiInput((current) => current || lastQuickFillAiInput);
-    setDraftPreview(null);
   };
 
   const updateDraftPreviewItem = (index: number, patch: Partial<DraftPreviewItem>) => {
@@ -825,11 +935,140 @@ export default function CalendarPage() {
     );
   };
 
+  const deleteDraftPreviewItem = (index: number) => {
+    setDraftPreview((current) => {
+      if (!current) return current;
+      const items = current.items.filter((_, itemIndex) => itemIndex !== index);
+      return {
+        ...current,
+        items,
+        attachmentTargetIndex: Math.max(0, Math.min(current.attachmentTargetIndex, Math.max(0, items.length - 1)))
+      };
+    });
+  };
+
+  const addManualDraftItem = () => {
+    setDraftPreview((current) => {
+      const nextItem = createEmptyDraftComposerItem(quickFillDate);
+      if (!current) {
+        return {
+          assistantMessage: "手动新增项目日报项。",
+          items: [nextItem],
+          attachedToFirst: false,
+          attachmentTargetIndex: 0
+        };
+      }
+      return {
+        ...current,
+        items: [...current.items, nextItem]
+      };
+    });
+  };
+
+  const persistQuickFillPreview = (submit: boolean, onlyIndex?: number) => {
+    const targetPreview =
+      typeof onlyIndex === "number" && draftPreview
+        ? {
+            ...draftPreview,
+            items: draftPreview.items.map((item, index) => ({ ...item, selected: index === onlyIndex }))
+          }
+        : draftPreview;
+    const validation = validateDraftComposerState(targetPreview);
+    if (!validation.ok) {
+      if (validation.index >= 0) {
+        updateDraftPreviewItem(typeof onlyIndex === "number" ? onlyIndex : validation.index, { expanded: true });
+      }
+      message.warning(validation.message);
+      return;
+    }
+    setDraftPreview((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item, index) =>
+              (typeof onlyIndex === "number" ? index === onlyIndex : item.selected) && item.status !== "submitted" && item.status !== "ignored"
+                ? { ...item, status: submit ? ("submitting" as const) : ("saving" as const), errorMessage: undefined }
+                : item
+            )
+          }
+        : current
+    );
+    persistDraftWorkLog.mutate({ preview: targetPreview as DraftPreview, submit });
+  };
+
+  const ignoreDraftPreviewItem = (index: number) => {
+    updateDraftPreviewItem(index, { status: "ignored", selected: false });
+  };
+
+  const splitDraftPreviewItem = (index: number) => {
+    setDraftPreview((current) => {
+      if (!current) return current;
+      const source = current.items[index];
+      if (!source) return current;
+      const nextItem: DraftPreviewItem = {
+        ...source,
+        localId: `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        workLogId: undefined,
+        title: `${source.title || "工作项"}（补充）`,
+        content: "",
+        achievements: [],
+        risks: [],
+        blockers: [],
+        nextActions: [],
+        selected: true,
+        expanded: true,
+        status: "editing",
+        errorMessage: undefined
+      };
+      return {
+        ...current,
+        items: [...current.items.slice(0, index + 1), nextItem, ...current.items.slice(index + 1)]
+      };
+    });
+  };
+
+  const mergeSelectedDraftItems = () => {
+    setDraftPreview((current) => {
+      if (!current) return current;
+      const selectedItems = current.items.filter((item) => item.selected && item.status !== "submitted" && item.status !== "ignored");
+      if (selectedItems.length < 2) return current;
+      const [first, ...rest] = selectedItems;
+      const merged: DraftPreviewItem = {
+        ...first,
+        title: first.title || rest.find((item) => item.title)?.title || "合并工作项",
+        content: [first.content, ...rest.map((item) => item.content)].filter(Boolean).join("\n"),
+        hours: selectedItems.reduce((sum, item) => sum + (Number.isFinite(Number(item.hours)) ? Number(item.hours) : 0), 0),
+        achievements: selectedItems.flatMap((item) => item.achievements),
+        risks: selectedItems.flatMap((item) => item.risks),
+        blockers: selectedItems.flatMap((item) => item.blockers),
+        nextActions: selectedItems.flatMap((item) => item.nextActions),
+        missingFields: Array.from(new Set(selectedItems.flatMap((item) => item.missingFields))),
+        expanded: true,
+        status: "editing"
+      };
+      const selectedIds = new Set(selectedItems.map((item) => item.localId));
+      let inserted = false;
+      const items = current.items.reduce<DraftPreviewItem[]>((result, item) => {
+        if (!selectedIds.has(item.localId)) {
+          result.push(item);
+          return result;
+        }
+        if (!inserted) {
+          result.push(merged);
+          inserted = true;
+        }
+        return result;
+      }, []);
+      return { ...current, items };
+    });
+  };
+
   const goToday = () => {
     const today = dayjs();
     setMonth(today);
     setSelectedDate(today.format("YYYY-MM-DD"));
   };
+  const quickFillKindTitle = quickFillDate.format("YYYY-MM-DD") > today ? "填写计划" : "填写日报";
 
   return (
     <div className="page-stack dashboard-calendar-page">
@@ -1020,6 +1259,11 @@ export default function CalendarPage() {
                     <div className="calendar-count flex items-center gap-1 text-ink">
                       <CheckCircle2 size={14} /> {isFuture ? "计划" : "填报"} {filledCount}/{totalCount}
                     </div>
+                    {!isFuture && (day?.planLogCount ?? 0) > 0 ? (
+                      <div className="calendar-count muted flex items-center gap-1 text-muted">
+                        <CalendarPlus size={14} /> 历史计划 {day?.planLogCount}
+                      </div>
+                    ) : null}
                     {missingCount > 0 ? (
                       <div className="calendar-count muted flex items-center gap-1 text-muted">
                         <UsersRound size={14} /> {isFuture ? "未计划" : "未填"} {missingCount}
@@ -1035,226 +1279,6 @@ export default function CalendarPage() {
             })}
           </div>
       </section>
-
-      <Modal
-        title="新增填报"
-        open={quickFillOpen}
-        onCancel={() => {
-          setQuickFillOpen(false);
-          setDraftPreview(null);
-          setPendingAttachments([]);
-        }}
-        onOk={() => quickFillForm.submit()}
-        okText="提交表单"
-        cancelText="取消"
-        confirmLoading={createWorkLog.isPending || draftWorkLog.isPending || confirmDraftWorkLog.isPending}
-        width={880}
-      >
-        <Form
-          form={quickFillForm}
-          layout="vertical"
-          onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, quickFillForm.setFieldsValue)}
-          onFinish={(values) => createWorkLog.mutate(values)}
-        >
-          <div className="mb-5 rounded-[18px] bg-surface-container-low p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-              <Bot size={17} className="text-secondary" />
-              智能草稿
-            </div>
-            <div className="mb-3 max-h-48 space-y-2 overflow-auto">
-              {quickFillAiMessages.map((item, index) => (
-                <div
-                  key={`${item.role}-${index}`}
-                  className={`rounded-[14px] px-3 py-2 text-sm leading-6 ${
-                    item.role === "user" ? "ml-8 bg-primary text-white" : "mr-8 bg-white text-muted"
-                  }`}
-                >
-                  {item.content}
-                </div>
-              ))}
-            </div>
-            {draftWorkLog.error ? <Alert className="mb-3" type="error" showIcon message={(draftWorkLog.error as Error).message} /> : null}
-            {draftWorkLog.isPending ? (
-              <div className="quickfill-draft-waiting" role="status" aria-live="polite">
-                <span className="quickfill-draft-spinner" />
-                <div>
-                  <strong>正在生成草稿</strong>
-                  <p>正在调用模型识别日期、工时和工作内容，正式环境可能需要 5-20 秒，请稍候。</p>
-                </div>
-              </div>
-            ) : null}
-            <div className="flex gap-2">
-              <Input.TextArea
-                value={quickFillAiInput}
-                autoSize={{ minRows: 2, maxRows: 4 }}
-                placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
-                disabled={draftWorkLog.isPending}
-                onPaste={handlePasteImages}
-                onChange={(event) => setQuickFillAiInput(event.target.value)}
-                onPressEnter={(event) => {
-                  if (!event.shiftKey) {
-                    event.preventDefault();
-                    sendQuickFillAiMessage();
-                  }
-                }}
-              />
-              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftWorkLog.isPending} disabled={draftWorkLog.isPending} onClick={sendQuickFillAiMessage}>
-                生成草稿
-              </Button>
-            </div>
-            {draftPreview ? (
-              <div className="quickfill-draft-preview">
-                <Alert
-                  type={draftPreview.items.some((item) => item.selected && (item.missingFields.length > 0 || item.confidence < 0.8)) ? "warning" : "info"}
-                  showIcon
-                  message="请确认草稿后再提交"
-                  description="系统不会自动提交。你可以逐条确认、跳过或修改日期、标题、工时、项目和内容。"
-                />
-                {pendingAttachments.length > 0 && draftPreview.items.length > 1 ? (
-                  <div className="quickfill-attachment-target">
-                    <span>附件归属</span>
-                    <Select
-                      value={draftPreview.attachmentTargetIndex}
-                      listHeight={280}
-                      options={draftPreview.items.map((item, index) => ({
-                        value: index,
-                        disabled: !item.selected,
-                        label: `第 ${index + 1} 条 · ${item.title || "未命名草稿"}`
-                      }))}
-                      onChange={(value) =>
-                        setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))
-                      }
-                    />
-                    <em>未选择或跳过目标时，自动关联到第一条已确认草稿。</em>
-                  </div>
-                ) : null}
-                <div className="quickfill-draft-list">
-                  {draftPreview.items.map((item, index) => (
-                    <div key={`${item.date}-${item.title}-${index}`} className={`quickfill-draft-item ${item.selected ? "" : "is-muted"}`}>
-                      <div className="quickfill-draft-head">
-                        <Checkbox checked={item.selected} onChange={(event) => updateDraftPreviewItem(index, { selected: event.target.checked })}>
-                          确认第 {index + 1} 条
-                        </Checkbox>
-                        <span>{item.kind === "PLAN" ? "计划" : "日报"}</span>
-                      </div>
-                      <div className="quickfill-draft-edit-grid">
-                        <label>
-                          <span>日期</span>
-                          <DatePicker
-                            className="w-full"
-                            value={dayjs(item.date).isValid() ? dayjs(item.date) : dayjs()}
-                            onChange={(value) => value && updateDraftPreviewItem(index, { date: value.format("YYYY-MM-DD") })}
-                          />
-                        </label>
-                        <label>
-                          <span>工时</span>
-                          <InputNumber
-                            className="w-full"
-                            min={0}
-                            max={24}
-                            step={0.5}
-                            value={item.hours}
-                            onChange={(value) => updateDraftPreviewItem(index, { hours: Number(value ?? 0) })}
-                          />
-                        </label>
-                        <label className="quickfill-draft-title-field">
-                          <span>标题</span>
-                          <Input value={item.title} onChange={(event) => updateDraftPreviewItem(index, { title: event.target.value })} />
-                        </label>
-                        <label className="quickfill-draft-project-field">
-                          <span>项目</span>
-                          <Select
-                            allowClear
-                            showSearch
-                            optionFilterProp="label"
-                            value={item.projectId}
-                            placeholder="未关联"
-                            loading={projects.isFetching}
-                            listHeight={280}
-                            dropdownStyle={{ zIndex: 1800 }}
-                            options={projectOptions}
-                            onChange={(value) => updateDraftPreviewItem(index, { projectId: value })}
-                          />
-                        </label>
-                      </div>
-                      <label className="quickfill-draft-content-field">
-                        <span>内容</span>
-                        <Input.TextArea
-                          autoSize={{ minRows: 2, maxRows: 5 }}
-                          value={item.content}
-                          onPaste={handlePasteImages}
-                          onChange={(event) => updateDraftPreviewItem(index, { content: event.target.value })}
-                        />
-                      </label>
-                      <div className="quickfill-draft-meta">
-                        <span>附件：{pendingAttachments.length ? (draftPreview.attachmentTargetIndex === index ? "关联到本条" : "未关联到本条") : "无"}</span>
-                        <span>项目：{item.projectId ? projectNameById.get(item.projectId) ?? "已选择项目" : "未关联"}</span>
-                        <span>置信度：{Math.round(item.confidence * 100)}%</span>
-                      </div>
-                      {item.missingFields.length ? <div className="quickfill-draft-warning">需确认：{item.missingFields.join("、")}</div> : null}
-                    </div>
-                  ))}
-                </div>
-                <div className="quickfill-draft-actions">
-                  <Button onClick={continueEditingQuickFillPrompt}>继续编辑</Button>
-                  <Button
-                    type="primary"
-                    loading={confirmDraftWorkLog.isPending}
-                    disabled={!draftPreview.items.some((item) => item.selected)}
-                    onClick={() => confirmDraftWorkLog.mutate(draftPreview)}
-                  >
-                    确认并提交{draftPreview.items.filter((item) => item.selected).length > 1 ? ` ${draftPreview.items.filter((item) => item.selected).length} 条` : ""}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <Form.Item name="date" label="日期" rules={[{ required: true }]}>
-              <DatePicker className="w-full" />
-            </Form.Item>
-            <Form.Item name="hours" label="工时">
-              <InputNumber className="w-full" min={0} max={24} step={0.5} placeholder="可不填" />
-            </Form.Item>
-            <Form.Item name="startTime" label="开始时间">
-              <TimePicker className="w-full" format="HH:mm" />
-            </Form.Item>
-            <Form.Item name="endTime" label="结束时间">
-              <TimePicker className="w-full" format="HH:mm" />
-            </Form.Item>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <Form.Item className="md:col-span-3" name="title" label="标题" rules={[{ required: true, min: 2 }]}>
-              <Input />
-            </Form.Item>
-            <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-              <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" loading={projects.isFetching} listHeight={280} dropdownStyle={{ zIndex: 1800 }} options={projectOptions} />
-            </Form.Item>
-          </div>
-          <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
-            <Input.TextArea rows={6} onPaste={handlePasteImages} />
-          </Form.Item>
-          <Form.Item label="附件">
-            <div className="paste-upload-zone" tabIndex={0} onPaste={handlePasteImages}>
-              <Upload.Dragger
-                multiple
-                fileList={pendingUploadFiles}
-                beforeUpload={addPendingAttachment}
-                onRemove={(file) => {
-                  setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
-                  return true;
-                }}
-              >
-                <p className="ant-upload-drag-icon">
-                  <UploadCloud size={28} />
-                </p>
-                <p className="ant-upload-text">添加照片或文件</p>
-                <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴微信或聊天截图。</p>
-              </Upload.Dragger>
-            </div>
-          </Form.Item>
-        </Form>
-      </Modal>
 
       <Modal
         title={
@@ -1356,18 +1380,73 @@ export default function CalendarPage() {
         </div>
       </Modal>
 
-      <Drawer
+      <Modal
+        title={
+          <div className="today-log-modal-title">
+            <strong>{quickFillKindTitle}</strong>
+            <span>{workLogDraftDateLabel(quickFillDate)}，像聊天一样描述工作，AI 只生成草稿，确认后才提交。</span>
+          </div>
+        }
+        open={quickFillOpen}
+        onCancel={() => setQuickFillOpen(false)}
+        footer={null}
+        width="min(1040px, calc(100vw - 32px))"
+        zIndex={1600}
+        className="today-log-modal"
+        styles={{ body: { padding: "0 26px 24px", background: "#f5f5f7" }, header: { borderBottom: 0, padding: "24px 26px 12px", background: "#f5f5f7" } }}
+      >
+        <div className="today-log-modal-shell" data-worklog-chat-panel>
+          <WorkLogDraftComposer
+            aiMessages={quickFillAiMessages}
+            aiInput={quickFillAiInput}
+            aiPending={draftWorkLog.isPending}
+            aiError={draftWorkLog.error instanceof Error ? draftWorkLog.error : null}
+            onAiInputChange={setQuickFillAiInput}
+            onGenerateDraft={sendQuickFillAiMessage}
+            onContinuePrompt={continueEditingQuickFillPrompt}
+            draftPreview={draftPreview}
+            onUpdateItem={updateDraftPreviewItem}
+            onDeleteItem={deleteDraftPreviewItem}
+            onAddManualItem={addManualDraftItem}
+            onAttachmentTargetChange={(value) => setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))}
+            onSaveDrafts={() => persistQuickFillPreview(false)}
+            onSubmitDrafts={() => persistQuickFillPreview(true)}
+            onSubmitItem={(index) => persistQuickFillPreview(true, index)}
+            onIgnoreItem={ignoreDraftPreviewItem}
+            onMergeSelected={mergeSelectedDraftItems}
+            onSplitItem={splitDraftPreviewItem}
+            onRegenerateDraft={regenerateQuickFillDraft}
+            onViewSubmittedItem={() => router.push("/work-logs")}
+            saving={persistDraftWorkLog.isPending && persistDraftWorkLog.variables?.submit === false}
+            submitting={persistDraftWorkLog.isPending && persistDraftWorkLog.variables?.submit === true}
+            projectOptions={projectOptions}
+            projectNameById={projectNameById}
+            projectsLoading={projects.isFetching}
+            pendingAttachmentCount={pendingAttachments.length}
+            pendingUploadFiles={pendingUploadFiles}
+            beforeUploadAttachment={addPendingAttachment}
+            onRemoveAttachment={(file) => {
+              setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+              return true;
+            }}
+            onPasteImages={handlePasteImages}
+          />
+        </div>
+      </Modal>
+
+      <Modal
         title={null}
         open={Boolean(selectedDate)}
-        onClose={() => setSelectedDate(null)}
-        width="min(1240px, calc(100vw - 32px))"
-        className="workday-detail-modal workday-detail-drawer"
+        onCancel={() => setSelectedDate(null)}
+        footer={null}
+        width="min(1180px, calc(100vw - 32px))"
+        zIndex={1300}
+        className="workday-detail-modal"
         destroyOnHidden
       >
         {selectedDate ? (
           <div className="workday-detail-hero">
             <div>
-              <div className="workday-product">工作日历</div>
               <div className="workday-date">{chineseDateLabel(selectedDate)}</div>
               <div className="workday-subtitle">{detailTitle}</div>
             </div>
@@ -1378,9 +1457,29 @@ export default function CalendarPage() {
             </div>
           </div>
         ) : null}
+        {selectedDate ? (
+          <div className={`workday-summary-sentence ${detailRiskBlockerCount(detailStats) > 0 ? "has-risk" : ""}`}>
+            <div>
+              <strong>{detailLogCount}</strong>
+              <span>记录</span>
+            </div>
+            <div>
+              <strong>{detailStats?.totalHours ?? 0}h</strong>
+              <span>工时</span>
+            </div>
+            <div>
+              <strong>{detailStats?.missingCount ?? 0}</strong>
+              <span>{selectedDateKind === "future" ? "未计划" : "未填报"}</span>
+            </div>
+            <div className={detailRiskBlockerCount(detailStats) > 0 ? "is-danger" : ""}>
+              <strong>{detailRiskBlockerCount(detailStats)}</strong>
+              <span>风险/阻塞</span>
+            </div>
+          </div>
+        ) : null}
         <div className="workday-content-grid">
           <div className="workday-records-column">
-            {(detailStats?.filledCount ?? 0) === 0 && !dayDetail.isFetching ? (
+            {detailLogCount === 0 && !dayDetail.isFetching ? (
               <div className="workday-empty-state">
                 <div>
                   <div className="workday-empty-title">
@@ -1415,130 +1514,63 @@ export default function CalendarPage() {
               <div className="workday-detail-data">
                 <div className="workday-records-heading">
                   <div>
-                    <div className="workday-section-heading">{selectedDateKind === "future" ? "计划记录" : "日报记录"}</div>
-                    <div className="workday-records-subtitle">{detailLogCount} 条记录 · {detailFilledEmployees.length} 位成员</div>
+                    <div className="workday-section-heading">今日记录</div>
+                    <div className="workday-records-subtitle">
+                      日报 {detailDailyLogCount} 条 · 计划 {detailPlanLogCount} 条
+                    </div>
+                    {detailProjectGroups.length ? (
+                      <div className="workday-project-inline">
+                        {detailProjectGroups.slice(0, 3).map((item) => `${item.name} ${item.hours}h`).join(" / ")}
+                        {detailProjectGroups.length > 3 ? ` 等 ${detailProjectGroups.length} 个项目` : ""}
+                      </div>
+                    ) : null}
                   </div>
                   {dayDetail.isFetching ? <span className="ai-shimmer">正在同步记录…</span> : null}
                 </div>
                 <div className="workday-records-list">
-                  {detailFilledEmployees.map((employee) => (
-                    <div key={employee.id} className="workday-employee-record">
-                      <div className="workday-employee-meta">
-                        <div className="workday-employee-name">{employee.name}</div>
-                        <div className="workday-employee-dept">{employee.departmentName ?? "未分配部门"}</div>
-                        <div className="workday-employee-count">{employee.logs.length} 条</div>
-                      </div>
-                      <div className="workday-log-stack">
-                        {employee.logs.map((log) => (
-                          <button key={log.id} type="button" className="workday-log-card" onClick={() => setSelectedWorkLog(log)}>
-                            <div className="workday-log-main">
-                              <div className="workday-log-title-row">
-                                <div className="workday-log-title">{log.title}</div>
-                                <div className="workday-log-meta">
-                                  <span>{Number(log.hours).toFixed(1)} 小时</span>
-                                  {log.attachments?.length ? (
-                                    <span className="workday-log-attachment"><Paperclip size={13} /> 附件 {log.attachments.length}</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="workday-log-content">{log.content}</div>
-                              <div className="workday-log-tags">
-                                {log.project ? (
-                                  <span className="workday-log-project">{log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name}</span>
-                                ) : null}
-                                {log.aiAnalysis?.achievements?.slice(0, 3).map((item) => (
-                                  <span className="workday-log-achievement" key={item}>{item}</span>
-                                ))}
-                                {log.aiAnalysis?.risks?.slice(0, 3).map((item) => (
-                                  <span className="workday-log-risk" key={item}>{item}</span>
-                                ))}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                  <div className="workday-record-list">
+                    {detailRecordSections.flatMap((section) =>
+                      section.employees.flatMap((employee) =>
+                        employee.logs.map((log) => {
+                          const risk = (log.aiAnalysis?.risks ?? [])[0];
+                          const projectName = log.project ? (log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name) : "未关联项目";
+                          return (
+                            <button key={`${section.key}-${employee.id}-${log.id}`} type="button" className={`workday-record-row ${risk ? "has-risk" : ""}`} onClick={() => setSelectedWorkLog(log)}>
+                              <span className="workday-record-person">
+                                <span className="workday-record-avatar">{employee.name.slice(0, 1)}</span>
+                                <span>
+                                  <strong>{employee.name}</strong>
+                                  <em>{employee.departmentName ?? "未分配部门"}</em>
+                                </span>
+                              </span>
+                              <span className="workday-record-main">
+                                <span className="workday-record-title">
+                                  <strong>{log.title}</strong>
+                                  <Tag color={(log.kind ?? "DAILY") === "PLAN" ? "blue" : "green"}>{(log.kind ?? "DAILY") === "PLAN" ? "计划" : "日报"}</Tag>
+                                </span>
+                                <span className="workday-record-content">{log.content}</span>
+                                <span className="workday-record-meta">
+                                  <span>{projectName}</span>
+                                  {log.attachments?.length ? <em><Paperclip size={12} /> {log.attachments.length} 个附件</em> : null}
+                                </span>
+                                {risk ? <span className="workday-record-risk">{risk}</span> : null}
+                              </span>
+                              <span className="workday-record-hours">{Number(log.hours).toFixed(1)}h</span>
+                            </button>
+                          );
+                        })
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
-          <div className="workday-insight-column">
-            <div className="workday-ai-panel workday-ai-panel-complete">
-              <div className="workday-ai-header">
-                <div>
-                  <div className="workday-section-kicker">工作判断</div>
-                  <div className="workday-ai-title-line">
-                    <div className="workday-ai-title">今日观察</div>
-                    <Button className="ai-soft-button workday-ai-title-action" icon={<Bot size={15} />} onClick={() => setChatOpen(true)}>
-                      打开助手
-                    </Button>
-                  </div>
-                </div>
-                {calendarChat.isPending || dayDetail.isFetching ? <span className="ai-shimmer">正在分析团队日报…</span> : null}
-              </div>
-              <div className="workday-ai-stat-grid">
-                <div className="workday-ai-stat is-filled">
-                  <span>{selectedDate && dateKind(selectedDate) === "future" ? "已计划" : "已填报"}</span>
-                  <strong>{detailStats?.filledCount ?? 0}</strong>
-                </div>
-                <div className="workday-ai-stat is-missing">
-                  <span>{selectedDate && dateKind(selectedDate) === "future" ? "未计划" : "未填报"}</span>
-                  <strong>{detailStats?.missingCount ?? 0}</strong>
-                </div>
-                <div className="workday-ai-stat is-hours">
-                  <span>工时合计</span>
-                  <strong>{detailStats?.totalHours ?? 0}h</strong>
-                </div>
-                <div className="workday-ai-stat is-risk">
-                  <span>风险/阻塞</span>
-                  <strong>{detailRiskBlockerCount(detailStats)}</strong>
-                </div>
-              </div>
-              <div className={`workday-ai-risk-summary ${detailRiskBlockerCount(detailStats) > 0 ? "has-risk" : ""}`}>
-                <div className="workday-ai-subheading">异常 / 风险/阻塞</div>
-                <strong>{detailRiskBlockerCount(detailStats) > 0 ? `发现 ${detailRiskBlockerCount(detailStats)} 条风险/阻塞信号` : "暂未发现明显风险/阻塞"}</strong>
-                <p>
-                  {detailReminderActionCount > 0
-                    ? `${detailReminderActionCount} 位成员尚未${selectedDateKind === "future" ? "提交计划" : "提交日报"}，建议优先提醒。`
-                    : "团队提交状态正常，可以继续查看具体记录。"}
-                </p>
-              </div>
-              <div className="workday-ai-missing-summary">
-                <div className="workday-ai-subheading">{selectedDateKind === "future" ? "未提交计划" : "未提交日报"}</div>
-                <div className="workday-ai-missing-list">
-                  {detailMissingEmployees.length ? (
-                    detailMissingEmployees.map((item) => (
-                      <Tag key={item.id}>{item.name} · {item.departmentName ?? "未分配部门"}</Tag>
-                    ))
-                  ) : (
-                    <span className="workday-ai-empty-tag">全部已提交</span>
-                  )}
-                </div>
-              </div>
-              <div className="workday-ai-observation-block">
-                <div className="workday-ai-subheading">关键证据</div>
-                <ul className="workday-ai-list">
-                  {aiObservations.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="workday-ai-pills">
-                {["本周风险/阻塞", "项目进度", "人员负载", "异常工时"].map((item) => (
-                  <button key={item} type="button" className="workday-ai-pill" onClick={() => runCopilotPrompt(item)}>
-                    {item}
-                  </button>
-                ))}
-              </div>
-              <div className="workday-ai-context-note">助手会带着当前日期、记录、缺填和风险/阻塞上下文继续分析。</div>
-            </div>
-          </div>
         </div>
-      </Drawer>
+      </Modal>
 
       <Modal
-        title={selectedWorkLog ? `${dayjs(selectedWorkLog.date).format("YYYY-MM-DD")} · ${selectedWorkLog.title}` : "填报详情"}
+        title={selectedWorkLog ? <WorkLogDetailTitle record={selectedWorkLog} readOnly /> : "填报详情"}
         open={Boolean(selectedWorkLog)}
         onCancel={() => setSelectedWorkLog(null)}
         footer={null}
@@ -1546,70 +1578,7 @@ export default function CalendarPage() {
         zIndex={1500}
         className="work-log-detail-modal"
       >
-        {selectedWorkLog ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="metric-card">
-                <div className="metric-label">人员</div>
-                <div className="mt-2 text-sm font-medium text-ink">{selectedWorkLog.user?.name ?? "-"}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">项目</div>
-                <div className="mt-2 text-sm font-medium text-ink">{selectedWorkLog.project?.name ?? "未关联"}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">工时</div>
-                <div className="metric-value">{Number(selectedWorkLog.hours).toFixed(1)}h</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">时间</div>
-                <div className="mt-2 text-sm font-medium text-ink">
-                  {selectedWorkLog.startTime ? dayjs(selectedWorkLog.startTime).format("HH:mm") : "--"}
-                  {" - "}
-                  {selectedWorkLog.endTime ? dayjs(selectedWorkLog.endTime).format("HH:mm") : "--"}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-[8px] bg-surface-container-low p-4">
-              <div className="mb-2 text-sm font-medium text-ink">内容</div>
-              <div className="whitespace-pre-wrap text-sm leading-6 text-muted">{selectedWorkLog.content}</div>
-            </div>
-            {selectedWorkLog.attachments?.length ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-2 text-sm font-medium text-ink">附件</div>
-                <WorkLogAttachmentViewer workLogId={selectedWorkLog.id} attachments={selectedWorkLog.attachments} />
-              </div>
-            ) : null}
-            {selectedWorkLog.aiAnalysis ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-                  <Bot size={16} />
-                  智能分析
-                </div>
-                <div className="text-sm leading-6 text-muted">{selectedWorkLog.aiAnalysis.summary}</div>
-                <Space className="mt-3" wrap>
-                  <Tag color="green">{selectedWorkLog.aiAnalysis.category}</Tag>
-                  {selectedWorkLog.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-                  {selectedWorkLog.aiAnalysis.risks?.map((risk) => <Tag color="red" key={risk}>{risk}</Tag>)}
-                </Space>
-              </div>
-            ) : selectedWorkLog.status === "SUBMITTED" ? (
-              <div className="rounded-[8px] bg-surface-container-low p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-                  <Bot size={16} />
-                  分析生成中
-                </div>
-                <div className="quickfill-draft-waiting mb-0" role="status" aria-live="polite">
-                  <span className="quickfill-draft-spinner" />
-                  <div>
-                    <strong>正在分析这条填报</strong>
-                    <p>系统已提交分析任务，真实模型可能需要几十秒；稍后刷新或返回列表查看结果。</p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {selectedWorkLog ? <WorkLogDetailView record={selectedWorkLog} /> : null}
       </Modal>
 
     </div>

@@ -71,6 +71,7 @@
   },
   "nginx": {
     "webServerName": "app.example.com",
-    "apiServerName": "api.example.com"
+    "apiServerName": "api.example.com",
+    "clientMaxBodySize": "16m"
   }
 }

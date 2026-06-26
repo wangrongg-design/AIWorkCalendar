@@ -29,6 +29,7 @@ export type WorkLogDraftItem = {
   hours: number;
   startTime: string | null;
   endTime: string | null;
+  projectHint: string | null;
   confidence: number;
   missingFields: string[];
 };
@@ -107,6 +108,7 @@ export const workLogDraftJsonSchema = {
     "hours",
     "startTime",
     "endTime",
+    "projectHint",
     "confidence",
     "missingFields",
     "assistantMessage",
@@ -120,6 +122,7 @@ export const workLogDraftJsonSchema = {
     hours: { type: "number", minimum: 0, maximum: 24 },
     startTime: { anyOf: [{ type: "string" }, { type: "null" }] },
     endTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+    projectHint: { anyOf: [{ type: "string" }, { type: "null" }] },
     confidence: { type: "number", minimum: 0, maximum: 1 },
     missingFields: { type: "array", items: { type: "string" } },
     assistantMessage: { type: "string" },
@@ -128,7 +131,7 @@ export const workLogDraftJsonSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["date", "kind", "title", "content", "hours", "startTime", "endTime", "confidence", "missingFields"],
+        required: ["date", "kind", "title", "content", "hours", "startTime", "endTime", "projectHint", "confidence", "missingFields"],
         properties: {
           date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
           kind: { type: "string", enum: ["DAILY", "PLAN"] },
@@ -137,6 +140,7 @@ export const workLogDraftJsonSchema = {
           hours: { type: "number", minimum: 0, maximum: 24 },
           startTime: { anyOf: [{ type: "string" }, { type: "null" }] },
           endTime: { anyOf: [{ type: "string" }, { type: "null" }] },
+          projectHint: { anyOf: [{ type: "string" }, { type: "null" }] },
           confidence: { type: "number", minimum: 0, maximum: 1 },
           missingFields: { type: "array", items: { type: "string" } }
         }

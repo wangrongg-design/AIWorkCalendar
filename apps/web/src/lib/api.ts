@@ -137,6 +137,9 @@ export function humanizeApiError(message: string, status?: number, path = "", me
     return "服务暂时不可用，请稍后重试；如果反复出现，请联系运维人员。";
   }
   if (normalized === "failed to fetch" || normalized.includes("networkerror")) {
+    if (isAttachmentEndpoint && upperMethod === "POST") {
+      return "附件上传失败，可能是网络中断或服务器上传大小限制。日报正文会优先保存，请稍后在填报记录中重新上传附件。";
+    }
     return "暂时无法连接服务，请确认本地 API 已启动，或稍后重试。";
   }
   return message;
@@ -181,6 +184,54 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   return (await response.json()) as T;
 }
 
+function decodeHeaderValue(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function stripHeaderQuotes(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function filenameFromDisposition(disposition: string) {
+  const encodedMatch = disposition.match(/filename\*\s*=\s*(?:UTF-8''|utf-8'')?([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    return decodeHeaderValue(stripHeaderQuotes(encodedMatch[1]));
+  }
+
+  const quotedMatch = disposition.match(/filename\s*=\s*"([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return decodeHeaderValue(quotedMatch[1]);
+  }
+
+  const bareMatch = disposition.match(/filename\s*=\s*([^;]+)/i);
+  if (bareMatch?.[1]) {
+    return decodeHeaderValue(stripHeaderQuotes(bareMatch[1]));
+  }
+
+  return null;
+}
+
+function fallbackFilename(contentType: string | null) {
+  const normalized = contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (normalized === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "download.xlsx";
+  if (normalized === "application/vnd.ms-excel") return "download.xls";
+  if (normalized === "text/csv") return "download.csv";
+  if (normalized === "application/zip" || normalized === "application/x-zip-compressed") return "download.zip";
+  if (normalized === "application/pdf") return "download.pdf";
+  if (normalized === "application/msword") return "download.doc";
+  if (normalized === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "download.docx";
+  if (normalized === "application/json") return "download.json";
+  return "download.bin";
+}
+
 export async function apiDownload(path: string, options: RequestInit = {}) {
   const token = useAuthStore.getState().token;
   const headers = new Headers(options.headers);
@@ -201,9 +252,9 @@ export async function apiDownload(path: string, options: RequestInit = {}) {
     throw new Error(humanizeApiError(message, response.status, path, options.method ?? "GET"));
   }
   const disposition = response.headers.get("Content-Disposition") ?? "";
-  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const contentType = response.headers.get("Content-Type");
   return {
     blob: await response.blob(),
-    filename: filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : "download.zip"
+    filename: filenameFromDisposition(disposition) ?? fallbackFilename(contentType)
   };
 }

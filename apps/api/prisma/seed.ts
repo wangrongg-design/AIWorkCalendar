@@ -1,4 +1,4 @@
-import { PrismaClient, ProjectStatus, RoleCode, SubscriptionPlan, SubscriptionStatus, WorkLogStatus } from "@prisma/client";
+import { PrismaClient, ProjectStatus, RoleCode, SubscriptionPlan, SubscriptionStatus, WorkLogKind, WorkLogStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -467,6 +467,7 @@ async function main() {
       date: tomorrow,
       title: "AI 汇报质量评估计划",
       content: "计划抽样 20 条日报评估 AI 汇报结构，重点检查风险、阻塞和建议动作是否可执行。",
+      kind: WorkLogKind.PLAN,
       startTime: hoursAgoDate(tomorrow, 2),
       endTime: hoursAgoDate(tomorrow, 4),
       hours: "2",
@@ -482,6 +483,7 @@ async function main() {
         userId: log.userId,
         projectId: log.projectId,
         date: log.date,
+        kind: log.kind ?? WorkLogKind.DAILY,
         title: log.title,
         content: log.content,
         startTime: log.startTime,
@@ -493,6 +495,7 @@ async function main() {
       },
       create: {
         ...log,
+        kind: log.kind ?? WorkLogKind.DAILY,
         tenantId: tenant.id,
         submittedAt: new Date()
       }

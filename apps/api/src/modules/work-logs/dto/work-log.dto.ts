@@ -1,5 +1,10 @@
 import { Type } from "class-transformer";
-import { IsBase64, IsDateString, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import { IsBase64, IsDateString, IsEnum, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+
+export enum WorkLogKindDto {
+  DAILY = "DAILY",
+  PLAN = "PLAN"
+}
 
 export class WorkLogQueryDto {
   @IsOptional()
@@ -21,6 +26,10 @@ export class WorkLogQueryDto {
   @IsOptional()
   @IsString()
   projectId?: string;
+
+  @IsOptional()
+  @IsEnum(WorkLogKindDto)
+  kind?: WorkLogKindDto;
 }
 
 export class CreateWorkLogDto {
@@ -57,6 +66,10 @@ export class CreateWorkLogDto {
   @IsOptional()
   @IsString()
   projectId?: string | null;
+
+  @IsOptional()
+  @IsEnum(WorkLogKindDto)
+  kind?: WorkLogKindDto;
 }
 
 export class UpdateWorkLogDto {
@@ -92,6 +105,10 @@ export class UpdateWorkLogDto {
   @IsOptional()
   @IsString()
   projectId?: string | null;
+
+  @IsOptional()
+  @IsEnum(WorkLogKindDto)
+  kind?: WorkLogKindDto;
 }
 
 export class CreateWorkLogAttachmentDto {

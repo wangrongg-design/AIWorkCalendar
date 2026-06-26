@@ -1,17 +1,29 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Checkbox, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
 import { Download, Edit2, MessageSquare, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import type { ClipboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  WorkLogDraftComposer,
+  composeDraftComposerContent,
+  createEmptyDraftComposerItem,
+  draftComposerItemFromAi,
+  projectIdFromDraftHint,
+  selectedDraftComposerEntries,
+  validateDraftComposerState,
+  workLogDraftDateLabel,
+  type WorkLogDraftComposerItem,
+  type WorkLogDraftComposerState
+} from "@/components/WorkLogDraftComposer";
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { CommunicationInsight, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem } from "@/lib/types";
+import { CommunicationInsight, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type WorkLogForm = {
@@ -22,6 +34,7 @@ type WorkLogForm = {
   endTime?: dayjs.Dayjs;
   hours?: number | null;
   projectId?: string;
+  kind?: WorkLogKind;
 };
 
 type CommunicationDraftForm = {
@@ -42,17 +55,14 @@ type PendingAttachment = {
   file: File;
 };
 
-type DraftPreviewItem = WorkLogDraftItem & {
-  projectId?: string;
-  selected: boolean;
+type AttachmentUploadResult = {
+  uploadedCount: number;
+  failedCount: number;
+  error?: Error;
 };
 
-type DraftPreview = {
-  assistantMessage: string;
-  items: DraftPreviewItem[];
-  attachedToFirst: boolean;
-  attachmentTargetIndex: number;
-};
+type DraftPreviewItem = WorkLogDraftComposerItem;
+type DraftPreview = WorkLogDraftComposerState;
 
 const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -118,7 +128,8 @@ function toPayload(values: WorkLogForm) {
       ? date.hour(values.endTime.hour()).minute(values.endTime.minute()).second(0).millisecond(0).toISOString()
       : undefined,
     hours,
-    projectId: values.projectId || undefined
+    projectId: values.projectId || undefined,
+    kind: values.kind ?? (date.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY")
   };
 }
 
@@ -135,6 +146,7 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
     title: item.title || "工作填报",
     content: item.content || item.title || "工作填报",
     hours: Number.isFinite(hours) ? hours : null,
+    kind: item.kind,
     startTime: parseWorkLogTime(item.startTime, safeDate),
     endTime: parseWorkLogTime(item.endTime, safeDate)
   };
@@ -143,6 +155,7 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
 function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
   return {
     ...draftItemToForm(item),
+    content: composeDraftComposerContent(item),
     projectId: item.projectId
   };
 }
@@ -156,8 +169,10 @@ export default function WorkLogsPage() {
   const [detailRecord, setDetailRecord] = useState<WorkLog | null>(null);
   const [communicationDraft, setCommunicationDraft] = useState<CommunicationInsight | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [entryDate, setEntryDate] = useState(dayjs());
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(null);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "DRAFT" | "SUBMITTED">("ALL");
+  const [kindFilter, setKindFilter] = useState<"ALL" | WorkLogKind>("ALL");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
   const initialOpenHandled = useRef(false);
   const [aiInput, setAiInput] = useState("");
@@ -206,10 +221,11 @@ export default function WorkLogsPage() {
     return (logs.data ?? []).filter((item) => {
       const dateMatched = dateFilter ? dayjs(item.date).format("YYYY-MM-DD") === dateFilter.format("YYYY-MM-DD") : true;
       const statusMatched = statusFilter === "ALL" ? true : item.status === statusFilter;
+      const kindMatched = kindFilter === "ALL" ? true : (item.kind ?? "DAILY") === kindFilter;
       const projectMatched = projectFilter ? item.projectId === projectFilter : true;
-      return dateMatched && statusMatched && projectMatched;
+      return dateMatched && statusMatched && kindMatched && projectMatched;
     });
-  }, [dateFilter, logs.data, projectFilter, statusFilter]);
+  }, [dateFilter, kindFilter, logs.data, projectFilter, statusFilter]);
 
   const pendingUploadFiles: UploadFile[] = useMemo(
     () =>
@@ -222,23 +238,34 @@ export default function WorkLogsPage() {
     [pendingAttachments]
   );
 
-  const uploadPendingAttachments = async (workLogId: string) => {
+  const uploadPendingAttachments = async (workLogId: string): Promise<AttachmentUploadResult> => {
     const files = [...pendingAttachments];
+    let uploadedCount = 0;
     for (const item of files) {
-      const contentBase64 = await fileToBase64(item.file);
-      await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
-        method: "POST",
-        body: JSON.stringify({
-          fileName: item.file.name,
-          mimeType: item.file.type || "application/octet-stream",
-          fileSize: item.file.size,
-          contentBase64
-        })
-      });
+      try {
+        const contentBase64 = await fileToBase64(item.file);
+        await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
+          method: "POST",
+          body: JSON.stringify({
+            fileName: item.file.name,
+            mimeType: item.file.type || "application/octet-stream",
+            fileSize: item.file.size,
+            contentBase64
+          })
+        });
+        uploadedCount += 1;
+      } catch (error) {
+        return {
+          uploadedCount,
+          failedCount: files.length - uploadedCount,
+          error: error instanceof Error ? error : new Error("附件上传失败")
+        };
+      }
     }
     if (files.length) {
       setPendingAttachments([]);
     }
+    return { uploadedCount, failedCount: 0 };
   };
 
   const communicationDraftPayload = (values: CommunicationDraftForm, submit: boolean) => ({
@@ -296,38 +323,27 @@ export default function WorkLogsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const createAndSubmitLog = async (values: WorkLogForm, withAttachments: boolean) => {
+  const createLogRecord = async (values: WorkLogForm, withAttachments: boolean, submit: boolean) => {
     const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(toPayload(values)) });
+    let attachmentUpload: AttachmentUploadResult | null = null;
     if (withAttachments) {
-      await uploadPendingAttachments(workLog.id);
+      attachmentUpload = await uploadPendingAttachments(workLog.id);
     }
-    return apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" });
+    const savedWorkLog = submit ? await apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" }) : workLog;
+    return { workLog: savedWorkLog, attachmentUpload };
   };
-
-  const createLog = useMutation({
-    mutationFn: (values: WorkLogForm) => createAndSubmitLog(values, true),
-    onSuccess: () => {
-      message.success("已提交，将自动分析。");
-      setModalOpen(false);
-      setPendingAttachments([]);
-      form.resetFields();
-      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
-    },
-    onError: (error) => {
-      message.error((error as Error).message || "填报失败，请检查内容后重试。");
-    }
-  });
 
   const updateLog = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: WorkLogForm }) => {
       const workLog = await apiFetch<WorkLog>(`/work-logs/${id}`, { method: "PATCH", body: JSON.stringify(toPayload(values)) });
-      await uploadPendingAttachments(id);
-      return workLog;
+      const attachmentUpload = pendingAttachments.length ? await uploadPendingAttachments(id) : null;
+      return { workLog, attachmentUpload };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success("已更新填报");
+      if (result.attachmentUpload?.failedCount) {
+        message.warning(`填报内容已保存，但 ${result.attachmentUpload.failedCount} 个附件上传失败。${result.attachmentUpload.error?.message ?? "请稍后重新上传。"}`);
+      }
       setModalOpen(false);
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
@@ -424,7 +440,7 @@ export default function WorkLogsPage() {
         draft,
         preview: {
           assistantMessage: draft.assistantMessage,
-          items: items.map((item) => ({ ...item, projectId: form.getFieldValue("projectId"), selected: true })),
+          items: items.map((item, index) => draftComposerItemFromAi(item, index, projectIdFromDraftHint(projects.data, item.projectHint))),
           attachedToFirst,
           attachmentTargetIndex: 0
         } satisfies DraftPreview,
@@ -441,10 +457,7 @@ export default function WorkLogsPage() {
         message.success("已整理到表单，请确认后保存修改。");
       } else {
         setDraftPreview(preview);
-        if (preview?.items.length === 1) {
-          form.setFieldsValue(draftPreviewItemToForm(preview.items[0]));
-        }
-        message.success("已生成草稿，请确认后提交。");
+        message.success(preview?.items.length ? `已生成 ${preview.items.length} 条草稿，请逐条确认。` : "已生成草稿，请确认后提交。");
       }
     },
     onError: (error) => {
@@ -452,23 +465,31 @@ export default function WorkLogsPage() {
     }
   });
 
-  const confirmDraftLog = useMutation({
-    mutationFn: async (preview: DraftPreview) => {
-      const selectedEntries = preview.items.map((item, index) => ({ item, index })).filter((entry) => entry.item.selected);
+  const persistDraftLog = useMutation({
+    mutationFn: async ({ preview, submit }: { preview: DraftPreview; submit: boolean }) => {
+      const selectedEntries = selectedDraftComposerEntries(preview);
       if (!selectedEntries.length) {
-        throw new Error("请至少确认一条草稿。");
+        throw new Error("请至少选择一条日报项。");
       }
       const hasAttachments = pendingAttachments.length > 0;
       const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
       const uploadTargetIndex = selectedEntries.some((entry) => entry.index === requestedTargetIndex) ? requestedTargetIndex : selectedEntries[0].index;
+      let attachmentUpload: AttachmentUploadResult | null = null;
       for (const { item, index } of selectedEntries) {
-        await createAndSubmitLog(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex);
+        const result = await createLogRecord(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex, submit);
+        if (result.attachmentUpload) {
+          attachmentUpload = result.attachmentUpload;
+        }
       }
-      return { ...preview, submittedCount: selectedEntries.length, hasAttachments, uploadTargetIndex };
+      return { ...preview, persistedCount: selectedEntries.length, hasAttachments, uploadTargetIndex, submit, attachmentUpload };
     },
     onSuccess: (preview) => {
-      message.success(preview.submittedCount > 1 ? `已提交 ${preview.submittedCount} 条填报。` : "已提交填报。");
-      if (preview.hasAttachments && preview.submittedCount > 1) {
+      message.success(preview.submit ? `已提交 ${preview.persistedCount} 条日报。` : `已保存 ${preview.persistedCount} 条草稿。`);
+      if (preview.attachmentUpload?.failedCount) {
+        message.warning(
+          `${preview.submit ? "日报已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
+        );
+      } else if (preview.hasAttachments && preview.persistedCount > 1) {
         message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
       }
       setDraftPreview(null);
@@ -480,7 +501,7 @@ export default function WorkLogsPage() {
       queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "提交草稿失败，请检查后重试。");
+      message.error(error instanceof Error ? error.message : "保存日报项失败，请检查后重试。");
     }
   });
 
@@ -491,36 +512,36 @@ export default function WorkLogsPage() {
     setLastAiInput(text);
     setAiMessages(nextMessages);
     setAiInput("");
-    setDraftPreview(null);
     draftLog.mutate(nextMessages);
   };
 
   const continueEditingDraftPrompt = () => {
     setAiInput((current) => current || lastAiInput);
-    setDraftPreview(null);
   };
 
   const openCreate = (dateValue = dayjs()) => {
     const dateKey = dateValue.format("YYYY-MM-DD");
     const isFuture = dateKey > dayjs().format("YYYY-MM-DD");
     setEditing(null);
+    setEntryDate(dateValue);
     setPendingAttachments([]);
     form.resetFields();
     form.setFieldsValue({
       date: dateValue,
       title: isFuture ? "工作计划" : "工作日报",
       content: "",
-      hours: null
+      hours: null,
+      kind: isFuture ? "PLAN" : "DAILY"
     });
     setAiInput("");
     setLastAiInput("");
-    setAiMessages([
-      {
-        role: "assistant",
-        content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会先识别整理，等待完成后再写入填报。"
-      }
-    ]);
-    setDraftPreview(null);
+    setAiMessages([]);
+    setDraftPreview({
+      assistantMessage: "今日日报项",
+      items: [],
+      attachedToFirst: false,
+      attachmentTargetIndex: 0
+    });
     setModalOpen(true);
   };
 
@@ -545,7 +566,8 @@ export default function WorkLogsPage() {
       startTime: parseWorkLogTime(record.startTime, record.date),
       endTime: parseWorkLogTime(record.endTime, record.date),
       hours: Number(record.hours),
-      projectId: record.projectId ?? undefined
+      projectId: record.projectId ?? undefined,
+      kind: record.kind ?? "DAILY"
     });
     setAiInput("");
     setLastAiInput("");
@@ -590,8 +612,60 @@ export default function WorkLogsPage() {
     );
   };
 
+  const deleteDraftPreviewItem = (index: number) => {
+    setDraftPreview((current) => {
+      if (!current) return current;
+      const items = current.items.filter((_, itemIndex) => itemIndex !== index);
+      return {
+        ...current,
+        items,
+        attachmentTargetIndex: Math.max(0, Math.min(current.attachmentTargetIndex, Math.max(0, items.length - 1)))
+      };
+    });
+  };
+
+  const addManualDraftItem = () => {
+    setDraftPreview((current) => {
+      const nextItem = createEmptyDraftComposerItem(entryDate);
+      if (!current) {
+        return {
+          assistantMessage: "手动新增项目日报项。",
+          items: [nextItem],
+          attachedToFirst: false,
+          attachmentTargetIndex: 0
+        };
+      }
+      return {
+        ...current,
+        items: [...current.items, nextItem]
+      };
+    });
+  };
+
+  const markDraftItemExpanded = (index: number) => {
+    if (index < 0) return;
+    updateDraftPreviewItem(index, { expanded: true });
+  };
+
+  const persistDraftPreview = (submit: boolean) => {
+    const validation = validateDraftComposerState(draftPreview);
+    if (!validation.ok) {
+      markDraftItemExpanded(validation.index);
+      message.warning(validation.message);
+      return;
+    }
+    persistDraftLog.mutate({ preview: draftPreview as DraftPreview, submit });
+  };
+  const entryKindTitle = entryDate.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD") ? "填写计划" : "填写日报";
+
   const columns: ColumnsType<WorkLog> = [
     { title: "日期", dataIndex: "date", width: 110, render: (value: string) => dayjs(value).format("YYYY-MM-DD") },
+    {
+      title: "类型",
+      dataIndex: "kind",
+      width: 90,
+      render: (value?: WorkLogKind) => <Tag color={(value ?? "DAILY") === "PLAN" ? "blue" : "green"}>{(value ?? "DAILY") === "PLAN" ? "计划" : "日报"}</Tag>
+    },
     {
       title: "填报时间",
       width: 170,
@@ -678,11 +752,11 @@ export default function WorkLogsPage() {
 
       <div className="surface-panel worklog-entry-panel">
         <div className="worklog-entry-copy">
-          <div className="section-title">写日报/计划</div>
-          <div className="section-subtitle">直接写一句话，系统会识别日期、工时和工作内容，多条日程也可以一次填报。</div>
+          <div className="section-title">填写今日日报</div>
+          <div className="section-subtitle">把今天的多个项目工作整理成独立日报项，项目、工时和附件逐条确认。</div>
         </div>
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
-          写日报/计划
+          填写今日日报
         </Button>
       </div>
 
@@ -740,6 +814,16 @@ export default function WorkLogsPage() {
             ]}
           />
           <Select
+            value={kindFilter}
+            style={{ width: 132 }}
+            onChange={setKindFilter}
+            options={[
+              { value: "ALL", label: "全部类型" },
+              { value: "DAILY", label: "日报" },
+              { value: "PLAN", label: "计划" }
+            ]}
+          />
+          <Select
             allowClear
             value={projectFilter}
             placeholder="按项目筛选"
@@ -762,255 +846,155 @@ export default function WorkLogsPage() {
       </section>
 
       <Modal
-        title={editing ? "编辑填报" : "新增填报"}
+        title={
+          editing ? (
+            "编辑填报"
+          ) : (
+            <div className="today-log-modal-title">
+              <strong>{entryKindTitle}</strong>
+              <span>{workLogDraftDateLabel(entryDate)}，可一次提交多条日报或计划</span>
+            </div>
+          )
+        }
         open={modalOpen}
         onCancel={() => {
           setModalOpen(false);
           setDraftPreview(null);
           setPendingAttachments([]);
+          setEditing(null);
         }}
-        onOk={() => form.submit()}
-        okText={editing ? "保存修改" : "提交表单"}
-        cancelText="取消"
-        confirmLoading={createLog.isPending || updateLog.isPending || draftLog.isPending || confirmDraftLog.isPending}
-        width={880}
+        footer={
+          editing
+            ? [
+                <Button key="cancel" onClick={() => setModalOpen(false)}>
+                  取消
+                </Button>,
+                <Button key="save" type="primary" loading={updateLog.isPending} onClick={() => form.submit()}>
+                  保存修改
+                </Button>
+              ]
+            : null
+        }
+        width={editing ? 760 : 920}
+        className={editing ? undefined : "today-log-modal"}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, form.setFieldsValue)}
-          onFinish={(values) => {
-            if (editing) {
-              updateLog.mutate({ id: editing.id, values });
-            } else {
-              createLog.mutate(values);
-            }
-          }}
-        >
-          <div className="mb-5 rounded-[18px] bg-surface-container-low p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-              <WandSparkles size={17} className="text-secondary" />
-              智能草稿
-            </div>
-            <div className="mb-3 max-h-48 space-y-2 overflow-auto">
-              {aiMessages.map((item, index) => (
-                <div
-                  key={`${item.role}-${index}`}
-                  className={`rounded-[14px] px-3 py-2 text-sm leading-6 ${
-                    item.role === "user" ? "ml-8 bg-primary text-white" : "mr-8 bg-white text-muted"
-                  }`}
-                >
-                  {item.content}
-                </div>
-              ))}
-            </div>
-            {draftLog.error ? <Alert className="mb-3" type="error" showIcon message={(draftLog.error as Error).message} /> : null}
-            {draftLog.isPending ? (
-              <div className="quickfill-draft-waiting" role="status" aria-live="polite">
-                <span className="quickfill-draft-spinner" />
-                <div>
-                  <strong>{editing ? "正在整理到表单" : "正在生成草稿"}</strong>
-                  <p>正在调用模型识别日期、工时和工作内容，正式环境可能需要 5-20 秒，请稍候。</p>
-                </div>
-              </div>
-            ) : null}
-            <div className="flex gap-2">
-              <Input.TextArea
-                value={aiInput}
-                autoSize={{ minRows: 2, maxRows: 4 }}
-                placeholder="例如：今天完成小程序语音填报，联调日历看板，花了 3 小时。明天计划优化登录页。"
-                disabled={draftLog.isPending}
-                onPaste={handlePasteImages}
-                onChange={(event) => setAiInput(event.target.value)}
-                onPressEnter={(event) => {
-                  if (!event.shiftKey) {
-                    event.preventDefault();
-                    sendAiMessage();
-                  }
-                }}
-              />
-              <Button className="ai-soft-button" icon={<WandSparkles size={16} />} loading={draftLog.isPending} disabled={draftLog.isPending} onClick={sendAiMessage}>
-                {editing ? "整理到表单" : "生成草稿"}
-              </Button>
-            </div>
-            {draftPreview ? (
-              <div className="quickfill-draft-preview">
-                <Alert
-                  type={draftPreview.items.some((item) => item.selected && (item.missingFields.length > 0 || item.confidence < 0.8)) ? "warning" : "info"}
-                  showIcon
-                  message="请确认草稿后再提交"
-                  description="系统不会自动提交。你可以逐条确认、跳过或修改日期、标题、工时、项目和内容。"
+        {editing ? (
+          <Form
+            form={form}
+            layout="vertical"
+            onValuesChange={(changed, values) => applyWorkLogTimingAutoFill(changed, values, form.setFieldsValue)}
+            onFinish={(values) => updateLog.mutate({ id: editing.id, values })}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <Form.Item name="date" label="日期" rules={[{ required: true }]}>
+                <DatePicker className="w-full" />
+              </Form.Item>
+              <Form.Item name="hours" label="工时">
+                <InputNumber className="w-full" min={0} max={24} step={0.5} placeholder="可不填" />
+              </Form.Item>
+              <Form.Item name="kind" label="类型" rules={[{ required: true }]}>
+                <Select
+                  options={[
+                    { value: "DAILY", label: "日报" },
+                    { value: "PLAN", label: "计划" }
+                  ]}
                 />
-                {pendingAttachments.length > 0 && draftPreview.items.length > 1 ? (
-                  <div className="quickfill-attachment-target">
-                    <span>附件归属</span>
-                    <Select
-                      value={draftPreview.attachmentTargetIndex}
-                      listHeight={280}
-                      options={draftPreview.items.map((item, index) => ({
-                        value: index,
-                        disabled: !item.selected,
-                        label: `第 ${index + 1} 条 · ${item.title || "未命名草稿"}`
-                      }))}
-                      onChange={(value) =>
-                        setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))
-                      }
-                    />
-                    <em>未选择或跳过目标时，自动关联到第一条已确认草稿。</em>
-                  </div>
-                ) : null}
-                <div className="quickfill-draft-list">
-                  {draftPreview.items.map((item, index) => (
-                    <div key={`${item.date}-${item.title}-${index}`} className={`quickfill-draft-item ${item.selected ? "" : "is-muted"}`}>
-                      <div className="quickfill-draft-head">
-                        <Checkbox checked={item.selected} onChange={(event) => updateDraftPreviewItem(index, { selected: event.target.checked })}>
-                          确认第 {index + 1} 条
-                        </Checkbox>
-                        <span>{item.kind === "PLAN" ? "计划" : "日报"}</span>
+              </Form.Item>
+              <Form.Item name="startTime" label="开始时间">
+                <TimePicker className="w-full" format="HH:mm" />
+              </Form.Item>
+              <Form.Item name="endTime" label="结束时间">
+                <TimePicker className="w-full" format="HH:mm" />
+              </Form.Item>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+              <Form.Item className="md:col-span-3" name="title" label="标题" rules={[{ required: true, min: 2 }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
+                <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" loading={projects.isFetching} listHeight={280} dropdownStyle={{ zIndex: 1800 }} options={projectOptions} />
+              </Form.Item>
+            </div>
+            <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
+              <Input.TextArea rows={6} onPaste={handlePasteImages} />
+            </Form.Item>
+            <Form.Item label="附件">
+              {editing.attachments?.length ? (
+                <div className="mb-3 space-y-2">
+                  {editing.attachments.map((attachment) => (
+                    <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-[12px] bg-surface-container-low px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-ink">{attachment.fileName}</div>
+                        <div className="text-xs text-muted">
+                          {attachment.kind === "IMAGE" ? "图片" : "文件"} · {formatFileSize(attachment.fileSize)}
+                        </div>
                       </div>
-                      <div className="quickfill-draft-edit-grid">
-                        <label>
-                          <span>日期</span>
-                          <DatePicker
-                            className="w-full"
-                            value={dayjs(item.date).isValid() ? dayjs(item.date) : dayjs()}
-                            onChange={(value) => value && updateDraftPreviewItem(index, { date: value.format("YYYY-MM-DD") })}
-                          />
-                        </label>
-                        <label>
-                          <span>工时</span>
-                          <InputNumber
-                            className="w-full"
-                            min={0}
-                            max={24}
-                            step={0.5}
-                            value={item.hours}
-                            onChange={(value) => updateDraftPreviewItem(index, { hours: Number(value ?? 0) })}
-                          />
-                        </label>
-                        <label className="quickfill-draft-title-field">
-                          <span>标题</span>
-                          <Input value={item.title} onChange={(event) => updateDraftPreviewItem(index, { title: event.target.value })} />
-                        </label>
-                        <label className="quickfill-draft-project-field">
-                          <span>项目</span>
-                          <Select
-                            allowClear
-                            showSearch
-                            optionFilterProp="label"
-                            value={item.projectId}
-                            placeholder="未关联"
-                            loading={projects.isFetching}
-                            listHeight={280}
-                            dropdownStyle={{ zIndex: 1800 }}
-                            options={projectOptions}
-                            onChange={(value) => updateDraftPreviewItem(index, { projectId: value })}
-                          />
-                        </label>
-                      </div>
-                      <label className="quickfill-draft-content-field">
-                        <span>内容</span>
-                        <Input.TextArea
-                          autoSize={{ minRows: 2, maxRows: 5 }}
-                          value={item.content}
-                          onPaste={handlePasteImages}
-                          onChange={(event) => updateDraftPreviewItem(index, { content: event.target.value })}
+                      <Space>
+                        <Button
+                          size="small"
+                          icon={<Download size={14} />}
+                          onClick={() =>
+                            downloadAttachment(editing.id, attachment).catch((error) => message.error((error as Error).message || "下载失败，请刷新页面后重试。"))
+                          }
                         />
-                      </label>
-                      <div className="quickfill-draft-meta">
-                        <span>附件：{pendingAttachments.length ? (draftPreview.attachmentTargetIndex === index ? "关联到本条" : "未关联到本条") : "无"}</span>
-                        <span>项目：{item.projectId ? projectNameById.get(item.projectId) ?? "已选择项目" : "未关联"}</span>
-                        <span>置信度：{Math.round(item.confidence * 100)}%</span>
-                      </div>
-                      {item.missingFields.length ? <div className="quickfill-draft-warning">需确认：{item.missingFields.join("、")}</div> : null}
+                        <Popconfirm title="确认删除这个附件？" onConfirm={() => deleteAttachment.mutate({ workLogId: editing.id, attachmentId: attachment.id })}>
+                          <Button size="small" danger icon={<Trash2 size={14} />} loading={deleteAttachment.isPending} />
+                        </Popconfirm>
+                      </Space>
                     </div>
                   ))}
                 </div>
-                <div className="quickfill-draft-actions">
-                  <Button onClick={continueEditingDraftPrompt}>继续修改描述</Button>
-                  <Button
-                    type="primary"
-                    loading={confirmDraftLog.isPending}
-                    disabled={!draftPreview.items.some((item) => item.selected)}
-                    onClick={() => confirmDraftLog.mutate(draftPreview)}
-                  >
-                    确认并提交{draftPreview.items.filter((item) => item.selected).length > 1 ? ` ${draftPreview.items.filter((item) => item.selected).length} 条` : ""}
-                  </Button>
-                </div>
+              ) : null}
+              <div className="paste-upload-zone" tabIndex={0} onPaste={handlePasteImages}>
+                <Upload.Dragger
+                  multiple
+                  fileList={pendingUploadFiles}
+                  beforeUpload={addPendingAttachment}
+                  onRemove={(file) => {
+                    setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+                    return true;
+                  }}
+                >
+                  <p className="ant-upload-drag-icon">
+                    <UploadCloud size={28} />
+                  </p>
+                  <p className="ant-upload-text">添加照片或文件</p>
+                  <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴微信或聊天截图。</p>
+                </Upload.Dragger>
               </div>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <Form.Item name="date" label="日期" rules={[{ required: true }]}>
-              <DatePicker className="w-full" />
             </Form.Item>
-            <Form.Item name="hours" label="工时">
-              <InputNumber className="w-full" min={0} max={24} step={0.5} placeholder="可不填" />
-            </Form.Item>
-            <Form.Item name="startTime" label="开始时间">
-              <TimePicker className="w-full" format="HH:mm" />
-            </Form.Item>
-            <Form.Item name="endTime" label="结束时间">
-              <TimePicker className="w-full" format="HH:mm" />
-            </Form.Item>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <Form.Item className="md:col-span-3" name="title" label="标题" rules={[{ required: true, min: 2 }]}>
-              <Input />
-            </Form.Item>
-            <Form.Item className="md:col-span-2" name="projectId" label="关联项目">
-              <Select allowClear showSearch optionFilterProp="label" placeholder="选择项目" loading={projects.isFetching} listHeight={280} dropdownStyle={{ zIndex: 1800 }} options={projectOptions} />
-            </Form.Item>
-          </div>
-          <Form.Item name="content" label="工作内容" rules={[{ required: true, min: 2 }]}>
-            <Input.TextArea rows={6} onPaste={handlePasteImages} />
-          </Form.Item>
-          <Form.Item label="附件">
-            {editing?.attachments?.length ? (
-              <div className="mb-3 space-y-2">
-                {editing.attachments.map((attachment) => (
-                  <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-[12px] bg-surface-container-low px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-ink">{attachment.fileName}</div>
-                      <div className="text-xs text-muted">
-                        {attachment.kind === "IMAGE" ? "图片" : "文件"} · {formatFileSize(attachment.fileSize)}
-                      </div>
-                    </div>
-                    <Space>
-                      <Button
-                        size="small"
-                        icon={<Download size={14} />}
-                        onClick={() =>
-                          downloadAttachment(editing.id, attachment).catch((error) => message.error((error as Error).message || "下载失败，请刷新页面后重试。"))
-                        }
-                      />
-                      <Popconfirm title="确认删除这个附件？" onConfirm={() => deleteAttachment.mutate({ workLogId: editing.id, attachmentId: attachment.id })}>
-                        <Button size="small" danger icon={<Trash2 size={14} />} loading={deleteAttachment.isPending} />
-                      </Popconfirm>
-                    </Space>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <div className="paste-upload-zone" tabIndex={0} onPaste={handlePasteImages}>
-              <Upload.Dragger
-                multiple
-                fileList={pendingUploadFiles}
-                beforeUpload={addPendingAttachment}
-                onRemove={(file) => {
-                  setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
-                  return true;
-                }}
-              >
-                <p className="ant-upload-drag-icon">
-                  <UploadCloud size={28} />
-                </p>
-                <p className="ant-upload-text">添加照片或文件</p>
-                <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴微信或聊天截图。</p>
-              </Upload.Dragger>
-            </div>
-          </Form.Item>
-        </Form>
+          </Form>
+        ) : (
+          <WorkLogDraftComposer
+            aiMessages={aiMessages}
+            aiInput={aiInput}
+            aiPending={draftLog.isPending}
+            aiError={draftLog.error instanceof Error ? draftLog.error : null}
+            onAiInputChange={setAiInput}
+            onGenerateDraft={sendAiMessage}
+            onContinuePrompt={continueEditingDraftPrompt}
+            draftPreview={draftPreview}
+            onUpdateItem={updateDraftPreviewItem}
+            onDeleteItem={deleteDraftPreviewItem}
+            onAddManualItem={addManualDraftItem}
+            onAttachmentTargetChange={(value) => setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))}
+            onSaveDrafts={() => persistDraftPreview(false)}
+            onSubmitDrafts={() => persistDraftPreview(true)}
+            saving={persistDraftLog.isPending && persistDraftLog.variables?.submit === false}
+            submitting={persistDraftLog.isPending && persistDraftLog.variables?.submit === true}
+            projectOptions={projectOptions}
+            projectNameById={projectNameById}
+            projectsLoading={projects.isFetching}
+            pendingAttachmentCount={pendingAttachments.length}
+            pendingUploadFiles={pendingUploadFiles}
+            beforeUploadAttachment={addPendingAttachment}
+            onRemoveAttachment={(file) => {
+              setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
+              return true;
+            }}
+            onPasteImages={handlePasteImages}
+          />
+        )}
       </Modal>
 
       <Modal

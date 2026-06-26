@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Collapse, Drawer, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { AlertTriangle, BookOpen, CheckCircle2, FileText, GitBranch, Link2, MessageSquare, PlayCircle, RotateCw, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, BookOpen, CheckCircle2, GitBranch, Link2, MessageSquare, PlayCircle, RotateCw, ShieldCheck, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import {
@@ -272,6 +272,7 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<CommunicationSource | null>(null);
   const [bindingTargets, setBindingTargets] = useState<Record<string, string | undefined>>({});
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const overview = useQuery({
     queryKey: ["wecom-overview"],
@@ -333,26 +334,19 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
 
   const projectNameById = useMemo(() => new Map((projects.data ?? []).map((item) => [item.id, item.code ? `${item.code} · ${item.name}` : item.name])), [projects.data]);
 
-  const saveIntegration = useMutation({
-    mutationFn: (values: IntegrationForm) =>
-      apiFetch("/wecom/integrations", {
+  const saveAndTestIntegration = useMutation({
+    mutationFn: async (values: IntegrationForm) => {
+      await apiFetch("/wecom/integrations", {
         method: "POST",
         body: JSON.stringify(values)
-      }),
-    onSuccess: () => {
-      message.success("企业微信配置已保存");
-      queryClient.invalidateQueries({ queryKey: ["wecom-overview"] });
+      });
+      return apiFetch<{ ok: boolean; message: string }>("/wecom/integrations/test", { method: "POST" });
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "保存企业微信配置失败")
-  });
-
-  const testIntegration = useMutation({
-    mutationFn: () => apiFetch<{ ok: boolean; message: string }>("/wecom/integrations/test", { method: "POST" }),
     onSuccess: (result) => {
       message[result.ok ? "success" : "warning"](result.message);
       queryClient.invalidateQueries({ queryKey: ["wecom-overview"] });
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "测试连接失败")
+    onError: (error) => message.error(error instanceof Error ? error.message : "保存或测试企业微信配置失败")
   });
 
   const autoMatch = useMutation({
@@ -384,6 +378,15 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "同步会话存档失败")
   });
+
+  const syncIsPending = syncText.isPending || syncArchive.isPending;
+  const syncWithBestMode = () => {
+    if (workerRuntime?.mode === "official" && workerRuntime.officialReady) {
+      syncArchive.mutate();
+      return;
+    }
+    syncText.mutate();
+  };
 
   const saveSource = useMutation({
     mutationFn: (values: SourceForm) =>
@@ -715,60 +718,113 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
     }
   ];
 
+  const pendingBindings = (overview.data?.bindings ?? []).filter((item) => item.mappingStatus === "CONFLICT" || item.mappingStatus === "UNMAPPED");
+  const pendingSuggestions = (overview.data?.projectSuggestions ?? []).filter((item) => item.status === "PENDING");
+  const failedFiles = (overview.data?.files ?? []).filter((item) => item.downloadStatus === "FAILED");
+  const consentIssues = (overview.data?.externalConsents ?? []).filter((item) => item.status === "DISAGREED" || item.status === "REVOKED" || item.status === "UNKNOWN");
+  const todoCount = pendingBindings.length + pendingSuggestions.length + failedFiles.length + consentIssues.length;
+  const officialMissing = workerRuntime?.mode === "official" && !workerRuntime.officialReady;
+  const hasSyncError = activeIntegration?.lastSyncStatus === "ERROR" || setup?.syncStatus === "ERROR";
+  const connectionStatus = !activeIntegration
+    ? {
+        tone: "neutral",
+        label: "未连接",
+        title: "先连接企业微信",
+        copy: "填写企业 ID、会话存档 secret 和 RSA 密钥后，系统会自动测试连接。"
+      }
+    : hasSyncError
+      ? {
+          tone: "danger",
+          label: "同步异常",
+          title: "企业微信同步需要处理",
+          copy: activeIntegration.lastError || "同步返回异常，请检查会话存档配置、可信 IP 和存档范围。"
+        }
+      : officialMissing
+        ? {
+            tone: "warning",
+            label: "待接入 SDK",
+            title: "正式同步还差 SDK 适配器",
+            copy: "配置 WECOM_MSGAUDIT_ADAPTER_CMD 后，系统才能按企业微信官方 seq 拉取真实消息。"
+          }
+        : todoCount > 0
+          ? {
+              tone: "warning",
+              label: "有待处理",
+              title: `${todoCount} 项需要确认`,
+              copy: "优先处理成员异常、项目群建议和客户存档同意，处理完再扩大同步范围。"
+            }
+          : setup?.syncStatus === "OK"
+            ? {
+                tone: "success",
+                label: "可同步",
+                title: "企业微信接入正常",
+                copy: setup.lastSyncAt ? `上次同步：${dateTimeText(setup.lastSyncAt)}` : "可以立即同步企业微信消息生成候选草稿。"
+              }
+            : {
+                tone: "neutral",
+                label: "已保存",
+                title: "配置已保存，等待同步",
+                copy: "完成成员匹配后，可以立即同步消息并查看候选草稿。"
+              };
+
   const steps = [
-    { label: "连接企业微信", done: Boolean(activeIntegration), hint: activeIntegration ? "配置已保存" : "填写 corpid、secret 和 RSA 密钥" },
-    { label: "选择同步范围", done: Boolean(activeIntegration?.syncDepartmentIds.length || activeIntegration?.syncUserIds.length || activeIntegration?.syncChatIds.length), hint: "可先用轻配置" },
-    { label: "自动匹配成员", done: Boolean(setup?.autoMatched), hint: setup?.autoMatched ? `已匹配 ${setup.autoMatched} 人` : "一键完成初始匹配" },
-    { label: "确认异常项", done: !setup?.needsConfirmation, hint: setup?.needsConfirmation ? `${setup.needsConfirmation} 项待确认` : "暂无异常" },
-    { label: "开始同步", done: setup?.syncStatus === "OK", hint: setup?.lastSyncAt ? dateTimeText(setup.lastSyncAt) : "等待同步" }
+    { label: "连接企业微信", done: Boolean(activeIntegration), hint: activeIntegration ? "配置已保存" : "填写 4 个必填项" },
+    { label: "自动匹配成员", done: Boolean(setup?.autoMatched && !setup.needsConfirmation), hint: setup?.needsConfirmation ? `${setup.needsConfirmation} 项待确认` : setup?.autoMatched ? `已匹配 ${setup.autoMatched} 人` : "一键匹配成员" },
+    { label: "开始同步", done: setup?.syncStatus === "OK", hint: setup?.lastSyncAt ? dateTimeText(setup.lastSyncAt) : "生成候选草稿" }
+  ];
+
+  const metricItems = [
+    { label: "已匹配成员", value: setup?.autoMatched ?? 0 },
+    { label: "已识别群聊", value: setup?.chatCount ?? 0 },
+    { label: "候选草稿", value: setup?.pendingDrafts ?? 0 },
+    { label: "异常项", value: todoCount }
+  ];
+
+  const todoCards = [
+    { key: "bindings", title: "成员异常", count: pendingBindings.length, copy: "未匹配或冲突成员不会自动生成日报。" },
+    { key: "suggestions", title: "项目群建议", count: pendingSuggestions.length, copy: "确认后群聊会绑定到对应项目。" },
+    { key: "consents", title: "客户同意异常", count: consentIssues.length, copy: "未同意存档的客户内容不会同步分析。" },
+    { key: "files", title: "文件失败", count: failedFiles.length, copy: "失败文件不会进入来源证据。" }
   ];
 
   return (
     <div className="wecom-workspace">
-      <Alert
-        type="info"
-        showIcon
-        icon={<ShieldCheck size={18} />}
-        message="仅支持企业微信会话内容存档"
-        description="本阶段实现企业微信官方合规接入的配置、成员映射、沟通来源和文本消息候选草稿。不会接入个人微信、外挂、Hook、抓包、RPA 或模拟客户端。"
-      />
-      {workerRuntime ? (
-        <Alert
-          type={workerRuntime.mode === "official" && workerRuntime.officialReady ? "success" : "warning"}
-          showIcon
-          className="wecom-runtime-alert"
-          message={workerRuntime.mode === "official" ? "正式企业微信同步模式" : "本地演示同步模式"}
-          description={
-            workerRuntime.mode === "official"
-              ? workerRuntime.officialReady
-                ? "已配置会话内容存档 SDK 适配器，同步会按企业微信官方 seq 增量拉取真实消息和文件。"
-                : "正式模式需要配置 WECOM_MSGAUDIT_ADAPTER_CMD，连接企业微信官方会话内容存档 SDK 后才能同步真实消息。"
-              : "当前只用于本地演示，不会连接真实企业微信。正式环境请切换 WECOM_MSGAUDIT_MODE=official 并配置 SDK 适配器。"
-          }
-        />
-      ) : null}
+      <section className={`surface-panel wecom-status-panel is-${connectionStatus.tone}`}>
+        <div className="wecom-status-main">
+          <Tag color={connectionStatus.tone === "success" ? "green" : connectionStatus.tone === "danger" ? "red" : connectionStatus.tone === "warning" ? "orange" : "default"}>
+            {connectionStatus.label}
+          </Tag>
+          <div>
+            <div className="wecom-status-title">{connectionStatus.title}</div>
+            <div className="wecom-status-copy">{connectionStatus.copy}</div>
+          </div>
+        </div>
+        <Space wrap>
+          <Button icon={<BookOpen size={16} />} onClick={() => setHelpOpen(true)}>
+            接入帮助
+          </Button>
+          <Button icon={<RotateCw size={16} />} onClick={() => overview.refetch()} loading={overview.isFetching}>
+            刷新状态
+          </Button>
+          {canManage ? (
+            <Button type="primary" icon={<PlayCircle size={16} />} loading={syncIsPending} disabled={!activeIntegration} onClick={syncWithBestMode}>
+              立即同步
+            </Button>
+          ) : null}
+        </Space>
+      </section>
 
       <section className="surface-panel wecom-setup-panel">
         <div className="section-head">
           <div>
-            <div className="section-title">首次接入向导</div>
-            <div className="section-subtitle">轻配置优先，系统自动完成大部分匹配，管理员只处理异常项。</div>
+            <div className="section-title">三步接入</div>
+            <div className="section-subtitle">先连通，再匹配成员，最后同步生成候选草稿。</div>
           </div>
-          <Space wrap>
-            <Button icon={<RotateCw size={16} />} onClick={() => overview.refetch()} loading={overview.isFetching}>
-              刷新状态
+          {canManage ? (
+            <Button icon={<Users size={16} />} loading={autoMatch.isPending} disabled={!activeIntegration} onClick={() => autoMatch.mutate()}>
+              自动匹配成员
             </Button>
-            {canManage ? (
-              <>
-                <Button icon={<PlayCircle size={16} />} loading={syncText.isPending} onClick={() => syncText.mutate()}>
-                  同步文本消息
-                </Button>
-                <Button icon={<FileText size={16} />} loading={syncArchive.isPending} onClick={() => syncArchive.mutate()}>
-                  同步会话存档
-                </Button>
-              </>
-            ) : null}
-          </Space>
+          ) : null}
         </div>
         <div className="wecom-step-list">
           {steps.map((step, index) => (
@@ -786,20 +842,17 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
           <div className="section-head">
             <div>
               <div className="section-title">连接企业微信</div>
-              <div className="section-subtitle">每个租户独立绑定自己的企业微信主体和会话内容存档配置。</div>
+              <div className="section-subtitle">默认轻配置，先填必填项。范围、保留周期和生成策略放在高级设置里。</div>
             </div>
             {activeIntegration ? statusTag(activeIntegration.lastSyncStatus) : <Tag>未配置</Tag>}
           </div>
           {!canManage ? (
             <Alert className="mb-4" type="warning" showIcon message="当前账号只能查看授权范围，企业微信配置需企业管理员操作。" />
           ) : null}
-          <Form form={integrationForm} layout="vertical" disabled={!canManage} onFinish={(values) => saveIntegration.mutate(values)}>
+          <Form form={integrationForm} layout="vertical" disabled={!canManage} onFinish={(values) => saveAndTestIntegration.mutate(values)}>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <Form.Item name="corpId" label="corpid" rules={[{ required: true, min: 4 }]}>
+              <Form.Item name="corpId" label="企业 ID corpid" rules={[{ required: true, min: 4 }]}>
                 <Input placeholder="企业微信企业 ID" />
-              </Form.Item>
-              <Form.Item name="mode" label="配置模式" rules={[{ required: true }]}>
-                <Select options={modeOptions.map((item) => ({ value: item.value, label: item.label }))} />
               </Form.Item>
               <Form.Item name="msgAuditSecretRef" label="会话内容存档 secret" rules={[{ required: true, min: 4 }]}>
                 <Input.Password placeholder="建议保存密钥引用或加密后的 secret" />
@@ -807,234 +860,251 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
               <Form.Item name="rsaPrivateKeyRef" label="RSA 私钥或密钥引用" rules={[{ required: true, min: 8 }]}>
                 <Input.Password placeholder="建议填写 KMS/密钥管理引用" />
               </Form.Item>
-            </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              <Form.Item name="rsaPublicKeyConfigured" label="RSA 公钥配置状态" valuePropName="checked">
+              <Form.Item name="rsaPublicKeyConfigured" label="企业微信后台 RSA 公钥" valuePropName="checked">
                 <Switch checkedChildren="已配置" unCheckedChildren="未配置" />
               </Form.Item>
-              <Form.Item name="syncFiles" label="同步文件" valuePropName="checked">
-                <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-              </Form.Item>
-              <Form.Item name="retentionDays" label="数据保留周期">
-                <InputNumber className="w-full" min={30} max={1095} suffix="天" />
-              </Form.Item>
             </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <Form.Item name="syncDepartmentIds" label="部门范围">
-                <Select mode="multiple" allowClear showSearch optionFilterProp="label" options={departmentOptions} placeholder="可留空，后续逐步收敛" />
-              </Form.Item>
-              <Form.Item name="syncUserIds" label="成员范围">
-                <Select mode="multiple" allowClear showSearch optionFilterProp="label" options={userOptions} placeholder="可留空，使用企业微信存档范围" />
-              </Form.Item>
-              <Form.Item name="syncChatIds" label="群聊范围">
-                <Select mode="tags" allowClear tokenSeparators={[",", "，", "\n"]} placeholder="输入 chat_id，可后续从同步结果确认" />
-              </Form.Item>
-              <Form.Item name="trustedIpNote" label="可信 IP 提示">
-                <Input placeholder="记录已加入企业微信可信 IP 的服务器出口地址" />
-              </Form.Item>
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Form.Item name="generateLogDrafts" label="生成日志草稿" valuePropName="checked">
-                <Switch checkedChildren="生成" unCheckedChildren="不生成" />
-              </Form.Item>
-              <Form.Item name="generateProjectRisks" label="生成项目风险" valuePropName="checked">
-                <Switch checkedChildren="生成" unCheckedChildren="不生成" />
-              </Form.Item>
-            </div>
-            <div className="wecom-mode-list">
-              {modeOptions.map((item) => (
-                <div key={item.value}>
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
-                </div>
-              ))}
-            </div>
+            <Collapse
+              className="wecom-advanced-settings"
+              ghost
+              items={[
+                {
+                  key: "advanced",
+                  label: "高级设置",
+                  children: (
+                    <>
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                        <Form.Item name="mode" label="配置模式" rules={[{ required: true }]}>
+                          <Select options={modeOptions.map((item) => ({ value: item.value, label: item.label }))} />
+                        </Form.Item>
+                        <Form.Item name="syncFiles" label="同步文件" valuePropName="checked">
+                          <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                        </Form.Item>
+                        <Form.Item name="retentionDays" label="数据保留周期">
+                          <InputNumber className="w-full" min={30} max={1095} suffix="天" />
+                        </Form.Item>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                        <Form.Item name="syncDepartmentIds" label="部门范围">
+                          <Select mode="multiple" allowClear showSearch optionFilterProp="label" options={departmentOptions} placeholder="可留空，后续逐步收敛" />
+                        </Form.Item>
+                        <Form.Item name="syncUserIds" label="成员范围">
+                          <Select mode="multiple" allowClear showSearch optionFilterProp="label" options={userOptions} placeholder="可留空，使用企业微信存档范围" />
+                        </Form.Item>
+                        <Form.Item name="syncChatIds" label="群聊范围">
+                          <Select mode="tags" allowClear tokenSeparators={[",", "，", "\n"]} placeholder="输入 chat_id，可后续从同步结果确认" />
+                        </Form.Item>
+                        <Form.Item name="trustedIpNote" label="可信 IP 备注">
+                          <Input placeholder="记录已加入企业微信可信 IP 的服务器出口地址" />
+                        </Form.Item>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <Form.Item name="generateLogDrafts" label="生成日志草稿" valuePropName="checked">
+                          <Switch checkedChildren="生成" unCheckedChildren="不生成" />
+                        </Form.Item>
+                        <Form.Item name="generateProjectRisks" label="生成项目风险" valuePropName="checked">
+                          <Switch checkedChildren="生成" unCheckedChildren="不生成" />
+                        </Form.Item>
+                      </div>
+                      <div className="wecom-mode-list">
+                        {modeOptions.map((item) => (
+                          <div key={item.value}>
+                            <strong>{item.label}</strong>
+                            <span>{item.description}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )
+                }
+              ]}
+            />
             {canManage ? (
-              <Space wrap>
-                <Button type="primary" htmlType="submit" icon={<Link2 size={16} />} loading={saveIntegration.isPending}>
-                  保存配置
-                </Button>
-                <Button icon={<ShieldCheck size={16} />} loading={testIntegration.isPending} onClick={() => testIntegration.mutate()}>
-                  测试连接
-                </Button>
-              </Space>
+              <Button type="primary" htmlType="submit" icon={<Link2 size={16} />} loading={saveAndTestIntegration.isPending}>
+                保存并测试连接
+              </Button>
             ) : null}
           </Form>
         </section>
 
         <section className="surface-panel wecom-summary-panel">
-          <div className="section-title">接入结果</div>
+          <div className="section-title">同步结果</div>
           <div className="wecom-metric-grid">
-            <div className="metric-card">
-              <div className="metric-label">已自动匹配</div>
-              <div className="metric-value">{setup?.autoMatched ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">待确认成员</div>
-              <div className="metric-value">{setup?.needsConfirmation ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">已识别群聊</div>
-              <div className="metric-value">{setup?.chatCount ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">候选草稿</div>
-              <div className="metric-value">{setup?.pendingDrafts ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">来源文件</div>
-              <div className="metric-value">{setup?.fileCount ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">项目建议</div>
-              <div className="metric-value">{setup?.pendingProjectSuggestions ?? 0}</div>
-            </div>
+            {metricItems.map((item) => (
+              <div className="metric-card" key={item.label}>
+                <div className="metric-label">{item.label}</div>
+                <div className="metric-value">{item.value}</div>
+              </div>
+            ))}
           </div>
           <div className="wecom-compliance-list">
-            <div><ShieldCheck size={15} /> 租户独立绑定企业微信主体。</div>
+            <div><ShieldCheck size={15} /> 只接入企业微信会话内容存档。</div>
             <div><GitBranch size={15} /> 消息只生成候选，不自动提交日报。</div>
-            <div><Users size={15} /> 名称只作辅助，优先使用企业微信 userid。</div>
-            <div><AlertTriangle size={15} /> 外部联系人不同意存档时不得同步或分析。</div>
+            <div><Users size={15} /> 成员优先按企业微信 userid 匹配。</div>
+            <div><AlertTriangle size={15} /> 客户未同意存档时不分析相关内容。</div>
           </div>
         </section>
       </div>
 
-      <section className="surface-panel wecom-table-panel">
-        <div className="section-head">
-          <div>
-            <div className="section-title">成员自动映射</div>
-            <div className="section-subtitle">系统优先按企业微信 userid 绑定，其次使用手机号、邮箱、姓名 + 部门辅助匹配。</div>
-          </div>
-          {canManage ? (
-            <Button icon={<Users size={16} />} loading={autoMatch.isPending} onClick={() => autoMatch.mutate()}>
-              自动匹配成员
-            </Button>
-          ) : null}
-        </div>
-        <Table
-          rowKey="id"
-          loading={overview.isFetching}
-          dataSource={overview.data?.bindings ?? []}
-          columns={bindingColumns}
-          locale={{ emptyText: <Empty description="暂无成员映射，先保存企业微信配置并执行自动匹配" /> }}
-          pagination={{ pageSize: 6 }}
-          scroll={{ x: 980 }}
+      <section className="surface-panel wecom-tabs-panel">
+        <Tabs
+          defaultActiveKey="todo"
+          items={[
+            {
+              key: "todo",
+              label: todoCount ? `待处理 ${todoCount}` : "待处理",
+              children: (
+                <div className="wecom-tab-content">
+                  <div className="wecom-todo-list">
+                    {todoCards.map((item) => (
+                      <div key={item.key} className={`wecom-todo-card ${item.count ? "has-count" : ""}`}>
+                        <strong>{item.count}</strong>
+                        <div>
+                          <span>{item.title}</span>
+                          <p>{item.copy}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {todoCount ? (
+                    <div className="wecom-todo-details">
+                      {pendingBindings.length ? (
+                        <section>
+                          <div className="section-title">成员异常</div>
+                          <Table rowKey="id" size="small" loading={overview.isFetching} dataSource={pendingBindings} columns={bindingColumns} pagination={{ pageSize: 4 }} scroll={{ x: 980 }} />
+                        </section>
+                      ) : null}
+                      {pendingSuggestions.length ? (
+                        <section>
+                          <div className="section-title">项目群建议</div>
+                          <Table rowKey="id" size="small" loading={overview.isFetching || updateSuggestion.isPending} dataSource={pendingSuggestions} columns={suggestionColumns} pagination={{ pageSize: 4 }} scroll={{ x: 820 }} />
+                        </section>
+                      ) : null}
+                      {consentIssues.length ? (
+                        <section>
+                          <div className="section-title">客户群存档同意</div>
+                          <Table rowKey="id" size="small" loading={overview.isFetching} dataSource={consentIssues} columns={consentColumns} pagination={{ pageSize: 4 }} />
+                        </section>
+                      ) : null}
+                      {failedFiles.length ? (
+                        <section>
+                          <div className="section-title">失败文件</div>
+                          <Table rowKey="id" size="small" loading={overview.isFetching} dataSource={failedFiles} columns={fileColumns} pagination={{ pageSize: 4 }} scroll={{ x: 980 }} />
+                        </section>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <Empty description="暂无待处理事项。可以立即同步或查看群聊来源。" />
+                  )}
+                </div>
+              )
+            },
+            {
+              key: "sources",
+              label: "群聊来源",
+              children: (
+                <div className="wecom-tab-content">
+                  <div className="section-head">
+                    <div>
+                      <div className="section-title">群聊来源</div>
+                      <div className="section-subtitle">管理企业微信群与项目、部门或通用来源的关系。</div>
+                    </div>
+                    {canManage ? (
+                      <Button icon={<MessageSquare size={16} />} onClick={() => openSourceModal()}>
+                        新增来源
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Table rowKey="id" loading={overview.isFetching || projects.isFetching} dataSource={overview.data?.sources ?? []} columns={sourceColumns} locale={{ emptyText: <Empty description="暂无沟通来源，先同步或手动新增企业微信群" /> }} pagination={{ pageSize: 6 }} scroll={{ x: 1080 }} />
+                </div>
+              )
+            },
+            {
+              key: "drafts",
+              label: "候选草稿",
+              children: (
+                <div className="wecom-tab-content">
+                  <div className="section-head">
+                    <div>
+                      <div className="section-title">候选草稿</div>
+                      <div className="section-subtitle">候选草稿不会自动提交，确认和编辑入口在填报记录页。</div>
+                    </div>
+                    <Tag color="blue">等待用户确认</Tag>
+                  </div>
+                  <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.drafts ?? []} columns={draftColumns} locale={{ emptyText: <Empty description="暂无候选草稿，可先立即同步" /> }} pagination={{ pageSize: 5 }} scroll={{ x: 980 }} />
+                </div>
+              )
+            },
+            {
+              key: "mappings",
+              label: "成员映射",
+              children: (
+                <div className="wecom-tab-content">
+                  <div className="section-head">
+                    <div>
+                      <div className="section-title">成员映射</div>
+                      <div className="section-subtitle">系统优先按企业微信 userid 绑定，其次用手机号、邮箱、姓名和部门辅助匹配。</div>
+                    </div>
+                    {canManage ? (
+                      <Button icon={<Users size={16} />} loading={autoMatch.isPending} disabled={!activeIntegration} onClick={() => autoMatch.mutate()}>
+                        自动匹配成员
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.bindings ?? []} columns={bindingColumns} locale={{ emptyText: <Empty description="暂无成员映射，先保存企业微信配置并执行自动匹配" /> }} pagination={{ pageSize: 6 }} scroll={{ x: 980 }} />
+                </div>
+              )
+            },
+            {
+              key: "records",
+              label: "高级记录",
+              children: (
+                <div className="wecom-tab-content wecom-records-stack">
+                  <section>
+                    <div className="section-head">
+                      <div>
+                        <div className="section-title">来源文件</div>
+                        <div className="section-subtitle">群文件会先作为来源证据保存，进入日报附件前仍需用户确认。</div>
+                      </div>
+                      {overview.data?.setupSummary.failedFileCount ? <Tag color="red">{overview.data.setupSummary.failedFileCount} 个失败</Tag> : <Tag color="green">下载状态正常</Tag>}
+                    </div>
+                    <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.files ?? []} columns={fileColumns} locale={{ emptyText: <Empty description="暂无来源文件" /> }} pagination={{ pageSize: 5 }} scroll={{ x: 980 }} />
+                  </section>
+                  <section>
+                    <div className="section-head">
+                      <div>
+                        <div className="section-title">客户群存档同意</div>
+                        <div className="section-subtitle">外部联系人未同意存档时，相关内容不会同步或分析。</div>
+                      </div>
+                      {overview.data?.setupSummary.externalConsentIssues ? <Tag color="red">{overview.data.setupSummary.externalConsentIssues} 项需处理</Tag> : <Tag color="green">同意状态正常</Tag>}
+                    </div>
+                    <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.externalConsents ?? []} columns={consentColumns} locale={{ emptyText: <Empty description="暂无客户群同意记录" /> }} pagination={{ pageSize: 5 }} />
+                  </section>
+                  <section>
+                    <div className="section-head">
+                      <div>
+                        <div className="section-title">项目群建议记录</div>
+                        <div className="section-subtitle">根据群名、消息关键词和文件名识别项目群，管理员确认后才会绑定项目。</div>
+                      </div>
+                    </div>
+                    <Table rowKey="id" loading={overview.isFetching || updateSuggestion.isPending} dataSource={overview.data?.projectSuggestions ?? []} columns={suggestionColumns} locale={{ emptyText: <Empty description="暂无项目群建议，同步会话存档后会自动识别" /> }} pagination={{ pageSize: 5 }} scroll={{ x: 820 }} />
+                  </section>
+                </div>
+              )
+            }
+          ]}
         />
       </section>
 
-      <section className="surface-panel wecom-table-panel">
-        <div className="section-head">
-          <div>
-            <div className="section-title">沟通来源</div>
-            <div className="section-subtitle">管理企业微信群与项目、部门或通用来源的关系。</div>
-          </div>
-          {canManage ? (
-            <Button icon={<MessageSquare size={16} />} onClick={() => openSourceModal()}>
-              新增来源
-            </Button>
-          ) : null}
-        </div>
-        <Table
-          rowKey="id"
-          loading={overview.isFetching || projects.isFetching}
-          dataSource={overview.data?.sources ?? []}
-          columns={sourceColumns}
-          locale={{ emptyText: <Empty description="暂无沟通来源，先同步或手动新增企业微信群" /> }}
-          pagination={{ pageSize: 6 }}
-          scroll={{ x: 1080 }}
-        />
-      </section>
-
-      <section className="surface-panel wecom-table-panel">
-        <div className="section-head">
-          <div>
-            <div className="section-title">沟通记录候选草稿</div>
-            <div className="section-subtitle">候选草稿不会自动提交，员工或有权限的管理员确认后才进入正式日报。</div>
-          </div>
-          <Tooltip title="确认和编辑入口在填报记录页">
-            <Tag color="blue">等待用户确认</Tag>
-          </Tooltip>
-        </div>
-        <Table
-          rowKey="id"
-          loading={overview.isFetching}
-          dataSource={overview.data?.drafts ?? []}
-          columns={draftColumns}
-          locale={{ emptyText: <Empty description="暂无候选草稿，可先同步文本消息" /> }}
-          pagination={{ pageSize: 5 }}
-          scroll={{ x: 980 }}
-        />
-      </section>
-
-      <section className="surface-panel wecom-table-panel">
-        <div className="section-head">
-          <div>
-            <div className="section-title">项目群自动建议</div>
-            <div className="section-subtitle">根据群名、消息关键词和文件名识别项目群，管理员确认后才会绑定项目。</div>
-          </div>
-          <Tag color="orange">{overview.data?.setupSummary.pendingProjectSuggestions ?? 0} 项待确认</Tag>
-        </div>
-        <Table
-          rowKey="id"
-          loading={overview.isFetching || updateSuggestion.isPending}
-          dataSource={overview.data?.projectSuggestions ?? []}
-          columns={suggestionColumns}
-          locale={{ emptyText: <Empty description="暂无项目群建议，同步会话存档后会自动识别" /> }}
-          pagination={{ pageSize: 5 }}
-          scroll={{ x: 820 }}
-        />
-      </section>
-
-      <div className="wecom-grid">
-        <section className="surface-panel wecom-table-panel">
-          <div className="section-head">
-            <div>
-              <div className="section-title">来源文件</div>
-              <div className="section-subtitle">群文件会先作为来源证据保存，进入日报附件前仍需用户确认。</div>
-            </div>
-            {overview.data?.setupSummary.failedFileCount ? <Tag color="red">{overview.data.setupSummary.failedFileCount} 个失败</Tag> : <Tag color="green">下载状态正常</Tag>}
-          </div>
-          <Table
-            rowKey="id"
-            loading={overview.isFetching}
-            dataSource={overview.data?.files ?? []}
-            columns={fileColumns}
-            locale={{ emptyText: <Empty description="暂无来源文件" /> }}
-            pagination={{ pageSize: 5 }}
-            scroll={{ x: 980 }}
+      <Drawer title="企业微信接入帮助" open={helpOpen} onClose={() => setHelpOpen(false)} width={620}>
+        <div className="wecom-help-content">
+          <Alert
+            type="info"
+            showIcon
+            icon={<ShieldCheck size={18} />}
+            message="仅支持企业微信会话内容存档"
+            description="本功能不接入个人微信、外挂、抓包、RPA 或模拟客户端。同步内容默认只生成候选草稿，确认后才进入正式日报。"
           />
-        </section>
-
-        <section className="surface-panel wecom-table-panel">
-          <div className="section-head">
-            <div>
-              <div className="section-title">客户群存档同意</div>
-              <div className="section-subtitle">外部联系人未同意存档时，相关内容不会同步或分析。</div>
-            </div>
-            {overview.data?.setupSummary.externalConsentIssues ? <Tag color="red">{overview.data.setupSummary.externalConsentIssues} 项需处理</Tag> : <Tag color="green">同意状态正常</Tag>}
-          </div>
-          <Table
-            rowKey="id"
-            loading={overview.isFetching}
-            dataSource={overview.data?.externalConsents ?? []}
-            columns={consentColumns}
-            locale={{ emptyText: <Empty description="暂无客户群同意记录" /> }}
-            pagination={{ pageSize: 5 }}
-          />
-        </section>
-      </div>
-
-      <section className="surface-panel wecom-guide-panel">
-        <div className="wecom-guide-head">
-          <BookOpen size={20} className="text-primary" />
-          <div>
-            <Typography.Title level={4} className="!mb-0">
-              如何使用企业微信群作为工作日志来源
-            </Typography.Title>
-            <Typography.Text className="section-subtitle">给租户管理员的完整使用说明，覆盖前提、合规、配置、员工确认和常见问题。</Typography.Text>
-          </div>
-        </div>
-        <div className="wecom-guide-grid">
           {guideSections.map((section) => (
             <article key={section.title} className="wecom-guide-section">
               <h4>{section.title}</h4>
@@ -1062,7 +1132,7 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
             </article>
           ))}
         </div>
-      </section>
+      </Drawer>
 
       <Modal
         title={editingSource ? "编辑沟通来源" : "新增沟通来源"}

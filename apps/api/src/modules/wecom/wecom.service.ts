@@ -13,6 +13,7 @@ import {
   WecomExternalConsentStatus,
   WecomIntegrationStatus,
   WecomUserMappingStatus,
+  WorkLogKind,
   WorkLogStatus
 } from "@prisma/client";
 import { AccessService } from "../../common/access/access.service";
@@ -74,6 +75,15 @@ function parseDateOnly(value: string | Date) {
 
 function dateKey(value: Date) {
   return value.toISOString().slice(0, 10);
+}
+
+function todayKeyInShanghai() {
+  const shanghai = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return dateKey(new Date(Date.UTC(shanghai.getUTCFullYear(), shanghai.getUTCMonth(), shanghai.getUTCDate())));
+}
+
+function resolveWorkLogKind(date: Date) {
+  return dateKey(date) > todayKeyInShanghai() ? WorkLogKind.PLAN : WorkLogKind.DAILY;
 }
 
 function unique(values: Array<string | null | undefined>) {
@@ -748,12 +758,14 @@ export class WecomService {
     });
     this.access.assertCanAccessUser(user, owner);
     const status = dto.submit === false ? WorkLogStatus.DRAFT : WorkLogStatus.SUBMITTED;
+    const workDate = parseDateOnly(dto.date);
     const workLog = await this.prisma.workLog.create({
       data: {
         tenantId: user.tenantId,
         userId: owner.id,
         projectId: dto.projectId || null,
-        date: parseDateOnly(dto.date),
+        date: workDate,
+        kind: resolveWorkLogKind(workDate),
         title: dto.title,
         content: dto.content,
         hours: String(dto.hours ?? insight.hours ?? 0),

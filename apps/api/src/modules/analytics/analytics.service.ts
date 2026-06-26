@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { WorkLogStatus } from "@prisma/client";
+import { WorkLogKind, WorkLogStatus } from "@prisma/client";
 import { AccessService } from "../../common/access/access.service";
 import { PrismaService } from "../../common/prisma.service";
 import { CurrentUser } from "../../common/types/current-user";
@@ -24,6 +24,10 @@ function dateKey(date: Date) {
 function todayKeyInShanghai() {
   const shanghai = new Date(Date.now() + 8 * 60 * 60 * 1000);
   return dateKey(new Date(Date.UTC(shanghai.getUTCFullYear(), shanghai.getUTCMonth(), shanghai.getUTCDate())));
+}
+
+function primaryKindForDate(date: string, today: string) {
+  return date > today ? WorkLogKind.PLAN : WorkLogKind.DAILY;
 }
 
 function addDays(date: Date, days: number) {
@@ -76,22 +80,27 @@ export class AnalyticsService {
     for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
       const dayLogs = byDate.get(key) ?? [];
-      const filledUserIds = new Set(dayLogs.map((log) => log.userId));
+      const primaryKind = primaryKindForDate(key, today);
+      const primaryLogs = dayLogs.filter((log) => log.kind === primaryKind);
+      const filledUserIds = new Set(primaryLogs.map((log) => log.userId));
       const filledCount = filledUserIds.size;
       const totalCount = users.length;
       const missingCount = Math.max(totalCount - filledCount, 0);
       const riskTotal = dayLogs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.risks), 0);
       const blockerTotal = dayLogs.reduce((sum, item) => sum + arrayCount(item.aiAnalysis?.blockers), 0);
-      const totalHours = dayLogs.reduce((sum, item) => sum + Number(item.hours), 0);
+      const totalHours = primaryLogs.reduce((sum, item) => sum + Number(item.hours), 0);
       days.push({
         date: key,
+        primaryKind,
         filledCount,
         missingCount,
         remindCount: key <= today ? missingCount : 0,
         fillRate: totalCount === 0 ? 0 : Number(((filledCount / totalCount) * 100).toFixed(1)),
         riskCount: riskTotal,
         blockerCount: blockerTotal,
-        totalHours: Number(totalHours.toFixed(2))
+        totalHours: Number(totalHours.toFixed(2)),
+        dailyLogCount: dayLogs.filter((log) => log.kind === WorkLogKind.DAILY).length,
+        planLogCount: dayLogs.filter((log) => log.kind === WorkLogKind.PLAN).length
       });
     }
 
@@ -151,6 +160,12 @@ export class AnalyticsService {
     for (const log of logs) {
       logsByUser.set(log.userId, [...(logsByUser.get(log.userId) ?? []), log]);
     }
+    const primaryKind = primaryKindForDate(query.date, today);
+    const primaryLogs = logs.filter((log) => log.kind === primaryKind);
+    const primaryLogsByUser = new Map<string, typeof primaryLogs>();
+    for (const log of primaryLogs) {
+      primaryLogsByUser.set(log.userId, [...(primaryLogsByUser.get(log.userId) ?? []), log]);
+    }
     const filledEmployees = users
       .filter((item) => logsByUser.has(item.id))
       .map((item) => ({
@@ -162,7 +177,7 @@ export class AnalyticsService {
         logs: logsByUser.get(item.id) ?? []
       }));
     const missingEmployees = users
-      .filter((item) => !logsByUser.has(item.id))
+      .filter((item) => !primaryLogsByUser.has(item.id))
       .map((item) => ({
         id: item.id,
         name: item.name,
@@ -177,17 +192,20 @@ export class AnalyticsService {
     return {
       date: query.date,
       scope,
+      primaryKind,
       filledEmployees,
       missingEmployees,
       stats: {
         totalEmployees: users.length,
-        filledCount: filledEmployees.length,
+        filledCount: primaryLogsByUser.size,
         missingCount: missingEmployees.length,
         remindCount,
-        fillRate: users.length === 0 ? 0 : Number(((filledEmployees.length / users.length) * 100).toFixed(1)),
+        fillRate: users.length === 0 ? 0 : Number(((primaryLogsByUser.size / users.length) * 100).toFixed(1)),
         totalHours,
         riskCount: riskTotal,
-        blockerCount: blockerTotal
+        blockerCount: blockerTotal,
+        dailyLogCount: logs.filter((log) => log.kind === WorkLogKind.DAILY).length,
+        planLogCount: logs.filter((log) => log.kind === WorkLogKind.PLAN).length
       }
     };
   }

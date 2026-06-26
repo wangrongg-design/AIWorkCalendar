@@ -158,6 +158,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, Content-Type");
   if (req.method === "OPTIONS") return send(res, 204);
 
   try {
@@ -366,6 +367,7 @@ function workLog(id, userId, date, title, content, hours, projectId = null) {
     userId,
     projectId,
     date,
+    kind: workLogKindForDate(date),
     title,
     content,
     startTime: `${date}T09:00:00.000Z`,
@@ -377,6 +379,11 @@ function workLog(id, userId, date, title, content, hours, projectId = null) {
     updatedAt: new Date().toISOString(),
     deletedAt: null
   };
+}
+
+function workLogKindForDate(date, explicitKind = null, referenceToday = todayKey) {
+  if (explicitKind === "DAILY" || explicitKind === "PLAN") return explicitKind;
+  return String(date) > referenceToday ? "PLAN" : "DAILY";
 }
 
 function createDemoDepartments() {
@@ -2360,6 +2367,7 @@ function confirmWecomLogDraft(user, id, body) {
     userId: draft.suggestedUserId,
     projectId: body.projectId || null,
     date: body.date || draft.date,
+    kind: workLogKindForDate(body.date || draft.date, body.kind),
     title: String(body.title ?? draft.title),
     content: String(body.content ?? draft.content),
     startTime: null,
@@ -2461,6 +2469,7 @@ function listWorkLogs(user, url) {
     .filter((item) => !item.deletedAt)
     .filter((item) => !url.searchParams.get("date") || item.date === url.searchParams.get("date"))
     .filter((item) => !url.searchParams.get("projectId") || item.projectId === url.searchParams.get("projectId"))
+    .filter((item) => !url.searchParams.get("kind") || (item.kind ?? "DAILY") === url.searchParams.get("kind"))
     .map(enrichLog)
     .sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
 }
@@ -2474,6 +2483,7 @@ function createWorkLog(user, body) {
     userId: ownerId,
     projectId: body.projectId || null,
     date: body.date,
+    kind: workLogKindForDate(body.date, body.kind),
     title: body.title,
     content: body.content,
     startTime: body.startTime ?? null,
@@ -2506,6 +2516,7 @@ function updateWorkLog(user, id, body) {
     assertProject(user, body.projectId);
     item.projectId = body.projectId || null;
   }
+  if (body.kind !== undefined) item.kind = workLogKindForDate(item.date, body.kind);
   if (body.hours !== undefined) item.hours = Number(body.hours);
   item.updatedAt = new Date().toISOString();
   return enrichLog(item);
@@ -2642,19 +2653,24 @@ function calendar(user, url) {
   for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
     const key = dateKey(cursor);
     const logs = workLogs.filter((item) => item.date === key && item.status === "SUBMITTED" && !item.deletedAt && visibleUserIds.has(item.userId));
-    const filled = new Set(logs.map((item) => item.userId));
+    const primaryKind = workLogKindForDate(key, null, today);
+    const primaryLogs = logs.filter((item) => (item.kind ?? "DAILY") === primaryKind);
+    const filled = new Set(primaryLogs.map((item) => item.userId));
     const missingCount = Math.max(reportUsers.length - filled.size, 0);
     const riskCount = logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0);
     const blockerCount = logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.blockers?.length ?? 0)), 0);
     days.push({
       date: key,
+      primaryKind,
       filledCount: filled.size,
       missingCount,
       remindCount: key <= today ? missingCount : 0,
       fillRate: reportUsers.length ? Number(((filled.size / reportUsers.length) * 100).toFixed(1)) : 0,
       riskCount,
       blockerCount,
-      totalHours: Number(logs.reduce((sum, item) => sum + Number(item.hours), 0).toFixed(2))
+      totalHours: Number(primaryLogs.reduce((sum, item) => sum + Number(item.hours), 0).toFixed(2)),
+      dailyLogCount: logs.filter((item) => (item.kind ?? "DAILY") === "DAILY").length,
+      planLogCount: logs.filter((item) => (item.kind ?? "DAILY") === "PLAN").length
     });
   }
   return { month, scope: resolveScope(user, url), totalEmployees: reportUsers.length, days };
@@ -2666,6 +2682,9 @@ function calendarDay(user, url) {
   const visibleUsers = filterUsersByAccess(user, url).filter((item) => item.requiresWorkReport);
   const visibleUserIds = new Set(visibleUsers.map((item) => item.id));
   const logs = workLogs.filter((item) => item.date === date && item.status === "SUBMITTED" && !item.deletedAt && visibleUserIds.has(item.userId));
+  const primaryKind = workLogKindForDate(date, null, today);
+  const primaryLogs = logs.filter((item) => (item.kind ?? "DAILY") === primaryKind);
+  const primaryUserIds = new Set(primaryLogs.map((item) => item.userId));
   const logsByUser = new Map();
   for (const log of logs) logsByUser.set(log.userId, [...(logsByUser.get(log.userId) ?? []), enrichLog(log)]);
   const filledEmployees = visibleUsers.filter((item) => logsByUser.has(item.id)).map((item) => ({
@@ -2676,7 +2695,7 @@ function calendarDay(user, url) {
     departmentName: departments.find((dept) => dept.id === item.departmentId)?.name ?? null,
     logs: logsByUser.get(item.id)
   }));
-  const missingEmployees = visibleUsers.filter((item) => !logsByUser.has(item.id)).map((item) => ({
+  const missingEmployees = visibleUsers.filter((item) => !primaryUserIds.has(item.id)).map((item) => ({
     id: item.id,
     name: item.name,
     email: item.email,
@@ -2686,17 +2705,20 @@ function calendarDay(user, url) {
   return {
     date,
     scope: resolveScope(user, url),
+    primaryKind,
     filledEmployees,
     missingEmployees,
     stats: {
       totalEmployees: visibleUsers.length,
-      filledCount: filledEmployees.length,
+      filledCount: primaryUserIds.size,
       missingCount: missingEmployees.length,
       remindCount: date <= today ? missingEmployees.length : 0,
-      fillRate: visibleUsers.length ? Number(((filledEmployees.length / visibleUsers.length) * 100).toFixed(1)) : 0,
+      fillRate: visibleUsers.length ? Number(((primaryUserIds.size / visibleUsers.length) * 100).toFixed(1)) : 0,
       totalHours: logs.reduce((sum, item) => sum + Number(item.hours), 0),
       riskCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.risks?.length ?? 0)), 0),
-      blockerCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.blockers?.length ?? 0)), 0)
+      blockerCount: logs.reduce((sum, item) => sum + ((analyses.get(item.id)?.blockers?.length ?? 0)), 0),
+      dailyLogCount: logs.filter((item) => (item.kind ?? "DAILY") === "DAILY").length,
+      planLogCount: logs.filter((item) => (item.kind ?? "DAILY") === "PLAN").length
     }
   };
 }
@@ -2784,7 +2806,7 @@ function inferDraftItems(text, currentDate, today) {
     return items.length ? items : [buildDraftItem(content, currentDate, today)];
   }
 
-  const clauses = splitDraftClauses(content);
+  const clauses = splitDraftClauses(content, shouldSplitDraftSoftly(content));
   const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
   if (hourClauses.length > 1) return hourClauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
   if (clauses.length > 1) return clauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
@@ -2797,6 +2819,12 @@ function splitDraftClauses(text, includeSoftSeparators = false) {
     .split(separator)
     .map((item) => item.trim())
     .filter((item) => item && hasDraftClauseContent(item));
+}
+
+function shouldSplitDraftSoftly(text) {
+  const timeMarkers = text.match(/上午|下午|晚上|中午|早上|凌晨/g)?.length ?? 0;
+  const projectMarkers = text.match(/项目|需求|客户/g)?.length ?? 0;
+  return timeMarkers >= 2 || projectMarkers >= 2;
 }
 
 function hasDraftClauseContent(text) {
@@ -2824,6 +2852,7 @@ function buildDraftItem(text, currentDate, today, timing, missingContent = false
     hours,
     startTime: timing?.startTime ?? null,
     endTime: timing?.endTime ?? null,
+    projectHint: inferDraftProjectHint(text),
     confidence: missingContent || (!timing && !hoursMatch) ? 0.72 : 0.9,
     missingFields: [missingContent ? "content" : null, timing || hoursMatch ? null : "hours"].filter(Boolean)
   };
@@ -2916,6 +2945,19 @@ function inferDraftTitle(text) {
     .trim();
   if (!cleaned) return "工作填报";
   return cleaned.length > 24 ? `${cleaned.slice(0, 24)}...` : cleaned;
+}
+
+function inferDraftProjectHint(text) {
+  const patterns = [
+    /([A-Za-z][A-Za-z0-9_-]{1,16})\s*(?:项目|需求|系统|平台|模块)/,
+    /([\u4e00-\u9fa5A-Za-z0-9_-]{2,24})\s*(?:项目|需求|系统|平台|模块|客户)/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const value = match?.[1]?.trim();
+    if (value && !/今天|昨天|明天|上午|下午|晚上|客户/.test(value)) return value;
+  }
+  return null;
 }
 
 function inferDraftContent(text) {
@@ -3427,6 +3469,7 @@ function enrichLog(log) {
   const owner = users.find((item) => item.id === log.userId);
   return {
     ...log,
+    kind: log.kind ?? "DAILY",
     user: owner
       ? {
           id: owner.id,
@@ -3562,10 +3605,23 @@ function json(res, body) {
   res.end(JSON.stringify(body));
 }
 
+function asciiFallbackFileName(fileName) {
+  const fallback = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_").trim();
+  return fallback || "download";
+}
+
+function encodeRFC5987Value(value) {
+  return encodeURIComponent(value).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function attachmentDisposition(fileName) {
+  return `attachment; filename="${asciiFallbackFileName(fileName)}"; filename*=UTF-8''${encodeRFC5987Value(fileName)}`;
+}
+
 function sendBuffer(res, buffer, { contentType = "application/octet-stream", fileName = "download.bin" } = {}) {
   res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Length", buffer.length);
-  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+  res.setHeader("Content-Disposition", attachmentDisposition(fileName));
   res.writeHead(200);
   res.end(buffer);
 }

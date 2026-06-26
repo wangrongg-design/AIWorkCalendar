@@ -649,7 +649,7 @@ export class OpenAiService {
       return items.length ? items : [this.buildDraftItem(content, currentDate, today)];
     }
 
-    const clauses = this.splitDraftClauses(content);
+    const clauses = this.splitDraftClauses(content, this.shouldSplitDraftSoftly(content));
     const hourClauses = clauses.filter((item) => /(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/.test(item));
     if (hourClauses.length > 1) {
       return hourClauses.map((item) => this.applyGlobalDraftDate(this.buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
@@ -667,6 +667,12 @@ export class OpenAiService {
       .split(separator)
       .map((item) => item.trim())
       .filter((item) => item && this.hasDraftClauseContent(item));
+  }
+
+  private shouldSplitDraftSoftly(text: string) {
+    const timeMarkers = text.match(/上午|下午|晚上|中午|早上|凌晨/g)?.length ?? 0;
+    const projectMarkers = text.match(/项目|需求|客户/g)?.length ?? 0;
+    return timeMarkers >= 2 || projectMarkers >= 2;
   }
 
   private hasDraftClauseContent(text: string) {
@@ -698,6 +704,7 @@ export class OpenAiService {
       hours,
       startTime: timing?.startTime ?? null,
       endTime: timing?.endTime ?? null,
+      projectHint: this.inferDraftProjectHint(text),
       confidence: missingFields.length ? 0.72 : 0.9,
       missingFields
     };
@@ -803,6 +810,21 @@ export class OpenAiService {
     return cleaned.length > 24 ? `${cleaned.slice(0, 24)}...` : cleaned;
   }
 
+  private inferDraftProjectHint(text: string) {
+    const patterns = [
+      /([A-Za-z][A-Za-z0-9_-]{1,16})\s*(?:项目|需求|系统|平台|模块)/,
+      /([\u4e00-\u9fa5A-Za-z0-9_-]{2,24})\s*(?:项目|需求|系统|平台|模块|客户)/
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      const value = match?.[1]?.trim();
+      if (value && !/今天|昨天|明天|上午|下午|晚上|客户/.test(value)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   private inferDraftContent(text: string) {
     const cleaned = text
       .replace(this.timeRangePattern(), " ")
@@ -838,6 +860,7 @@ export class OpenAiService {
       hours,
       startTime: result.startTime ?? fallback.startTime ?? null,
       endTime: result.endTime ?? fallback.endTime ?? null,
+      projectHint: typeof result.projectHint === "string" && result.projectHint.trim() ? result.projectHint.trim() : fallback.projectHint ?? null,
       confidence: Number.isFinite(Number(result.confidence)) ? Math.min(Math.max(Number(result.confidence), 0), 1) : fallback.confidence,
       missingFields: Array.isArray(result.missingFields) ? result.missingFields.map(String) : fallback.missingFields
     };
