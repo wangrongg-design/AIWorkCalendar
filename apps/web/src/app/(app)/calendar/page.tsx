@@ -74,6 +74,8 @@ type AttachmentUploadResult = {
   error?: Error;
 };
 
+type DetailEmployee = CalendarDayDetail["filledEmployees"][number];
+
 type DraftPreviewItem = WorkLogDraftComposerItem;
 type DraftPreview = WorkLogDraftComposerState;
 
@@ -130,6 +132,41 @@ function calendarRiskBlockerCount(day?: Pick<CalendarDay, "riskCount" | "blocker
 
 function detailRiskBlockerCount(stats?: CalendarDayDetail["stats"] | null) {
   return (stats?.riskCount ?? 0) + (stats?.blockerCount ?? 0);
+}
+
+function sortWorkLogs(logs: WorkLog[]) {
+  return [...logs].sort((a, b) => {
+    const aKey = a.submittedAt ?? a.createdAt ?? a.updatedAt ?? a.id;
+    const bKey = b.submittedAt ?? b.createdAt ?? b.updatedAt ?? b.id;
+    return aKey.localeCompare(bKey);
+  });
+}
+
+function mergeDetailEmployeesById(employees: DetailEmployee[]) {
+  const map = new Map<string, DetailEmployee>();
+  for (const employee of employees) {
+    const current = map.get(employee.id);
+    if (!current) {
+      map.set(employee.id, { ...employee, logs: sortWorkLogs(employee.logs) });
+      continue;
+    }
+    current.logs = sortWorkLogs([...current.logs, ...employee.logs]);
+    current.departmentName = current.departmentName ?? employee.departmentName;
+  }
+  return Array.from(map.values());
+}
+
+function sumLogHours(logs: WorkLog[]) {
+  return Number(logs.reduce((sum, log) => sum + (Number(log.hours) || 0), 0).toFixed(1));
+}
+
+function workLogProjectLabel(log: WorkLog) {
+  if (!log.project) return "未关联项目";
+  return log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name;
+}
+
+function workLogRiskLabel(log: WorkLog) {
+  return log.aiAnalysis?.blockers?.[0] ?? log.aiAnalysis?.risks?.[0] ?? null;
 }
 
 function dateKind(date: string) {
@@ -599,9 +636,10 @@ export default function CalendarPage() {
       .slice(0, 5);
   }, [calendar.data?.days, today]);
   const todayStats = todayDetail.data?.stats;
+  const todayFilledEmployees = useMemo(() => mergeDetailEmployeesById(todayDetail.data?.filledEmployees ?? []), [todayDetail.data?.filledEmployees]);
   const todayReferenceCount = useMemo(
-    () => todayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).length ?? 0,
-    [todayDetail.data?.filledEmployees]
+    () => todayFilledEmployees.flatMap((employee) => employee.logs).length,
+    [todayFilledEmployees]
   );
   const isCalendarSyncing = calendar.isFetching || todayDetail.isFetching || dayDetail.isFetching;
   const calendarSyncError = calendar.error ?? todayDetail.error;
@@ -665,10 +703,10 @@ export default function CalendarPage() {
   }, [calendar.isFetching, todayDetail.isFetching, todayStats]);
 
   const detailStats = dayDetail.data?.stats;
-  const detailFilledEmployees = dayDetail.data?.filledEmployees ?? [];
+  const detailFilledEmployees = useMemo(() => mergeDetailEmployeesById(dayDetail.data?.filledEmployees ?? []), [dayDetail.data?.filledEmployees]);
   const detailMissingEmployees = dayDetail.data?.missingEmployees ?? [];
-  const detailLogCount = detailFilledEmployees.reduce((sum, employee) => sum + employee.logs.length, 0);
   const detailLogs = useMemo(() => detailFilledEmployees.flatMap((employee) => employee.logs), [detailFilledEmployees]);
+  const detailLogCount = detailLogs.length;
   const detailDailyLogCount = detailLogs.filter((log) => (log.kind ?? "DAILY") === "DAILY").length;
   const detailPlanLogCount = detailLogs.filter((log) => (log.kind ?? "DAILY") === "PLAN").length;
   const detailRecordSections = useMemo(
@@ -745,12 +783,12 @@ export default function CalendarPage() {
     if (selectedDateKind !== "future" && planLogCount > 0) {
       observations.push(`另有 ${planLogCount} 条历史计划${dailyLogCount > 0 ? "，可对照实际日报检查兑现情况。" : "，但暂无日报可对照。"}`);
     }
-    const firstProject = dayDetail.data?.filledEmployees.flatMap((employee) => employee.logs).find((log) => log.project)?.project?.name;
+    const firstProject = detailLogs.find((log) => log.project)?.project?.name;
     if (firstProject) {
       observations.push(`${firstProject} 已出现在今日记录中，可进一步询问项目进展。`);
     }
     return observations;
-  }, [dayDetail.data, dayDetail.isFetching, selectedDate, selectedDateKind]);
+  }, [dayDetail.data, dayDetail.isFetching, detailLogs, selectedDate, selectedDateKind]);
   const copilotObservations = useMemo(() => {
     if (selectedDate) {
       return aiObservations;
@@ -1516,7 +1554,7 @@ export default function CalendarPage() {
                   <div>
                     <div className="workday-section-heading">今日记录</div>
                     <div className="workday-records-subtitle">
-                      日报 {detailDailyLogCount} 条 · 计划 {detailPlanLogCount} 条
+                      覆盖 {detailFilledEmployees.length} 人 · 日报 {detailDailyLogCount} 条 · 计划 {detailPlanLogCount} 条
                     </div>
                     {detailProjectGroups.length ? (
                       <div className="workday-project-inline">
@@ -1529,38 +1567,66 @@ export default function CalendarPage() {
                 </div>
                 <div className="workday-records-list">
                   <div className="workday-record-list">
-                    {detailRecordSections.flatMap((section) =>
-                      section.employees.flatMap((employee) =>
-                        employee.logs.map((log) => {
-                          const risk = (log.aiAnalysis?.risks ?? [])[0];
-                          const projectName = log.project ? (log.project.code ? `${log.project.code} · ${log.project.name}` : log.project.name) : "未关联项目";
-                          return (
-                            <button key={`${section.key}-${employee.id}-${log.id}`} type="button" className={`workday-record-row ${risk ? "has-risk" : ""}`} onClick={() => setSelectedWorkLog(log)}>
-                              <span className="workday-record-person">
-                                <span className="workday-record-avatar">{employee.name.slice(0, 1)}</span>
-                                <span>
-                                  <strong>{employee.name}</strong>
-                                  <em>{employee.departmentName ?? "未分配部门"}</em>
-                                </span>
-                              </span>
-                              <span className="workday-record-main">
-                                <span className="workday-record-title">
-                                  <strong>{log.title}</strong>
-                                  <Tag color={(log.kind ?? "DAILY") === "PLAN" ? "blue" : "green"}>{(log.kind ?? "DAILY") === "PLAN" ? "计划" : "日报"}</Tag>
-                                </span>
-                                <span className="workday-record-content">{log.content}</span>
-                                <span className="workday-record-meta">
-                                  <span>{projectName}</span>
-                                  {log.attachments?.length ? <em><Paperclip size={12} /> {log.attachments.length} 个附件</em> : null}
-                                </span>
-                                {risk ? <span className="workday-record-risk">{risk}</span> : null}
-                              </span>
-                              <span className="workday-record-hours">{Number(log.hours).toFixed(1)}h</span>
-                            </button>
-                          );
-                        })
-                      )
-                    )}
+                    {detailRecordSections.map((section) => {
+                      const sectionLogCount = section.employees.reduce((sum, employee) => sum + employee.logs.length, 0);
+                      return (
+                        <section key={section.key} className="workday-person-section">
+                          <div className="workday-person-section-head">
+                            <strong>{section.title}</strong>
+                            <span>
+                              {section.employees.length} 人 · {sectionLogCount} 条
+                            </span>
+                          </div>
+                          <div className="workday-person-list">
+                            {section.employees.map((employee) => {
+                              const employeeHours = sumLogHours(employee.logs);
+                              return (
+                                <article key={`${section.key}-${employee.id}`} className="workday-person-row">
+                                  <div className="workday-person-profile">
+                                    <span className="workday-record-avatar">{employee.name.slice(0, 1)}</span>
+                                    <span className="workday-person-profile-text">
+                                      <strong>{employee.name}</strong>
+                                      <em>{employee.departmentName ?? "未分配部门"}</em>
+                                      <small>{employee.logs.length} 条记录</small>
+                                    </span>
+                                  </div>
+                                  <div className="workday-person-log-list">
+                                    {employee.logs.map((log) => {
+                                      const risk = workLogRiskLabel(log);
+                                      return (
+                                        <button
+                                          key={`${section.key}-${employee.id}-${log.id}`}
+                                          type="button"
+                                          className={`workday-person-log-card ${risk ? "has-risk" : ""}`}
+                                          onClick={() => setSelectedWorkLog(log)}
+                                        >
+                                          <span className="workday-person-log-title">
+                                            <strong>{log.title}</strong>
+                                            <Tag color={(log.kind ?? "DAILY") === "PLAN" ? "blue" : "green"}>{(log.kind ?? "DAILY") === "PLAN" ? "计划" : "日报"}</Tag>
+                                            <em>{Number(log.hours).toFixed(1)}h</em>
+                                          </span>
+                                          <span className="workday-person-log-content">{log.content}</span>
+                                          <span className="workday-person-log-meta">
+                                            <span>{workLogProjectLabel(log)}</span>
+                                            {log.attachments?.length ? (
+                                              <em>
+                                                <Paperclip size={12} /> {log.attachments.length} 个附件
+                                              </em>
+                                            ) : null}
+                                          </span>
+                                          {risk ? <span className="workday-person-log-risk">{risk}</span> : null}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="workday-person-hours">{employeeHours.toFixed(1)}h</div>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

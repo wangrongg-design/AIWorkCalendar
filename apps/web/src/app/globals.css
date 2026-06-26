@@ -13420,6 +13420,247 @@ body {
   }
 }
 
+/* Date detail modal: group multiple logs under one employee. */
+.workday-detail-modal .workday-person-section + .workday-person-section {
+  border-top: 8px solid #f5f5f7;
+}
+
+.workday-detail-modal .workday-person-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e5e5ea;
+  background: #ffffff;
+  padding: 10px 18px;
+}
+
+.workday-detail-modal .workday-person-section-head strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-person-section-head span {
+  color: #6e6e73;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.workday-detail-modal .workday-person-list {
+  display: grid;
+}
+
+.workday-detail-modal .workday-person-row {
+  display: grid;
+  grid-template-columns: 154px minmax(0, 1fr) 68px;
+  gap: 14px;
+  align-items: start;
+  border-bottom: 1px solid #e5e5ea;
+  background: #ffffff;
+  padding: 14px 18px;
+}
+
+.workday-detail-modal .workday-person-section:last-child .workday-person-row:last-child {
+  border-bottom: 0;
+}
+
+.workday-detail-modal .workday-person-profile {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.workday-detail-modal .workday-person-profile-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.workday-detail-modal .workday-person-profile-text strong {
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-person-profile-text em,
+.workday-detail-modal .workday-person-profile-text small {
+  overflow: hidden;
+  color: #86868b;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-person-log-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workday-detail-modal .workday-person-log-card {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 5px;
+  border: 1px solid #ececf0;
+  border-radius: 12px;
+  background: #fbfbfd;
+  padding: 9px 11px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.workday-detail-modal .workday-person-log-card:hover {
+  border-color: #d3e3fd;
+  background: #f8fbff;
+}
+
+.workday-detail-modal .workday-person-log-card:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.workday-detail-modal .workday-person-log-card:focus-visible {
+  outline: 2px solid #0b57d0;
+  outline-offset: 2px;
+}
+
+.workday-detail-modal .workday-person-log-card.has-risk {
+  border-color: rgba(255, 59, 48, 0.22);
+  background: #fff8f7;
+}
+
+.workday-detail-modal .workday-person-log-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.workday-detail-modal .workday-person-log-title strong {
+  min-width: 0;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-person-log-title .ant-tag {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  margin-inline-end: 0;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.workday-detail-modal .workday-person-log-title em {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #1d1d1f;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+.workday-detail-modal .workday-person-log-content {
+  display: block;
+  overflow: hidden;
+  color: #424245;
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-person-log-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: #86868b;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.workday-detail-modal .workday-person-log-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-person-log-meta em {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-style: normal;
+}
+
+.workday-detail-modal .workday-person-log-risk {
+  display: block;
+  overflow: hidden;
+  color: #ff3b30;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workday-detail-modal .workday-person-hours {
+  justify-self: end;
+  border-radius: 999px;
+  background: #f5f5f7;
+  padding: 4px 9px;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 18px;
+}
+
+@media (max-width: 720px) {
+  .workday-detail-modal .workday-person-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+  }
+
+  .workday-detail-modal .workday-person-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .workday-detail-modal .workday-person-hours {
+    justify-self: start;
+  }
+
+  .workday-detail-modal .workday-person-log-title {
+    flex-wrap: wrap;
+  }
+
+  .workday-detail-modal .workday-person-log-title strong {
+    flex: 1 1 160px;
+  }
+}
+
 /* Work log chat modal: large dialog, conversation-first flow */
 .today-log-modal .ant-modal-content {
   display: flex;
