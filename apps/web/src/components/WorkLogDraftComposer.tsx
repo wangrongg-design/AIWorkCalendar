@@ -389,8 +389,15 @@ export function WorkLogDraftComposer({
   const hasItems = itemCount > 0;
   const canGenerate = aiInput.trim().length > 0 && !aiPending;
   const hasConversation = aiMessages.some((item) => item.role === "user");
-  const showAttachments = attachmentsOpen || pendingAttachmentCount > 0;
+  const canAttach = hasItems && !aiPending;
+  const showAttachments = canAttach && (attachmentsOpen || pendingAttachmentCount > 0);
   const canSubmitAny = hasSubmittableDraft(draftPreview);
+  const handleAttachmentPaste = (event: ClipboardEvent<HTMLElement>) => {
+    if (!canAttach) {
+      return;
+    }
+    onPasteImages(event);
+  };
 
   return (
     <div className="today-log-composer worklog-chat-composer">
@@ -602,7 +609,7 @@ export function WorkLogDraftComposer({
                               autoSize={{ minRows: 3, maxRows: 7 }}
                               value={item.content}
                               disabled={locked}
-                              onPaste={onPasteImages}
+                              onPaste={handleAttachmentPaste}
                               onChange={(event) => onUpdateItem(index, { content: event.target.value, status: item.status === "generated" ? "editing" : item.status })}
                             />
                           </label>
@@ -667,7 +674,7 @@ export function WorkLogDraftComposer({
               收起
             </Button>
           </div>
-          <div className="paste-upload-zone" tabIndex={0} onPaste={onPasteImages}>
+          <div className="paste-upload-zone" tabIndex={0} onPaste={handleAttachmentPaste}>
             <Upload.Dragger multiple fileList={pendingUploadFiles} beforeUpload={beforeUploadAttachment} onRemove={onRemoveAttachment}>
               <p className="ant-upload-drag-icon">
                 <UploadCloud size={26} />
@@ -703,7 +710,7 @@ export function WorkLogDraftComposer({
           autoSize={{ minRows: 2, maxRows: 8 }}
           placeholder="描述今天完成了什么、花了多久、明天计划或风险。"
           disabled={aiPending}
-          onPaste={onPasteImages}
+          onPaste={handleAttachmentPaste}
           onChange={(event) => onAiInputChange(event.target.value)}
           onPressEnter={(event) => {
             if (!event.shiftKey && canGenerate) {
@@ -713,16 +720,18 @@ export function WorkLogDraftComposer({
           }}
         />
         <div className="today-log-quick-actions">
-          <Tooltip title={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}>
-            <Button
-              className="today-log-icon-button"
-              aria-label={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}
-              icon={<UploadCloud size={17} />}
-              onClick={() => setAttachmentsOpen((value) => !value)}
-            >
-              {pendingAttachmentCount > 0 ? pendingAttachmentCount : null}
-            </Button>
-          </Tooltip>
+          {canAttach ? (
+            <Tooltip title={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}>
+              <Button
+                className="today-log-icon-button"
+                aria-label={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}
+                icon={<UploadCloud size={17} />}
+                onClick={() => setAttachmentsOpen((value) => !value)}
+              >
+                {pendingAttachmentCount > 0 ? pendingAttachmentCount : null}
+              </Button>
+            </Tooltip>
+          ) : null}
           <Button className="today-log-send-button" type="primary" aria-label="发送" icon={<Send size={17} />} loading={aiPending} disabled={!canGenerate} onClick={onGenerateDraft} />
           <span className="today-log-shortcut-hint">Enter 生成，Shift + Enter 换行</span>
         </div>
