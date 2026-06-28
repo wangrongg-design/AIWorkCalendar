@@ -22,7 +22,7 @@ import {
 } from "@/components/WorkLogDraftComposer";
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiDownload, apiFetch } from "@/lib/api";
-import { useAuthStore } from "@/lib/auth-store";
+import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
 import { CommunicationInsight, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
@@ -185,6 +185,8 @@ export default function WorkLogsPage() {
   ]);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const canManageWorkLogs = hasAnyRole(user, ["SUPER_ADMIN", "COMPANY_ADMIN"]);
+  const canModifyWorkLog = (record: WorkLog) => Boolean(record.userId === user?.id || canManageWorkLogs);
 
   const logs = useQuery({
     queryKey: ["work-logs"],
@@ -381,9 +383,21 @@ export default function WorkLogsPage() {
 
   const deleteLog = useMutation({
     mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/work-logs/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       message.success("已删除");
+      if (editing?.id === id) {
+        setModalOpen(false);
+        setEditing(null);
+        setPendingAttachments([]);
+      }
+      setDetailRecord((current) => (current?.id === id ? null : current));
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+      queryClient.invalidateQueries({ queryKey: ["project-work-logs"] });
+    },
+    onError: (error) => {
+      message.error((error as Error).message || "删除失败，请刷新页面后重试。");
     }
   });
 
@@ -725,17 +739,26 @@ export default function WorkLogsPage() {
     {
       title: "操作",
       width: 210,
-      render: (_, record) => (
-        <Space>
-          <Button icon={<Edit2 size={15} />} onClick={() => openEdit(record)} />
-          <Button icon={<Send size={15} />} disabled={record.status === "SUBMITTED"} loading={submitLog.isPending} onClick={() => submitLog.mutate(record.id)}>
-            提交
-          </Button>
-          <Popconfirm title="确认删除这条填报？" onConfirm={() => deleteLog.mutate(record.id)}>
-            <Button danger icon={<Trash2 size={15} />} />
-          </Popconfirm>
-        </Space>
-      )
+      render: (_, record) => {
+        if (!canModifyWorkLog(record)) {
+          return (
+            <Button onClick={() => setDetailRecord(record)}>
+              查看
+            </Button>
+          );
+        }
+        return (
+          <Space>
+            <Button icon={<Edit2 size={15} />} onClick={() => openEdit(record)} />
+            <Button icon={<Send size={15} />} disabled={record.status === "SUBMITTED"} loading={submitLog.isPending} onClick={() => submitLog.mutate(record.id)}>
+              提交
+            </Button>
+            <Popconfirm title="确认删除这条填报？删除后不会进入统计和汇报。" onConfirm={() => deleteLog.mutate(record.id)}>
+              <Button danger icon={<Trash2 size={15} />} loading={deleteLog.isPending && deleteLog.variables === record.id} />
+            </Popconfirm>
+          </Space>
+        );
+      }
     }
   ];
 
@@ -866,6 +889,11 @@ export default function WorkLogsPage() {
         footer={
           editing
             ? [
+                <Popconfirm key="delete" title="确认删除这条填报？删除后不会进入统计和汇报。" onConfirm={() => deleteLog.mutate(editing.id)}>
+                  <Button danger icon={<Trash2 size={15} />} loading={deleteLog.isPending && deleteLog.variables === editing.id}>
+                    删除记录
+                  </Button>
+                </Popconfirm>,
                 <Button key="cancel" onClick={() => setModalOpen(false)}>
                   取消
                 </Button>,
@@ -998,10 +1026,31 @@ export default function WorkLogsPage() {
       </Modal>
 
       <Modal
-        title={detailRecord ? <WorkLogDetailTitle record={detailRecord} readOnly={detailRecord.userId !== user?.id} /> : "填报详情"}
+        title={detailRecord ? <WorkLogDetailTitle record={detailRecord} readOnly={!canModifyWorkLog(detailRecord)} /> : "填报详情"}
         open={Boolean(detailRecord)}
         onCancel={() => setDetailRecord(null)}
-        footer={null}
+        footer={
+          detailRecord && canModifyWorkLog(detailRecord)
+            ? [
+                <Popconfirm key="delete" title="确认删除这条填报？删除后不会进入统计和汇报。" onConfirm={() => deleteLog.mutate(detailRecord.id)}>
+                  <Button danger icon={<Trash2 size={15} />} loading={deleteLog.isPending && deleteLog.variables === detailRecord.id}>
+                    删除记录
+                  </Button>
+                </Popconfirm>,
+                <Button
+                  key="edit"
+                  icon={<Edit2 size={15} />}
+                  onClick={() => {
+                    const record = detailRecord;
+                    setDetailRecord(null);
+                    openEdit(record);
+                  }}
+                >
+                  编辑记录
+                </Button>
+              ]
+            : null
+        }
         width={860}
         zIndex={1500}
         className="work-log-detail-modal"

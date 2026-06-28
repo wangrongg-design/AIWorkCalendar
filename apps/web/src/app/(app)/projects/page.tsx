@@ -275,7 +275,7 @@ export default function ProjectsPage() {
   });
 
   const canEditWorkLog = (record: WorkLog) => {
-    return Boolean(record.userId === user?.id);
+    return Boolean(record.userId === user?.id || canManage);
   };
 
   const updateProjectWorkLog = useMutation({
@@ -294,6 +294,22 @@ export default function ProjectsPage() {
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "更新日报失败");
+    }
+  });
+
+  const deleteProjectWorkLog = useMutation({
+    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/work-logs/${id}`, { method: "DELETE" }),
+    onSuccess: (_, id) => {
+      message.success("日报已删除");
+      setDetailLog((current) => (current?.id === id ? null : current));
+      setDetailEditing(false);
+      queryClient.invalidateQueries({ queryKey: ["project-work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "删除日报失败");
     }
   });
 
@@ -646,15 +662,27 @@ export default function ProjectsPage() {
           detailLog && canEditWorkLog(detailLog) ? (
             detailEditing ? (
               <Space>
+                <Popconfirm title="确认删除这条日报？删除后不会进入统计和汇报。" onConfirm={() => deleteProjectWorkLog.mutate(detailLog.id)}>
+                  <Button danger icon={<Trash2 size={15} />} loading={deleteProjectWorkLog.isPending && deleteProjectWorkLog.variables === detailLog.id}>
+                    删除记录
+                  </Button>
+                </Popconfirm>
                 <Button onClick={() => setDetailEditing(false)}>取消编辑</Button>
                 <Button type="primary" loading={updateProjectWorkLog.isPending} onClick={() => workLogForm.submit()}>
                   保存修改
                 </Button>
               </Space>
             ) : (
-              <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
-                编辑记录
-              </Button>
+              <Space>
+                <Popconfirm title="确认删除这条日报？删除后不会进入统计和汇报。" onConfirm={() => deleteProjectWorkLog.mutate(detailLog.id)}>
+                  <Button danger icon={<Trash2 size={15} />} loading={deleteProjectWorkLog.isPending && deleteProjectWorkLog.variables === detailLog.id}>
+                    删除记录
+                  </Button>
+                </Popconfirm>
+                <Button icon={<Edit2 size={15} />} onClick={() => setDetailEditing(true)}>
+                  编辑记录
+                </Button>
+              </Space>
             )
           ) : null
         }
