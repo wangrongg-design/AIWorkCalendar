@@ -89,7 +89,7 @@ function AnalysisList({
 }) {
   const safeItems = items?.filter(Boolean) ?? [];
   return (
-    <section className={`work-log-analysis-card is-${tone}`}>
+    <section className={`work-log-analysis-card is-${tone}${safeItems.length ? "" : " is-empty"}`}>
       <div className="work-log-analysis-card-title">
         {icon}
         <span>{title}</span>
