@@ -2469,6 +2469,8 @@ function listWorkLogs(user, url) {
   return filterLogsByAccess(user, url)
     .filter((item) => !item.deletedAt)
     .filter((item) => !url.searchParams.get("date") || item.date === url.searchParams.get("date"))
+    .filter((item) => !url.searchParams.get("from") || item.date >= url.searchParams.get("from"))
+    .filter((item) => !url.searchParams.get("to") || item.date <= url.searchParams.get("to"))
     .filter((item) => !url.searchParams.get("projectId") || item.projectId === url.searchParams.get("projectId"))
     .filter((item) => !url.searchParams.get("kind") || (item.kind ?? "DAILY") === url.searchParams.get("kind"))
     .map(enrichLog)
@@ -2789,8 +2791,9 @@ function projectChat(user, body) {
     .filter((item) => item.date >= start && item.date <= end)
     .map(enrichLog)
     .sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+  const sources = projectChatSources(visibleLogs);
   return {
-    answer: localCalendarAnswer(body.question ?? "", visibleLogs, body.startDate && body.endDate ? `${start} 至 ${end}` : "最近 30 天"),
+    answer: projectChatAnswer(body.question ?? "", visibleLogs, sources, body.startDate && body.endDate ? `${start} 至 ${end}` : "最近 30 天"),
     contextCount: visibleLogs.length,
     project: {
       id: project.id,
@@ -2799,8 +2802,34 @@ function projectChat(user, body) {
       ownerName: project.owner?.name ?? null
     },
     period: { start, end },
-    sources: projectChatSources(visibleLogs)
+    sources
   };
+}
+
+function projectChatAnswer(question, logs, sources, periodLabel) {
+  if (!logs.length) {
+    return `结论：当前项目暂无可用于分析的来源日报。\n\n依据：${periodLabel} 内没有可引用的项目日报。\n\n建议动作：\n1. 先关联项目日报或扩大时间范围。\n2. 成员提交日报时确认项目归属。\n\n来源：\n- 来源日报 0 条\n- 时间范围 ${periodLabel}`;
+  }
+  const lowerQuestion = String(question ?? "").toLowerCase();
+  const wantsRisk = /风险|问题|阻塞|block|risk/.test(lowerQuestion);
+  const wantsReport = /周报|同步|汇报|摘要|summary|report/i.test(lowerQuestion);
+  const riskTotal = sources.reduce((sum, source) => sum + source.riskCount + source.blockerCount, 0);
+  const totalHours = logs.reduce((sum, log) => sum + Number(log.hours ?? 0), 0);
+  const conclusion = wantsRisk
+    ? riskTotal
+      ? `当前项目存在 ${riskTotal} 条风险/阻塞，需要先确认负责人和处理动作。`
+      : "当前项目在所选范围内没有明确风险或阻塞。"
+    : wantsReport
+      ? `${periodLabel} 项目共有 ${logs.length} 条来源日报，可生成项目同步摘要。`
+      : `${periodLabel} 项目共有 ${logs.length} 条日报/计划，合计 ${Number(totalHours.toFixed(1))} 小时。`;
+  const evidence = sources
+    .slice(0, 4)
+    .map((source) => `- ${source.date} ${source.userName}：${source.title}。${source.evidence}`)
+    .join("\n");
+  const actions = riskTotal
+    ? ["1. 优先确认风险/阻塞负责人和处理时间。", "2. 周会前复核相关来源日报，补齐下一步动作。", "3. 如需对外同步，可生成项目周报。"]
+    : ["1. 继续保持日报按项目归属。", "2. 周会前复核关键进展。", "3. 如需对外同步，可生成项目周报。"];
+  return `结论：${conclusion}\n\n依据：\n${evidence}\n\n建议动作：\n${actions.join("\n")}\n\n来源：\n- 来源日报 ${sources.length} 条\n- 时间范围 ${periodLabel}`;
 }
 
 function projectChatSources(logs) {

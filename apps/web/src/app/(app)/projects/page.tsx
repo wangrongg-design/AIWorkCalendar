@@ -1,10 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, DatePicker, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Button, DatePicker, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag, Typography, message } from "antd";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Bot, Edit2, FolderKanban, MessageSquare, Plus, Send, Trash2 } from "lucide-react";
+import { AlertTriangle, Bot, Clock, Edit2, FileText, FolderKanban, MessageSquare, Plus, Search, Send, Trash2, Users } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
@@ -69,6 +68,8 @@ type ProjectChatMessage = {
   contextCount?: number;
 };
 
+type ProjectListStats = ReturnType<typeof summarizeProjectLogs>;
+
 const statusOptions: Array<{ value: ProjectStatus; label: string; color: string }> = [
   { value: "ACTIVE", label: "进行中", color: "green" },
   { value: "PAUSED", label: "暂停", color: "orange" },
@@ -132,6 +133,15 @@ function logRiskBlockerCount(record: WorkLog) {
   return (record.aiAnalysis?.risks?.length ?? 0) + (record.aiAnalysis?.blockers?.length ?? 0);
 }
 
+function buildWorkLogRangeQuery(range: [Dayjs, Dayjs] | null) {
+  const params = new URLSearchParams();
+  if (range) {
+    params.set("from", range[0].format("YYYY-MM-DD"));
+    params.set("to", range[1].format("YYYY-MM-DD"));
+  }
+  return params.toString() ? `/work-logs?${params.toString()}` : "/work-logs";
+}
+
 function buildProjectLogQuery(projectId: string, range: [Dayjs, Dayjs] | null) {
   const params = new URLSearchParams({ projectId });
   if (range) {
@@ -156,10 +166,11 @@ function projectChatPayload(projectId: string, question: string, range: [Dayjs, 
 }
 
 function projectQuestionPrompt(label: string) {
-  if (label === "总结近期进展") return "请总结这个项目近期进展，按已完成、正在推进、需要跟进输出，并列出依据日报。";
-  if (label === "查看风险/阻塞") return "这个项目当前最大的风险或阻塞是什么？请给出结论、依据日报和建议动作。";
+  if (label === "总结最近 7 天进展") return "请总结这个项目最近 7 天的进展，按已完成、正在推进、需要跟进输出，并列出依据日报。";
+  if (label === "找出当前风险") return "这个项目当前最大的风险或阻塞是什么？请给出结论、依据日报和建议动作。";
   if (label === "生成项目周报") return "请基于当前项目日报生成一份项目周报，包含关键进展、风险/阻塞、下周动作和来源。";
-  if (label === "整理下一步动作") return "请从这个项目最近日报中提取下一步待办，按负责人或事项整理，并说明依据。";
+  if (label === "整理负责人待办") return "请从这个项目最近日报中提取下一步待办，按负责人或事项整理，并说明依据。";
+  if (label === "生成客户同步摘要") return "请生成一份适合发给客户或业务方的项目同步摘要，包含进展、风险、下一步和来源依据。";
   return label;
 }
 
@@ -240,6 +251,49 @@ function projectOverviewText(project: Project, analysis: ReturnType<typeof summa
   return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，整体${projectHealth(project).label}，暂无明确风险/阻塞。`;
 }
 
+function isLogInRange(log: WorkLog, range: [Dayjs, Dayjs] | null) {
+  if (!range) return true;
+  const date = dayjs(log.date);
+  return !date.isBefore(range[0], "day") && !date.isAfter(range[1], "day");
+}
+
+function summarizeLogsByProject(logs: WorkLog[]) {
+  const grouped = new Map<string, WorkLog[]>();
+  logs.forEach((log) => {
+    if (!log.projectId) return;
+    grouped.set(log.projectId, [...(grouped.get(log.projectId) ?? []), log]);
+  });
+  return new Map(Array.from(grouped.entries()).map(([projectId, items]) => [projectId, summarizeProjectLogs(items)]));
+}
+
+function projectMatchesSearch(project: Project, keyword: string) {
+  if (!keyword) return true;
+  const normalized = keyword.toLowerCase();
+  return [project.name, project.code, project.owner?.name, project.description]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(normalized));
+}
+
+function projectRecentText(stats?: ProjectListStats) {
+  if (!stats?.latestDate) return "当前周期暂无日报";
+  return `最近更新 ${dayjs(stats.latestDate).format("MM-DD")}`;
+}
+
+function assistantIntro(project: Project, analysis: ProjectListStats, range: [Dayjs, Dayjs] | null) {
+  if (!analysis.totalLogs) {
+    return {
+      conclusion: "当前项目暂无来源日报，先关联项目日报或调整时间范围。",
+      evidence: `${rangeText(range)} 内没有可分析记录。`,
+      action: "可以先让成员按项目提交日报，或扩大日期范围后再提问。"
+    };
+  }
+  return {
+    conclusion: projectOverviewText(project, analysis),
+    evidence: `${rangeText(range)} · ${analysis.totalLogs} 条日报/计划 · ${analysis.members.length} 个成员 · ${analysis.riskBlockerCount} 条风险/阻塞。`,
+    action: analysis.riskBlockerCount ? "建议先追问当前风险，确认负责人和处理动作。" : "可以继续生成项目周报、整理负责人待办或准备客户同步摘要。"
+  };
+}
+
 function projectNextActions(project: Project, analysis: ReturnType<typeof summarizeProjectLogs>) {
   const actions: string[] = [];
   if (!project.owner?.name) {
@@ -298,10 +352,13 @@ export default function ProjectsPage() {
   const [detailEditing, setDetailEditing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "ALL">("ACTIVE");
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectRiskFilter, setProjectRiskFilter] = useState<"ALL" | "RISK">("ALL");
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>([dayjs().subtract(14, "day"), dayjs().add(7, "day")]);
   const [projectChatInput, setProjectChatInput] = useState("");
   const [projectChatMessages, setProjectChatMessages] = useState<ProjectChatMessage[]>([]);
+  const [showAllSourceLogs, setShowAllSourceLogs] = useState(false);
 
   const projects = useQuery({
     queryKey: ["projects"],
@@ -319,9 +376,25 @@ export default function ProjectsPage() {
     [org.data?.users]
   );
 
+  const allProjectLogs = useQuery({
+    queryKey: [
+      "project-center-work-logs",
+      range?.[0].format("YYYY-MM-DD") ?? "all",
+      range?.[1].format("YYYY-MM-DD") ?? "all"
+    ],
+    queryFn: () => apiFetch<WorkLog[]>(buildWorkLogRangeQuery(range))
+  });
+
+  const rangeFilteredAllLogs = useMemo(() => (allProjectLogs.data ?? []).filter((item) => isLogInRange(item, range)), [allProjectLogs.data, range]);
+  const projectStatsById = useMemo(() => summarizeLogsByProject(rangeFilteredAllLogs), [rangeFilteredAllLogs]);
+
   const filteredProjects = useMemo(() => {
-    return (projects.data ?? []).filter((item) => (statusFilter === "ALL" ? true : item.status === statusFilter));
-  }, [projects.data, statusFilter]);
+    const keyword = projectSearch.trim();
+    return (projects.data ?? [])
+      .filter((item) => (statusFilter === "ALL" ? true : item.status === statusFilter))
+      .filter((item) => projectMatchesSearch(item, keyword))
+      .filter((item) => (projectRiskFilter === "RISK" ? (projectStatsById.get(item.id)?.riskBlockerCount ?? 0) > 0 : true));
+  }, [projectRiskFilter, projectSearch, projectStatsById, projects.data, statusFilter]);
 
   const selectedProject = useMemo(() => {
     return filteredProjects.find((item) => item.id === selectedProjectId) ?? filteredProjects[0] ?? null;
@@ -349,20 +422,27 @@ export default function ProjectsPage() {
   });
 
   const projectAnalysis = useMemo(() => {
-    return summarizeProjectLogs(projectLogs.data ?? []);
-  }, [projectLogs.data]);
-  const projectLogById = useMemo(() => new Map((projectLogs.data ?? []).map((item) => [item.id, item])), [projectLogs.data]);
+    return summarizeProjectLogs((projectLogs.data ?? []).filter((item) => isLogInRange(item, range)));
+  }, [projectLogs.data, range]);
+  const sourceLogs = useMemo(() => (projectLogs.data ?? []).filter((item) => isLogInRange(item, range)), [projectLogs.data, range]);
+  const visibleSourceLogs = useMemo(() => (showAllSourceLogs ? sourceLogs : sourceLogs.slice(0, 5)), [showAllSourceLogs, sourceLogs]);
+  const projectLogById = useMemo(() => new Map(sourceLogs.map((item) => [item.id, item])), [sourceLogs]);
   const projectQuickQuestions = useMemo(
     () =>
       selectedProject
         ? [
-            "总结近期进展",
-            "查看风险/阻塞",
+            "总结最近 7 天进展",
+            "找出当前风险",
             "生成项目周报",
-            "整理下一步动作"
+            "整理负责人待办",
+            "生成客户同步摘要"
           ]
         : [],
     [selectedProject]
+  );
+  const projectAssistantIntro = useMemo(
+    () => (selectedProject ? assistantIntro(selectedProject, projectAnalysis, range) : null),
+    [projectAnalysis, range, selectedProject]
   );
   const projectActions = useMemo(() => (selectedProject ? projectNextActions(selectedProject, projectAnalysis) : []), [projectAnalysis, selectedProject]);
   const selectedProjectSources = useMemo(
@@ -501,6 +581,10 @@ export default function ProjectsPage() {
   const askProjectQuestion = (question = projectChatInput) => {
     const normalized = question.trim();
     if (!normalized || !selectedProject || projectChat.isPending) return;
+    if (!projectAnalysis.totalLogs) {
+      message.info("当前项目暂无来源日报，先关联项目日报或调整时间范围。");
+      return;
+    }
     setProjectChatMessages((items) => [
       ...items,
       {
@@ -527,6 +611,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     setProjectChatMessages([]);
     setProjectChatInput("");
+    setShowAllSourceLogs(false);
   }, [selectedProject?.id, range?.[0]?.format("YYYY-MM-DD"), range?.[1]?.format("YYYY-MM-DD")]);
 
   useEffect(() => {
@@ -539,34 +624,8 @@ export default function ProjectsPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [projectChatMessages, projectChat.isPending]);
 
-  const logColumns: ColumnsType<WorkLog> = [
-    { title: "日期", dataIndex: "date", width: 112, render: (value: string) => dayjs(value).format("MM-DD") },
-    {
-      title: "日报内容",
-      render: (_, record) => (
-        <div className="min-w-0">
-          <Button type="link" className="!h-auto !p-0 !text-left font-medium" onClick={() => openLogDetail(record)}>
-            {record.title}
-          </Button>
-          <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{record.aiAnalysis?.summary ?? record.content}</div>
-          {record.sourceLinks?.length ? <Tag className="mt-2" color="cyan">沟通来源 {record.sourceLinks.length}</Tag> : null}
-        </div>
-      )
-    },
-    { title: "人员", width: 110, render: (_, record) => record.user?.name ?? "-" },
-    { title: "工时", dataIndex: "hours", width: 90, render: formatHours },
-    {
-      title: "风险/阻塞",
-      width: 120,
-      render: (_, record) => {
-        const count = logRiskBlockerCount(record);
-        return <Tag color={count ? "red" : "default"}>{count ? `${count} 条` : "无"}</Tag>;
-      }
-    }
-  ];
-
   return (
-    <div className="page-stack">
+    <div className="page-stack project-center-page">
       <div className="page-header">
         <div>
           <Typography.Title level={3} className="page-title">
@@ -582,7 +641,8 @@ export default function ProjectsPage() {
       </div>
 
       <div className="toolbar-panel project-analysis-toolbar">
-        <Space wrap>
+        <div className="project-toolbar-control">
+          <span>状态</span>
           <Select
             value={statusFilter}
             style={{ width: 132 }}
@@ -592,19 +652,49 @@ export default function ProjectsPage() {
             }}
             options={[{ value: "ACTIVE", label: "进行中" }, { value: "ALL", label: "全部项目" }, ...statusOptions.filter((item) => item.value !== "ACTIVE").map((item) => ({ value: item.value, label: item.label }))]}
           />
+        </div>
+        <div className="project-toolbar-control is-range">
+          <span>周期</span>
           <DatePicker.RangePicker
             value={range}
             onChange={(dates) => setRange(dates?.[0] && dates?.[1] ? [dates[0], dates[1]] : null)}
             allowClear
           />
-        </Space>
+        </div>
+        <Input
+          className="project-toolbar-search"
+          prefix={<Search size={15} />}
+          allowClear
+          value={projectSearch}
+          placeholder="搜索项目、编号、负责人"
+          onChange={(event) => {
+            setProjectSearch(event.target.value);
+            setSelectedProjectId(undefined);
+          }}
+        />
+        <div className="project-toolbar-control">
+          <span>风险</span>
+          <Select
+            value={projectRiskFilter}
+            style={{ width: 132 }}
+            onChange={(value) => {
+              setProjectRiskFilter(value);
+              setSelectedProjectId(undefined);
+            }}
+            options={[
+              { value: "ALL", label: "全部" },
+              { value: "RISK", label: "有风险/阻塞" }
+            ]}
+          />
+        </div>
       </div>
 
       <div className="project-analysis-layout">
         <section className="surface-panel project-list-panel">
-          <div className="section-head">
+          <div className="section-head project-list-head">
             <div>
               <div className="section-title">项目列表</div>
+              <div className="section-subtitle">{filteredProjects.length} 个项目 · {rangeText(range)}</div>
             </div>
           </div>
           <div className="project-list">
@@ -612,6 +702,8 @@ export default function ProjectsPage() {
               filteredProjects.map((project) => {
                 const health = projectHealth(project);
                 const active = project.id === selectedProject?.id;
+                const stats = projectStatsById.get(project.id);
+                const riskBlockerCount = stats?.riskBlockerCount ?? 0;
                 return (
                   <button
                     key={project.id}
@@ -626,13 +718,18 @@ export default function ProjectsPage() {
                     <span className="project-list-meta">
                       <Tag color={statusColor(project.status)}>{statusLabel(project.status)}</Tag>
                       <Tag color={health.color}>{health.label}</Tag>
+                      {riskBlockerCount ? <Tag color="red">风险/阻塞 {riskBlockerCount}</Tag> : null}
                     </span>
                     <span className="project-list-owner">{project.owner?.name ? `负责人：${project.owner.name}` : "负责人未设置"}</span>
+                    <span className="project-list-foot">
+                      <span>{stats?.totalLogs ?? 0} 条日报</span>
+                      <span>{projectRecentText(stats)}</span>
+                    </span>
                   </button>
                 );
               })
             ) : (
-              <Empty description="暂无项目" />
+              <Empty description="暂无匹配项目" />
             )}
           </div>
         </section>
@@ -651,11 +748,13 @@ export default function ProjectsPage() {
                     <Tag color={statusColor(selectedProject.status)}>{statusLabel(selectedProject.status)}</Tag>
                     <Tag color={projectHealth(selectedProject).color}>{projectHealth(selectedProject).label}</Tag>
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-muted">
-                    {selectedProject.description || "暂无项目说明。"} 负责人：{selectedProject.owner?.name ?? "未设置"}。
+                  <div className="project-hero-description">
+                    {selectedProject.description || "暂无项目说明。"}
                   </div>
-                  <div className="mt-2 text-xs text-muted">
-                    项目周期：{dateText(selectedProject.startDate)} 至 {dateText(selectedProject.endDate)}
+                  <div className="project-hero-meta">
+                    <span>负责人：{selectedProject.owner?.name ?? "未设置"}</span>
+                    <span>项目周期：{dateText(selectedProject.startDate)} 至 {dateText(selectedProject.endDate)}</span>
+                    <span>{projectRecentText(projectStatsById.get(selectedProject.id))}</span>
                   </div>
                 </div>
                 {canManage ? (
@@ -673,14 +772,14 @@ export default function ProjectsPage() {
               <div className="surface-panel project-focus-panel">
                 <div className="project-focus-head">
                   <div className="min-w-0">
-                    <div className="section-title">项目工作摘要</div>
+                    <div className="section-title">项目概览</div>
                     <div className="section-subtitle">{rangeText(range)}</div>
                   </div>
                   <div className="project-focus-stats" aria-label="项目工作摘要数据">
-                    <span><strong>{projectAnalysis.totalLogs}</strong>条日报/计划</span>
-                    <span><strong>{projectAnalysis.members.length}</strong>人</span>
-                    <span><strong>{projectAnalysis.riskBlockerCount}</strong>条风险/阻塞</span>
-                    <span><strong>{projectAnalysis.totalHours.toFixed(1)}</strong>h</span>
+                    <span><FileText size={13} /><strong>{projectAnalysis.totalLogs}</strong>条日报/计划</span>
+                    <span><Users size={13} /><strong>{projectAnalysis.members.length}</strong>人</span>
+                    <span><AlertTriangle size={13} /><strong>{projectAnalysis.riskBlockerCount}</strong>条风险/阻塞</span>
+                    <span><Clock size={13} /><strong>{projectAnalysis.totalHours.toFixed(1)}</strong>h</span>
                   </div>
                 </div>
                 <p className={`project-focus-summary ${projectAnalysis.riskBlockerCount ? "is-risk" : ""}`}>
@@ -719,21 +818,40 @@ export default function ProjectsPage() {
               <div className="project-log-section">
                 <div className="history-section-head">
                   <div>
-                    <div className="section-title">近期日报</div>
-                    <div className="section-subtitle">{projectAnalysis.totalLogs ? `${projectAnalysis.totalLogs} 条记录` : "暂无记录"}</div>
+                    <div className="section-title">来源日报</div>
+                    <div className="section-subtitle">默认展示最近 5 条，点击可查看详情。</div>
                   </div>
+                  {sourceLogs.length > 5 ? (
+                    <Button size="small" onClick={() => setShowAllSourceLogs((value) => !value)}>
+                      {showAllSourceLogs ? "收起" : `查看全部 ${sourceLogs.length} 条`}
+                    </Button>
+                  ) : null}
                 </div>
-                <Table
-                  rowKey="id"
-                  loading={projectLogs.isFetching}
-                  dataSource={projectLogs.data ?? []}
-                  columns={logColumns}
-                  locale={{ emptyText: <Empty description="当前项目暂无日报记录" /> }}
-                  pagination={{ pageSize: 6 }}
-                  onRow={(record) => ({
-                    onDoubleClick: () => openLogDetail(record)
-                  })}
-                />
+                {projectLogs.isFetching ? (
+                  <div className="project-source-log-empty">正在加载来源日报…</div>
+                ) : visibleSourceLogs.length ? (
+                  <div className="project-source-log-list">
+                    {visibleSourceLogs.map((record) => {
+                      const riskBlockerCount = logRiskBlockerCount(record);
+                      return (
+                        <button key={record.id} type="button" className="project-source-log-item" onClick={() => openLogDetail(record)}>
+                          <span className="project-source-log-meta">
+                            {dayjs(record.date).format("MM-DD")} · {record.user?.name ?? "员工"} · {formatHours(record.hours)}
+                            {record.sourceLinks?.length ? ` · 沟通来源 ${record.sourceLinks.length}` : ""}
+                          </span>
+                          <strong>{record.title}</strong>
+                          <span className="project-source-log-summary">{record.aiAnalysis?.summary ?? record.content}</span>
+                          <span className="project-source-log-tags">
+                            <Tag color={riskBlockerCount ? "red" : "default"}>{riskBlockerCount ? `风险/阻塞 ${riskBlockerCount} 条` : "无风险/阻塞"}</Tag>
+                            {record.kind === "PLAN" ? <Tag color="blue">计划</Tag> : <Tag color="green">日报</Tag>}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Empty description="当前项目暂无来源日报" />
+                )}
               </div>
 
               <div className="surface-panel project-communication-panel">
@@ -812,14 +930,21 @@ export default function ProjectsPage() {
                 <div className="min-w-0">
                   <div className="project-ai-title">项目 AI 助手</div>
                   <div className="project-ai-context">
-                    当前项目 · {rangeText(range)} · {projectAnalysis.totalLogs} 条日报 · {projectAnalysis.members.length} 个成员
+                    {selectedProject.name}
                   </div>
                 </div>
               </div>
 
+              <div className="project-ai-coverage" aria-label="项目 AI 助手数据覆盖">
+                <span>{rangeText(range)}</span>
+                <span>{projectAnalysis.totalLogs} 条日报</span>
+                <span>{projectAnalysis.members.length} 个成员</span>
+                <span>{projectAnalysis.riskBlockerCount} 条风险/阻塞</span>
+              </div>
+
               <div className="project-ai-quick">
                 {projectQuickQuestions.map((item) => (
-                  <button key={item} type="button" disabled={projectChat.isPending} onClick={() => askProjectQuestion(projectQuestionPrompt(item))}>
+                  <button key={item} type="button" disabled={projectChat.isPending || !projectAnalysis.totalLogs} onClick={() => askProjectQuestion(projectQuestionPrompt(item))}>
                     {item}
                   </button>
                 ))}
@@ -865,9 +990,13 @@ export default function ProjectsPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="project-ai-empty">
-                    <strong>问问这个项目</strong>
-                    <span>可以问近期进展、风险/阻塞、项目周报和下一步动作。回答会带来源日报。</span>
+                  <div className={`project-ai-empty ${projectAnalysis.totalLogs ? "" : "is-no-data"}`}>
+                    <strong>结论</strong>
+                    <span>{projectAssistantIntro?.conclusion}</span>
+                    <strong>依据</strong>
+                    <span>{projectAssistantIntro?.evidence}</span>
+                    <strong>建议动作</strong>
+                    <span>{projectAssistantIntro?.action}</span>
                   </div>
                 )}
                 {projectChat.isPending ? (
@@ -881,8 +1010,8 @@ export default function ProjectsPage() {
                 <Input.TextArea
                   value={projectChatInput}
                   autoSize={{ minRows: 1, maxRows: 4 }}
-                  placeholder="问问这个项目…"
-                  disabled={projectChat.isPending}
+                  placeholder={projectAnalysis.totalLogs ? "问问这个项目…" : "当前项目暂无来源日报"}
+                  disabled={projectChat.isPending || !projectAnalysis.totalLogs}
                   onChange={(event) => setProjectChatInput(event.target.value)}
                   onPressEnter={(event) => {
                     if (!event.shiftKey) {
@@ -894,7 +1023,7 @@ export default function ProjectsPage() {
                 <Button
                   type="primary"
                   icon={<Send size={15} />}
-                  disabled={!projectChatInput.trim() || projectChat.isPending}
+                  disabled={!projectChatInput.trim() || projectChat.isPending || !projectAnalysis.totalLogs}
                   loading={projectChat.isPending}
                   onClick={() => askProjectQuestion()}
                 >
@@ -944,7 +1073,7 @@ export default function ProjectsPage() {
       </Modal>
 
       <Drawer
-        title={detailLog ? <WorkLogDetailTitle record={detailLog} readOnly={!canEditWorkLog(detailLog)} /> : "日报详情"}
+        title={detailLog ? <WorkLogDetailTitle record={detailLog} currentUserId={user?.id} readOnly={!canEditWorkLog(detailLog)} /> : "日报详情"}
         open={Boolean(detailLog)}
         onClose={() => {
           setDetailLog(null);

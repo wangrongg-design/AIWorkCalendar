@@ -56,16 +56,18 @@ function workLogKindLabel(record: WorkLog) {
 
 export function WorkLogDetailTitle({
   record,
-  readOnly,
+  currentUserId,
   navigation
 }: {
   record: WorkLog;
+  currentUserId?: string | null;
   readOnly?: boolean;
   navigation?: WorkLogDetailNavigation | null;
 }) {
   const status = workLogDetailStatus(record);
   const detailKind = workLogKindLabel(record);
   const canNavigate = Boolean(navigation && navigation.total > 1);
+  const showStatus = currentUserId ? record.userId === currentUserId || record.status !== "SUBMITTED" : true;
   return (
     <div className="work-log-detail-titlebar">
       <div className="work-log-detail-title-copy">
@@ -73,10 +75,11 @@ export function WorkLogDetailTitle({
         <div className="work-log-detail-title-sub">{record.title}</div>
       </div>
       <div className="work-log-detail-title-actions">
-        <div className="work-log-detail-title-tags">
-          <Tag color={status.color}>{status.label}</Tag>
-          {readOnly ? <Tag>仅可查看</Tag> : null}
-        </div>
+        {showStatus ? (
+          <div className="work-log-detail-title-tags">
+            <Tag color={status.color}>{status.label}</Tag>
+          </div>
+        ) : null}
         {canNavigate ? (
           <div className="work-log-detail-pager" aria-label={`切换该成员的其他${detailKind}`}>
             <Button

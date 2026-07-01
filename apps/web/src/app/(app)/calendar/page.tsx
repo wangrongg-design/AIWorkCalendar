@@ -1767,7 +1767,7 @@ export default function CalendarPage() {
       </Modal>
 
       <Modal
-        title={selectedWorkLog ? <WorkLogDetailTitle record={selectedWorkLog} readOnly navigation={selectedWorkLogNavigation} /> : "填报详情"}
+        title={selectedWorkLog ? <WorkLogDetailTitle record={selectedWorkLog} currentUserId={user?.id} readOnly navigation={selectedWorkLogNavigation} /> : "填报详情"}
         open={Boolean(selectedWorkLog)}
         onCancel={() => setSelectedWorkLog(null)}
         footer={null}

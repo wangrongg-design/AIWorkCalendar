@@ -206,7 +206,7 @@ export class AiService {
     const today = dateKey(new Date());
     const answer = await this.openAi.chatWithCalendarContext(
       {
-        question: dto.question,
+        question: this.projectChatQuestion(dto.question),
         periodLabel: period.label,
         scopeName: `${project.name}项目`,
         logs: logs.map((log) => {
@@ -241,9 +241,10 @@ export class AiService {
         targetId: project.id
       }
     );
+    const sources = this.projectChatSources(logs);
 
     return {
-      answer,
+      answer: this.formatProjectChatAnswer(answer, sources, period.label),
       contextCount: logs.length,
       project: {
         id: project.id,
@@ -255,7 +256,7 @@ export class AiService {
         start: dateKey(period.start),
         end: dateKey(period.end)
       },
-      sources: this.projectChatSources(logs)
+      sources
     };
   }
 
@@ -309,6 +310,33 @@ export class AiService {
     const start = new Date(end);
     start.setUTCDate(start.getUTCDate() - 29);
     return { start, end, label: "最近 30 天" };
+  }
+
+  private projectChatQuestion(question: string) {
+    return `${question.trim()}\n\n请按以下结构回答：\n结论：一句话判断当前项目状态。\n依据：列出相关来源日报，必须包含日期、人员、标题或关键证据。\n建议动作：给出 2-4 条可执行动作。\n来源：说明来源日报数量和时间范围。上下文不足时直接说明，不要编造。`;
+  }
+
+  private formatProjectChatAnswer(
+    answer: string,
+    sources: Array<{ date: string; userName: string; title: string; evidence: string; riskCount: number; blockerCount: number }>,
+    periodLabel: string
+  ) {
+    if (/结论[:：]/.test(answer) && /依据[:：]/.test(answer) && /建议动作[:：]/.test(answer)) {
+      return answer;
+    }
+    if (!sources.length) {
+      return `结论：当前项目暂无可用于分析的来源日报。\n\n依据：${periodLabel} 内没有可引用的项目日报。\n\n建议动作：\n1. 先关联项目日报或扩大时间范围。\n2. 成员提交日报时确认项目归属。\n\n来源：\n- 来源日报 0 条\n- 时间范围 ${periodLabel}`;
+    }
+    const sourceLines = sources
+      .slice(0, 4)
+      .map((source) => `- ${source.date} ${source.userName}：${source.title}。${source.evidence}`)
+      .join("\n");
+    const riskTotal = sources.reduce((sum, source) => sum + source.riskCount + source.blockerCount, 0);
+    const conclusion = answer.split("\n").find((line) => line.trim())?.trim() ?? `${periodLabel} 当前项目已有 ${sources.length} 条来源日报。`;
+    const actions = riskTotal
+      ? ["1. 优先确认风险/阻塞负责人和处理时间。", "2. 周会前复核相关来源日报，补齐下一步动作。", "3. 如需对外同步，可生成项目周报。"]
+      : ["1. 继续保持日报按项目归属。", "2. 周会前复核关键进展。", "3. 如需对外同步，可生成项目周报。"];
+    return `结论：${conclusion}\n\n依据：\n${sourceLines}\n\n建议动作：\n${actions.join("\n")}\n\n来源：\n- 来源日报 ${sources.length} 条\n- 时间范围 ${periodLabel}`;
   }
 
   private projectChatSources(

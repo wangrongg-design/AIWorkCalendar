@@ -1026,7 +1026,7 @@ export default function WorkLogsPage() {
       </Modal>
 
       <Modal
-        title={detailRecord ? <WorkLogDetailTitle record={detailRecord} readOnly={!canModifyWorkLog(detailRecord)} /> : "填报详情"}
+        title={detailRecord ? <WorkLogDetailTitle record={detailRecord} currentUserId={user?.id} readOnly={!canModifyWorkLog(detailRecord)} /> : "填报详情"}
         open={Boolean(detailRecord)}
         onCancel={() => setDetailRecord(null)}
         footer={
