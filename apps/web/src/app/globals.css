@@ -1647,6 +1647,11 @@ body {
   line-height: 1.25;
 }
 
+.work-log-detail-title-main span {
+  color: #6e6e73;
+  font-weight: 650;
+}
+
 .work-log-detail-title-sub {
   margin-top: 6px;
   max-width: 62ch;
@@ -1745,28 +1750,21 @@ body {
 
 .work-log-info-strip {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.8fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, 0.16fr) minmax(150px, 0.34fr);
+  gap: 14px;
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid rgba(60, 60, 67, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.56);
+  border-bottom: 1px solid rgba(60, 60, 67, 0.08);
+  padding: 0 4px 10px;
 }
 
 .work-log-info-item {
   min-width: 0;
-  border-right: 1px solid rgba(60, 60, 67, 0.08);
-  padding: 12px 16px;
-}
-
-.work-log-info-item:last-child {
-  border-right: 0;
+  padding: 0;
 }
 
 .work-log-info-item span {
   display: block;
-  color: #6e6e73;
+  color: #8e8e93;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
@@ -1775,11 +1773,16 @@ body {
 .work-log-info-item strong {
   display: block;
   margin-top: 6px;
-  color: #1d1d1f;
-  font-size: 15px;
+  color: #3a3a3c;
+  font-size: 14px;
   font-weight: 650;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.work-log-info-item:not(:first-child) strong {
+  color: #6e6e73;
+  font-weight: 600;
 }
 
 .work-log-detail-section {
@@ -2044,21 +2047,11 @@ body {
 
   .work-log-info-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .work-log-info-item {
-    border-right: 1px solid rgba(60, 60, 67, 0.08);
-    border-bottom: 1px solid rgba(60, 60, 67, 0.08);
-  }
-
-  .work-log-info-item:nth-child(2n),
-  .work-log-info-item:last-child {
-    border-right: 0;
+    gap: 12px 16px;
   }
 
   .work-log-info-item:last-child {
     grid-column: 1 / -1;
-    border-bottom: 0;
   }
 
   .work-log-analysis-grid {
@@ -2087,12 +2080,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .work-log-info-item {
-    border-right: 0;
-  }
-
   .work-log-info-item:last-child {
-    border-bottom: 0;
+    grid-column: auto;
   }
 
   .work-log-detail-section {

@@ -66,12 +66,16 @@ export function WorkLogDetailTitle({
 }) {
   const status = workLogDetailStatus(record);
   const detailKind = workLogKindLabel(record);
+  const userName = record.user?.name;
   const canNavigate = Boolean(navigation && navigation.total > 1);
   const showStatus = currentUserId ? record.userId === currentUserId || record.status !== "SUBMITTED" : true;
   return (
     <div className="work-log-detail-titlebar">
       <div className="work-log-detail-title-copy">
-        <div className="work-log-detail-title-main">{dayjs(record.date).format("YYYY-MM-DD")} · {detailKind}</div>
+        <div className="work-log-detail-title-main">
+          {dayjs(record.date).format("YYYY-MM-DD")} · {detailKind}
+          {userName ? <span> · {userName}</span> : null}
+        </div>
         <div className="work-log-detail-title-sub">{record.title}</div>
       </div>
       <div className="work-log-detail-title-actions">
@@ -157,15 +161,10 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
   const timeInfo = workLogTimeInfo(record);
   const status = workLogDetailStatus(record);
   const projectName = record.project?.name ?? projectNameFallback ?? "未关联";
-  const detailKind = workLogKindLabel(record);
 
   return (
     <div className="work-log-detail-shell">
       <div className="work-log-info-strip">
-        <div className="work-log-info-item">
-          <span>人员</span>
-          <strong>{record.user?.name ?? "-"}</strong>
-        </div>
         <div className="work-log-info-item">
           <span>项目</span>
           <strong>{projectName}</strong>
@@ -173,10 +172,6 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
         <div className="work-log-info-item">
           <span>工时</span>
           <strong>{Number(record.hours).toFixed(1)}h</strong>
-        </div>
-        <div className="work-log-info-item">
-          <span>类型</span>
-          <strong>{detailKind}</strong>
         </div>
         {showTimeInfo ? (
           <div className="work-log-info-item">
