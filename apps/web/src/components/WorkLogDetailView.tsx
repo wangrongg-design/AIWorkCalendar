@@ -72,6 +72,14 @@ function textOverlapScore(source: string, target: string) {
   return hits / sourceChars.length;
 }
 
+function stripNarrativeNoise(value?: string | null) {
+  return compactDisplayText(value)
+    .replace(/(?:今天|昨日|昨天|明天|上午|中午|下午|晚上|晚间|早上|凌晨|周[一二三四五六日天]|星期[一二三四五六日天])/g, "")
+    .replace(/[一二三四五六七八九十\d]{1,2}(?:点|时)(?:[一二三四五六七八九十\d]{1,2}分?)?(?:半)?/g, "")
+    .replace(/(?:去了?|前往|到|在)(?=[\u4e00-\u9fa5A-Za-z0-9])/g, "")
+    .trim();
+}
+
 function isCompactResultPhrase(value: string, reference: string) {
   const text = compactDisplayText(value);
   const normalizedValue = normalizeComparableText(value);
@@ -79,6 +87,22 @@ function isCompactResultPhrase(value: string, reference: string) {
   if (!normalizedValue || !normalizedReference) return false;
   const lengthRatio = normalizedValue.length / normalizedReference.length;
   return /^(完成|提交|确认|交付|修复|整理|梳理|输出|建立|上线|推进|解决|优化|复盘|评审|核对|补齐|同步|制定|更新|发布|测试|联调|归档)/.test(text) && lengthRatio <= 0.72;
+}
+
+function isOutcomePhrase(value: string) {
+  return /^(完成|提交|确认|交付|修复|整理|梳理|输出|建立|上线|推进|解决|优化|复盘|评审|核对|补齐|同步|制定|更新|发布|测试|联调|归档)/.test(compactDisplayText(value));
+}
+
+function isNarrativeRestatement(value: string, reference?: string | null) {
+  const text = compactDisplayText(value);
+  const normalizedValue = normalizeComparableText(stripNarrativeNoise(value));
+  const normalizedReference = normalizeComparableText(stripNarrativeNoise(reference));
+  if (!normalizedValue || !normalizedReference) return false;
+  const shorter = normalizedValue.length <= normalizedReference.length ? normalizedValue : normalizedReference;
+  const longer = normalizedValue.length > normalizedReference.length ? normalizedValue : normalizedReference;
+  const lengthRatio = shorter.length / longer.length;
+  const hasNarrativeCue = /^(今天|昨日|昨天|明天|上午|中午|下午|晚上|晚间|早上|凌晨|\d{1,2}[点时]|[一二三四五六七八九十]{1,3}[点时])/.test(text) || /(?:去了?|前往|到|在).{2,}/.test(text);
+  return hasNarrativeCue && shorter.length >= 8 && lengthRatio >= 0.72 && textOverlapScore(shorter, longer) >= 0.82;
 }
 
 function isSimilarText(a?: string | null, b?: string | null) {
@@ -127,8 +151,10 @@ function uniqueTextList(items?: string[]) {
 
 function displayAchievements(record: WorkLog, summary: string) {
   return uniqueTextList(record.aiAnalysis?.achievements).filter((item) => {
-    if (isCompactResultPhrase(item, record.content)) return true;
     if (isSimilarText(item, record.content) || isSimilarText(item, summary)) return false;
+    if (isNarrativeRestatement(item, record.content) || isNarrativeRestatement(item, summary)) return false;
+    if (isCompactResultPhrase(item, record.content) || isCompactResultPhrase(item, summary)) return true;
+    if (!isOutcomePhrase(item) && normalizeComparableText(item).length > 18) return false;
     return true;
   });
 }

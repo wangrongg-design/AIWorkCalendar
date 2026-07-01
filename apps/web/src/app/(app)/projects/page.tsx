@@ -270,14 +270,15 @@ function projectRecentText(stats?: ProjectListStats) {
 function assistantIntro(project: Project, analysis: ProjectListStats, range: [Dayjs, Dayjs] | null) {
   if (!analysis.totalLogs) {
     return {
-      conclusion: "当前项目暂无来源日报，先关联项目日报或调整时间范围。",
-      evidence: `${rangeText(range)} 内没有可分析记录。`,
+      overview: "当前项目暂无来源日报，先关联项目日报或调整时间范围。",
+      latestProgress: `${rangeText(range)} 内没有可分析记录。`,
       action: "可以先让成员按项目提交日报，或扩大日期范围后再提问。"
     };
   }
+  const latestText = analysis.latestDate ? `最近更新 ${dayjs(analysis.latestDate).format("MM-DD")}` : "暂无最近更新";
   return {
-    conclusion: projectOverviewText(project, analysis),
-    evidence: `${rangeText(range)} · ${analysis.totalLogs} 条日报/计划 · ${analysis.members.length} 个成员 · ${analysis.riskBlockerCount} 条风险/阻塞。`,
+    overview: projectOverviewText(project, analysis),
+    latestProgress: `${rangeText(range)} · ${analysis.totalLogs} 条日报/计划 · ${analysis.members.length} 个成员 · ${latestText}。`,
     action: analysis.riskBlockerCount ? "建议先追问当前风险，确认负责人和处理动作。" : "可以继续生成项目周报、整理负责人待办或准备客户同步摘要。"
   };
 }
@@ -719,10 +720,10 @@ export default function ProjectsPage() {
                   ))
                 ) : (
                   <div className={`project-ai-empty ${projectAnalysis.totalLogs ? "" : "is-no-data"}`}>
-                    <strong>结论</strong>
-                    <span>{projectAssistantIntro?.conclusion}</span>
-                    <strong>依据</strong>
-                    <span>{projectAssistantIntro?.evidence}</span>
+                    <strong>项目概览</strong>
+                    <span>{projectAssistantIntro?.overview}</span>
+                    <strong>最新进度</strong>
+                    <span>{projectAssistantIntro?.latestProgress}</span>
                     <strong>建议动作</strong>
                     <span>{projectAssistantIntro?.action}</span>
                   </div>
