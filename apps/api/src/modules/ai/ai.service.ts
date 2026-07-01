@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { WorkLogStatus } from "@prisma/client";
 import { AccessService } from "../../common/access/access.service";
 import { PrismaService } from "../../common/prisma.service";
@@ -26,6 +26,45 @@ function dateKey(date: Date) {
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
+}
+
+const maxCalendarChatRangeDays = 366;
+
+function parseStrictDateOnly(value: string) {
+  const date = parseDateOnly(value);
+  if (Number.isNaN(date.getTime()) || dateKey(date) !== value) {
+    throw new BadRequestException("日期格式不正确");
+  }
+  return date;
+}
+
+function calendarChatPeriod(dto: CalendarChatDto) {
+  if (dto.date) {
+    const date = parseStrictDateOnly(dto.date);
+    return { start: date, end: date, label: dto.date };
+  }
+  if (dto.startDate || dto.endDate) {
+    if (!dto.startDate || !dto.endDate) {
+      throw new BadRequestException("请选择完整的开始日期和结束日期");
+    }
+    const start = parseStrictDateOnly(dto.startDate);
+    const end = parseStrictDateOnly(dto.endDate);
+    if (end.getTime() < start.getTime()) {
+      throw new BadRequestException("结束日期不能早于开始日期");
+    }
+    const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    if (days > maxCalendarChatRangeDays) {
+      throw new BadRequestException(`AI 工作助手单次分析范围最多支持 ${maxCalendarChatRangeDays} 天`);
+    }
+    return {
+      start,
+      end,
+      label: dto.startDate === dto.endDate ? dto.startDate : `${dto.startDate} 至 ${dto.endDate}`
+    };
+  }
+  const month = dto.month ?? currentMonth();
+  const range = monthRange(month);
+  return { ...range, label: month };
 }
 
 @Injectable()
@@ -65,13 +104,7 @@ export class AiService {
   }
 
   async chatCalendar(user: CurrentUser, dto: CalendarChatDto) {
-    const period = dto.date
-      ? { start: parseDateOnly(dto.date), end: parseDateOnly(dto.date), label: dto.date }
-      : (() => {
-          const month = dto.month ?? currentMonth();
-          const range = monthRange(month);
-          return { ...range, label: month };
-        })();
+    const period = calendarChatPeriod(dto);
     const scope = this.access.resolveScope(user, dto.scope, dto.departmentId);
     const department = scope.departmentId
       ? await this.prisma.department.findFirst({
@@ -91,7 +124,7 @@ export class AiService {
         aiAnalysis: true
       },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      take: 160
+      take: 240
     });
     const today = dateKey(new Date());
     const answer = await this.openAi.chatWithCalendarContext(

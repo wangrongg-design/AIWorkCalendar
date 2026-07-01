@@ -3668,6 +3668,55 @@ body {
   font-weight: 600;
 }
 
+.ai-copilot-range-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ai-copilot-range-picker {
+  width: 100%;
+  border-radius: 12px;
+  border-color: rgba(11, 87, 208, 0.14);
+}
+
+.ai-copilot-range-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-copilot-range-presets button {
+  border: 1px solid rgba(11, 87, 208, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #0B57D0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  padding: 5px 9px;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.ai-copilot-range-presets button:hover {
+  border-color: rgba(11, 87, 208, 0.28);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+.ai-copilot-range-note {
+  margin-top: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  padding: 8px 10px;
+}
+
 .ai-copilot-section {
   border-radius: 18px;
   background: rgba(248, 250, 253, 0.86);
@@ -14395,6 +14444,313 @@ body {
 
   .today-log-modal .today-log-quick-actions {
     align-self: end;
+  }
+}
+
+/* Work log fill modal: stable Apple-style production polish */
+.today-log-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f7;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+
+.today-log-modal .ant-modal-header {
+  flex: 0 0 auto;
+  border-bottom: 0;
+  padding: 24px 72px 12px 28px !important;
+}
+
+.today-log-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 28px 24px !important;
+}
+
+.today-log-modal .worklog-chat-composer {
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+}
+
+.today-log-modal .worklog-chat-thread {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.today-log-modal .today-log-ai-message {
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+  white-space: pre-wrap;
+}
+
+.today-log-modal .today-log-ai-message.is-user {
+  background: #0b57d0;
+  color: #ffffff;
+}
+
+.today-log-modal .today-log-ai-message.is-assistant {
+  background: #ffffff;
+  color: #424245;
+}
+
+.today-log-modal .today-log-item {
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+}
+
+.today-log-modal .today-log-item-title-row {
+  flex-wrap: wrap;
+}
+
+.today-log-modal .today-log-item-title-row strong {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .today-log-item-summary span {
+  max-width: min(100%, 320px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-log-modal .today-log-item-fields {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.today-log-modal .today-log-item-state {
+  min-width: 0;
+}
+
+.today-log-modal .today-log-project-confirm {
+  display: inline-flex;
+  min-height: 32px;
+  max-width: 100%;
+  align-items: center;
+  border-radius: 999px;
+  background: #f5f5f7;
+  padding: 4px 10px;
+  color: #424245;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.today-log-modal .today-log-project-confirm .ant-checkbox + span {
+  min-width: 0;
+  padding-inline-start: 6px;
+  padding-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-log-modal .today-log-detail-editor {
+  border-top-color: #e5e5ea;
+}
+
+.today-log-modal .today-log-item-editor {
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.9fr) minmax(240px, 1.45fr) minmax(124px, 0.8fr);
+  gap: 10px;
+}
+
+.today-log-modal .today-log-item-editor label {
+  min-width: 0;
+}
+
+.today-log-modal .today-log-item-editor .ant-picker,
+.today-log-modal .today-log-item-editor .ant-select,
+.today-log-modal .today-log-item-editor .ant-input,
+.today-log-modal .today-log-item-editor .ant-input-number,
+.today-log-modal .today-log-item-editor textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.today-log-modal .today-log-item-editor .ant-picker,
+.today-log-modal .today-log-item-editor .ant-select-selector,
+.today-log-modal .today-log-item-editor .ant-input,
+.today-log-modal .today-log-item-editor .ant-input-number {
+  min-height: 40px;
+  border-color: #d2d2d7;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.today-log-modal .today-log-project-select,
+.today-log-modal .today-log-project-select .ant-select-selector,
+.today-log-modal .today-log-project-select .ant-select-selection-wrap,
+.today-log-modal .today-log-project-select .ant-select-selection-overflow {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.today-log-modal .today-log-project-select .ant-select-selection-item,
+.today-log-modal .today-log-project-select .ant-select-selection-placeholder {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: #424245;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-log-project-dropdown .ant-select-item-option-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-log-modal .today-log-field-note {
+  margin-top: 2px;
+  color: #6e6e73;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.today-log-modal .today-log-structured-list {
+  padding: 10px 12px;
+}
+
+.today-log-modal .today-log-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+}
+
+.today-log-modal .today-log-footer strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.today-log-modal .today-log-footer span {
+  color: #6e6e73;
+}
+
+.today-log-modal .today-log-footer-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.today-log-modal .today-log-footer-actions .ant-btn {
+  min-height: 40px;
+  border-radius: 12px;
+  font-weight: 650;
+}
+
+.today-log-modal .today-log-footer-actions .ant-btn:not(.ant-btn-primary) {
+  border-color: #d2d2d7;
+  background: #ffffff;
+  color: #1d1d1f;
+}
+
+.today-log-modal .today-log-footer-actions .ant-btn-primary {
+  border-color: #0b57d0;
+  background: #0b57d0;
+  color: #ffffff;
+}
+
+.today-log-modal .today-log-footer-actions .ant-btn-primary:disabled,
+.today-log-modal .today-log-footer-actions .ant-btn-primary.ant-btn-disabled {
+  border-color: #e5e5ea;
+  background: #f5f5f7;
+  color: #86868b;
+}
+
+.today-log-modal .worklog-chat-inputbar {
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+}
+
+.today-log-modal .today-log-quick-actions {
+  width: 140px;
+  flex-wrap: wrap;
+}
+
+.today-log-modal .today-log-input-meter {
+  flex: 0 0 100%;
+  color: #6e6e73;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.today-log-modal .today-log-input-meter.is-error {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.today-log-modal .today-log-icon-button:hover,
+.today-log-modal .today-log-icon-button:focus {
+  border-color: #d2d2d7;
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+.today-log-modal .today-log-send-button:not(:disabled):hover,
+.today-log-modal .today-log-send-button:not(:disabled):focus {
+  border-color: #1a73e8;
+  background: #1a73e8;
+  color: #ffffff;
+}
+
+@media (max-width: 960px) {
+  .today-log-modal .today-log-item-editor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .today-log-modal .ant-modal-header {
+    padding: 18px 52px 10px 16px !important;
+  }
+
+  .today-log-modal .ant-modal-body {
+    padding: 0 16px 16px !important;
+  }
+
+  .today-log-modal .worklog-chat-composer {
+    grid-template-rows: minmax(0, 1fr) auto auto auto;
+  }
+
+  .today-log-modal .today-log-item-fields,
+  .today-log-modal .today-log-item-editor,
+  .today-log-modal .today-log-structured-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .today-log-modal .today-log-item-state,
+  .today-log-modal .today-log-card-actions {
+    justify-content: flex-start;
+  }
+
+  .today-log-modal .today-log-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .today-log-modal .today-log-footer-actions {
+    width: 100%;
+  }
+
+  .today-log-modal .today-log-footer-actions .ant-btn {
+    flex: 1 1 0;
+  }
+
+  .today-log-modal .today-log-quick-actions {
+    width: 48px;
+  }
+
+  .today-log-modal .today-log-input-meter {
+    display: none;
   }
 }
 

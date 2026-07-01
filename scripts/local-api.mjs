@@ -2745,8 +2745,15 @@ function retryAnalysis(user, workLogId) {
 
 function calendarChat(user, body) {
   const month = body.month ?? todayKey.slice(0, 7);
-  const start = body.date ?? `${month}-01`;
-  const end = body.date ?? monthEndKey(month);
+  if ((body.startDate && !body.endDate) || (!body.startDate && body.endDate)) {
+    throw httpError(400, "请选择完整的开始日期和结束日期");
+  }
+  const start = body.date ?? body.startDate ?? `${month}-01`;
+  const end = body.date ?? body.endDate ?? monthEndKey(month);
+  if (end < start) {
+    throw httpError(400, "结束日期不能早于开始日期");
+  }
+  const periodLabel = body.date ?? (body.startDate && body.endDate ? `${body.startDate} 至 ${body.endDate}` : month);
   const url = new URL("http://localhost/");
   if (body.scope) url.searchParams.set("scope", body.scope);
   if (body.departmentId) url.searchParams.set("departmentId", body.departmentId);
@@ -2756,7 +2763,7 @@ function calendarChat(user, body) {
     .map(enrichLog)
     .sort((a, b) => `${a.date}${a.createdAt}`.localeCompare(`${b.date}${b.createdAt}`));
   return {
-    answer: localCalendarAnswer(body.question ?? "", visibleLogs, body.date ?? month),
+    answer: localCalendarAnswer(body.question ?? "", visibleLogs, periodLabel),
     contextCount: visibleLogs.length,
     scope: resolveScope(user, url),
     period: { start, end }
@@ -2788,6 +2795,10 @@ function inferDraftItems(text, currentDate, today) {
   const content = text.trim();
   if (!content) return [buildDraftItem("请补充工作内容。", currentDate, today, undefined, true)];
   const globalDate = inferDraftDate(content, currentDate);
+  const explicitSections = extractExplicitDraftSections(content);
+  if (explicitSections.length > 1) {
+    return explicitSections.map((section) => applyGlobalDraftDate(buildDraftItem(section, currentDate, today), section, globalDate, currentDate, today));
+  }
 
   const ranges = Array.from(content.matchAll(timeRangePattern()));
   if (ranges.length) {
@@ -2811,6 +2822,33 @@ function inferDraftItems(text, currentDate, today) {
   if (hourClauses.length > 1) return hourClauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
   if (clauses.length > 1) return clauses.map((item) => applyGlobalDraftDate(buildDraftItem(item, currentDate, today), item, globalDate, currentDate, today));
   return [buildDraftItem(content, currentDate, today)];
+}
+
+function extractExplicitDraftSections(text) {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  const strictSections = splitDraftSectionsByMarker(
+    normalized,
+    /(^|[\s\n\r。；;])((?:第?\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[、.．)]|[（(]\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[）)])\s*)(?=\s|[\u4e00-\u9fa5A-Za-z])/g
+  );
+  if (strictSections.length > 1) return strictSections;
+
+  const looseSections = splitDraftSectionsByMarker(normalized, /(^|[\n\r。；;]|\s)(\d{1,2})\s+(?=[\u4e00-\u9fa5A-Za-z])/g);
+  return looseSections.length > 1 ? looseSections : [];
+}
+
+function splitDraftSectionsByMarker(text, markerPattern) {
+  const matches = Array.from(text.matchAll(markerPattern));
+  if (matches.length < 2) return [];
+  return matches
+    .map((match, index) => {
+      const start = (match.index ?? 0) + match[0].length;
+      const end = matches[index + 1]?.index ?? text.length;
+      return text
+        .slice(start, end)
+        .replace(/^[，,、。；;\s]+/, "")
+        .trim();
+    })
+    .filter((item) => item && hasDraftClauseContent(item));
 }
 
 function splitDraftClauses(text, includeSoftSeparators = false) {

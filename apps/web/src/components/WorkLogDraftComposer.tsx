@@ -75,6 +75,7 @@ type WorkLogDraftComposerProps = {
 };
 
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const draftInputMaxLength = 4000;
 
 function nextDraftLocalId() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -333,6 +334,20 @@ function listValue(items: string[]) {
   return items.join("\n");
 }
 
+function countLikelyDraftSections(text: string) {
+  const normalized = text.trim();
+  if (!normalized) return 0;
+  const explicitMarkers = normalized.match(/(^|[\s\n\r。；;])(?:第?\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[、.．)]|[（(]\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[）)])(?=\s|[\u4e00-\u9fa5A-Za-z])/g);
+  if (explicitMarkers && explicitMarkers.length >= 2) return explicitMarkers.length;
+  const looseNumberMarkers = normalized.match(/(^|[\n\r。；;]|\s)\d{1,2}\s+(?=[\u4e00-\u9fa5A-Za-z])/g);
+  if (looseNumberMarkers && looseNumberMarkers.length >= 2) return looseNumberMarkers.length;
+  const lineItems = normalized
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 8 && !/^(今天|昨天|明天|后天)$/.test(item));
+  return lineItems.length >= 2 ? lineItems.length : 0;
+}
+
 function draftReady(item: WorkLogDraftComposerItem) {
   return (
     item.selected &&
@@ -387,7 +402,10 @@ export function WorkLogDraftComposer({
   const itemCount = items.length;
   const attachmentTargetIndex = draftPreview?.attachmentTargetIndex ?? 0;
   const hasItems = itemCount > 0;
-  const canGenerate = aiInput.trim().length > 0 && !aiPending;
+  const inputLength = aiInput.length;
+  const inputLimitExceeded = inputLength > draftInputMaxLength;
+  const detectedInputItemCount = countLikelyDraftSections(aiInput);
+  const canGenerate = aiInput.trim().length > 0 && !aiPending && !inputLimitExceeded;
   const hasConversation = aiMessages.some((item) => item.role === "user");
   const canAttach = hasItems && !aiPending;
   const showAttachments = canAttach && (attachmentsOpen || pendingAttachmentCount > 0);
@@ -499,7 +517,12 @@ export function WorkLogDraftComposer({
                       </div>
                       <div className="today-log-item-state">
                         {!projectName ? (
-                          <Checkbox checked={item.projectConfirmed} disabled={locked} onChange={(event) => onUpdateItem(index, { projectConfirmed: event.target.checked })}>
+                          <Checkbox
+                            className="today-log-project-confirm"
+                            checked={item.projectConfirmed}
+                            disabled={locked}
+                            onChange={(event) => onUpdateItem(index, { projectConfirmed: event.target.checked })}
+                          >
                             确认未关联项目
                           </Checkbox>
                         ) : null}
@@ -541,6 +564,8 @@ export function WorkLogDraftComposer({
                           <label>
                             <span>项目</span>
                             <Select
+                              className="today-log-project-select"
+                              popupClassName="today-log-project-dropdown"
                               allowClear
                               showSearch
                               optionFilterProp="label"
@@ -720,6 +745,10 @@ export function WorkLogDraftComposer({
           }}
         />
         <div className="today-log-quick-actions">
+          <span className={inputLimitExceeded ? "today-log-input-meter is-error" : "today-log-input-meter"}>
+            {detectedInputItemCount >= 2 ? `疑似 ${detectedInputItemCount} 项 · ` : ""}
+            {inputLength}/{draftInputMaxLength}
+          </span>
           {canAttach ? (
             <Tooltip title={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}>
               <Button

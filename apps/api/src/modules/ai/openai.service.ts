@@ -607,11 +607,7 @@ export class OpenAiService {
   }
 
   private localWorkLogDraft(input: DraftWorkLogInput): WorkLogDraftResult {
-    const userText = input.messages
-      .filter((message) => message.role === "user")
-      .map((message) => message.content)
-      .join("\n")
-      .trim();
+    const userText = this.draftUserText(input);
     const items = this.inferDraftItems(userText, input.currentDate, input.today);
     const first = items[0];
     return {
@@ -630,6 +626,10 @@ export class OpenAiService {
       return [this.buildDraftItem("请补充工作内容。", currentDate, today, undefined, true)];
     }
     const globalDate = this.inferDraftDate(content, currentDate);
+    const explicitSections = this.extractExplicitDraftSections(content);
+    if (explicitSections.length > 1) {
+      return explicitSections.map((section) => this.applyGlobalDraftDate(this.buildDraftItem(section, currentDate, today), section, globalDate, currentDate, today));
+    }
 
     const ranges = Array.from(content.matchAll(this.timeRangePattern()));
     if (ranges.length) {
@@ -659,6 +659,41 @@ export class OpenAiService {
     }
 
     return [this.buildDraftItem(content, currentDate, today)];
+  }
+
+  private draftUserText(input: DraftWorkLogInput) {
+    return input.messages
+      .filter((message) => message.role === "user")
+      .map((message) => message.content)
+      .join("\n")
+      .trim();
+  }
+
+  private extractExplicitDraftSections(text: string) {
+    const normalized = text.replace(/\r\n/g, "\n").trim();
+    const strictSections = this.splitDraftSectionsByMarker(
+      normalized,
+      /(^|[\s\n\r。；;])((?:第?\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[、.．)]|[（(]\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[）)])\s*)(?=\s|[\u4e00-\u9fa5A-Za-z])/g
+    );
+    if (strictSections.length > 1) return strictSections;
+
+    const looseSections = this.splitDraftSectionsByMarker(normalized, /(^|[\n\r。；;]|\s)(\d{1,2})\s+(?=[\u4e00-\u9fa5A-Za-z])/g);
+    return looseSections.length > 1 ? looseSections : [];
+  }
+
+  private splitDraftSectionsByMarker(text: string, markerPattern: RegExp) {
+    const matches = Array.from(text.matchAll(markerPattern));
+    if (matches.length < 2) return [];
+    return matches
+      .map((match, index) => {
+        const start = (match.index ?? 0) + match[0].length;
+        const end = matches[index + 1]?.index ?? text.length;
+        return text
+          .slice(start, end)
+          .replace(/^[，,、。；;\s]+/, "")
+          .trim();
+      })
+      .filter((item) => item && this.hasDraftClauseContent(item));
   }
 
   private splitDraftClauses(text: string, includeSoftSeparators = false) {
@@ -838,12 +873,19 @@ export class OpenAiService {
 
   private normalizeDraft(result: WorkLogDraftResult, input: DraftWorkLogInput): WorkLogDraftResult {
     const fallback = this.localWorkLogDraft(input);
+    const expectedSections = this.extractExplicitDraftSections(this.draftUserText(input));
+    const expectedCount = expectedSections.length;
     const sourceItems = Array.isArray(result.items) && result.items.length ? result.items : [result];
-    const items = sourceItems.map((item, index) => this.normalizeDraftItem(item, fallback.items[index] ?? fallback.items[0], input.today));
+    const shouldBackfillMissingItems = expectedCount > sourceItems.length && fallback.items.length >= expectedCount;
+    const mergedSourceItems = shouldBackfillMissingItems ? [...sourceItems, ...fallback.items.slice(sourceItems.length, expectedCount)] : sourceItems;
+    const items = mergedSourceItems.map((item, index) => this.normalizeDraftItem(item, fallback.items[index] ?? fallback.items[0], input.today));
     const first = items[0] ?? fallback.items[0];
+    const assistantMessage = result.assistantMessage?.trim() || fallback.assistantMessage;
     return {
       ...first,
-      assistantMessage: result.assistantMessage?.trim() || fallback.assistantMessage,
+      assistantMessage: shouldBackfillMissingItems
+        ? `${assistantMessage} 已识别到 ${expectedCount} 个分项，AI 返回 ${sourceItems.length} 条，系统已把遗漏分项补为待确认草稿，请逐条检查后提交。`
+        : assistantMessage,
       items
     };
   }

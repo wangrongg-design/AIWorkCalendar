@@ -80,10 +80,11 @@ type DraftPreviewItem = WorkLogDraftComposerItem;
 type DraftPreview = WorkLogDraftComposerState;
 
 const attachmentMaxBytes = 8 * 1024 * 1024;
-const quickQuestions = ["本周风险/阻塞", "项目进度", "人员负载", "异常工时"];
+const { RangePicker } = DatePicker;
+const quickQuestions = ["范围风险/阻塞", "跨月项目进度", "人员投入", "异常工时"];
 const copilotActions = [
-  { label: "提醒未填报员工", prompt: "帮我整理今天未填报员工，并给出提醒话术。" },
-  { label: "生成本周总结", prompt: "基于当前可见日报和计划，生成本周管理总结。" },
+  { label: "提醒缺填成员", prompt: "列出当前分析范围内需要补齐日报或计划的成员，并给出提醒话术。" },
+  { label: "生成范围总结", prompt: "基于当前分析范围内的日报和计划，生成管理总结，区分已完成、计划、风险和下一步。" },
   { label: "查看风险/阻塞项目", prompt: "列出当前范围内存在风险或阻塞的项目，并说明原因。" }
 ];
 
@@ -178,6 +179,19 @@ function dateKind(date: string) {
 function chineseDateLabel(date: string) {
   const value = dayjs(date);
   return `${value.format("YYYY年M月D日")} · ${weekdayLabels[value.day()]}`;
+}
+
+function normalizeCopilotRange(range: [Dayjs, Dayjs]): [Dayjs, Dayjs] {
+  const start = range[0].startOf("day");
+  const end = range[1].startOf("day");
+  return start.isAfter(end, "day") ? [end, start] : [start, end];
+}
+
+function copilotRangeLabel(start: Dayjs, end: Dayjs) {
+  if (start.isSame(end, "day")) {
+    return start.format("YYYY年M月D日");
+  }
+  return `${start.format("YYYY年M月D日")} 至 ${end.format("YYYY年M月D日")}`;
 }
 
 function clipboardImageFiles(event: ClipboardEvent<HTMLElement>) {
@@ -336,6 +350,7 @@ export default function CalendarPage() {
   const today = dayjs().format("YYYY-MM-DD");
   const [quickFillDate, setQuickFillDate] = useState(dayjs());
   const [month, setMonth] = useState(dayjs());
+  const [copilotRange, setCopilotRange] = useState<[Dayjs, Dayjs]>(() => normalizeCopilotRange([dayjs().startOf("month"), dayjs().endOf("month")]));
   const [scope, setScope] = useState<"self" | "department" | "company">(
     user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN")
       ? "company"
@@ -365,7 +380,7 @@ export default function CalendarPage() {
     {
       id: "welcome",
       role: "assistant",
-      content: "可以直接问我：本月团队重点、今天风险/阻塞、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
+      content: "可以直接问我：指定范围内的团队重点、跨月风险/阻塞、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
     }
   ]);
 
@@ -789,9 +804,36 @@ export default function CalendarPage() {
     }
     return observations;
   }, [dayDetail.data, dayDetail.isFetching, detailLogs, selectedDate, selectedDateKind]);
+  const normalizedCopilotRange = useMemo(() => normalizeCopilotRange(copilotRange), [copilotRange]);
+  const [copilotStartDate, copilotEndDate] = normalizedCopilotRange;
+  const assistantRangeLabel = copilotRangeLabel(copilotStartDate, copilotEndDate);
+  const copilotRangeDays = copilotEndDate.diff(copilotStartDate, "day") + 1;
+  const assistantRangeIsVisibleMonth =
+    copilotStartDate.isSame(month.startOf("month"), "day") && copilotEndDate.isSame(month.endOf("month").startOf("day"), "day");
+  const copilotRangePresets = useMemo(() => {
+    const now = dayjs().startOf("day");
+    const quarterStartMonth = Math.floor(now.month() / 3) * 3;
+    return [
+      { label: "当前月", range: normalizeCopilotRange([month.startOf("month"), month.endOf("month")]) },
+      { label: "近30天", range: normalizeCopilotRange([now.subtract(29, "day"), now]) },
+      { label: "本季度", range: normalizeCopilotRange([now.month(quarterStartMonth).startOf("month"), now]) },
+      { label: "近90天", range: normalizeCopilotRange([now.subtract(89, "day"), now]) }
+    ];
+  }, [month]);
+  const updateCopilotRange = (range: [Dayjs, Dayjs]) => {
+    setSelectedDate(null);
+    setCopilotRange(normalizeCopilotRange(range));
+  };
   const copilotObservations = useMemo(() => {
     if (selectedDate) {
       return aiObservations;
+    }
+    if (!assistantRangeIsVisibleMonth) {
+      return [
+        `已选择 ${assistantRangeLabel}，助手会按 ${copilotRangeDays} 天的日期区间查询日报和计划。`,
+        `当前月历仍显示 ${month.format("YYYY年M月")}，可继续切换月份查看单日详情。`,
+        "适合追问跨月风险、项目投入、人员负载和范围总结。"
+      ];
     }
     if (calendar.isFetching) {
       return ["正在分析当前月历数据…"];
@@ -804,16 +846,29 @@ export default function CalendarPage() {
       summary.riskBlockers > 0 ? `本月累计出现 ${summary.riskBlockers} 条风险/阻塞信号，建议查看重点日期和项目。` : "本月暂未出现明显风险/阻塞信号。",
       summary.filled > 0 ? `当前范围累计 ${summary.filled} 条已提交记录，可继续追问项目进展和人员投入。` : "还没有足够记录支撑深入分析。"
     ];
-  }, [aiObservations, calendar.isFetching, selectedDate, summary.filled, summary.missing, summary.rate, summary.remind, summary.riskBlockers]);
+  }, [
+    aiObservations,
+    assistantRangeIsVisibleMonth,
+    assistantRangeLabel,
+    calendar.isFetching,
+    copilotRangeDays,
+    month,
+    selectedDate,
+    summary.filled,
+    summary.missing,
+    summary.rate,
+    summary.remind,
+    summary.riskBlockers
+  ]);
   const copilotContext = useMemo(
     () => [
-      selectedDate ? chineseDateLabel(selectedDate) : month.format("YYYY年M月"),
+      selectedDate ? chineseDateLabel(selectedDate) : assistantRangeLabel,
       scope === "self" ? user?.name ?? "我" : scope === "department" ? "本部门" : "全公司",
       "日历看板",
       "日报数据",
       "工作计划"
     ],
-    [month, scope, selectedDate, user?.name]
+    [assistantRangeLabel, scope, selectedDate, user?.name]
   );
   const calendarChat = useMutation({
     mutationFn: (question: string) =>
@@ -821,8 +876,12 @@ export default function CalendarPage() {
         method: "POST",
         body: JSON.stringify({
           question,
-          month: month.format("YYYY-MM"),
-          date: selectedDate ?? undefined,
+          ...(selectedDate
+            ? { date: selectedDate }
+            : {
+                startDate: copilotStartDate.format("YYYY-MM-DD"),
+                endDate: copilotEndDate.format("YYYY-MM-DD")
+              }),
           scope,
           departmentId
         })
@@ -1104,7 +1163,13 @@ export default function CalendarPage() {
   const goToday = () => {
     const today = dayjs();
     setMonth(today);
+    setCopilotRange(normalizeCopilotRange([today.startOf("month"), today.endOf("month")]));
     setSelectedDate(today.format("YYYY-MM-DD"));
+  };
+  const changeCalendarMonth = (value: Dayjs | null) => {
+    if (!value) return;
+    setMonth(value);
+    setCopilotRange(normalizeCopilotRange([value.startOf("month"), value.endOf("month")]));
   };
   const quickFillKindTitle = quickFillDate.format("YYYY-MM-DD") > today ? "填写计划" : "填写日报";
 
@@ -1118,7 +1183,7 @@ export default function CalendarPage() {
           <Typography.Text className="page-subtitle">当日和具体日期的团队状态入口：看今天谁填了、谁缺填、哪里有风险/阻塞。</Typography.Text>
         </div>
         <Space wrap className="toolbar-panel dashboard-calendar-toolbar">
-          <DatePicker picker="month" value={month} format="YYYY年M月" onChange={(value) => value && setMonth(value)} allowClear={false} />
+          <DatePicker picker="month" value={month} format="YYYY年M月" onChange={changeCalendarMonth} allowClear={false} />
           <Button onClick={goToday}>今天</Button>
           <Select
             value={scope}
@@ -1342,10 +1407,33 @@ export default function CalendarPage() {
                 <span key={item}>{item}</span>
               ))}
             </div>
+            {!selectedDate ? (
+              <div className="ai-copilot-range-controls">
+                <RangePicker
+                  className="ai-copilot-range-picker"
+                  value={normalizedCopilotRange}
+                  allowClear={false}
+                  format="YYYY-MM-DD"
+                  onChange={(value) => {
+                    if (!value?.[0] || !value?.[1]) return;
+                    updateCopilotRange([value[0], value[1]]);
+                  }}
+                />
+                <div className="ai-copilot-range-presets">
+                  {copilotRangePresets.map((preset) => (
+                    <button key={preset.label} type="button" onClick={() => updateCopilotRange(preset.range)}>
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="ai-copilot-range-note">正在查看单日详情；关闭日期详情后，可切换为跨月范围分析。</div>
+            )}
           </div>
 
           <div className="ai-copilot-section">
-            <div className="ai-copilot-section-title">{selectedDate ? "今日判断" : "当月判断"}</div>
+            <div className="ai-copilot-section-title">{selectedDate ? "今日判断" : "范围判断"}</div>
             <ul className="ai-copilot-insights">
               {copilotObservations.map((item) => (
                 <li key={item}>{item}</li>
