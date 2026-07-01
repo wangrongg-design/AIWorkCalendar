@@ -1,8 +1,8 @@
 "use client";
 
-import { Tag } from "antd";
+import { Button, Tag } from "antd";
 import dayjs from "dayjs";
-import { AlertTriangle, Ban, Bot, CheckCircle2, Clock3, MessageSquare } from "lucide-react";
+import { AlertTriangle, Ban, Bot, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MessageSquare } from "lucide-react";
 import type { ReactNode } from "react";
 import { WorkLog } from "@/lib/types";
 import { WorkLogAttachmentViewer } from "./WorkLogAttachmentViewer";
@@ -13,6 +13,15 @@ type WorkLogDetailViewProps = {
   record: WorkLog;
   projectNameFallback?: string | null;
   showTimeInfo?: boolean;
+};
+
+type WorkLogDetailNavigation = {
+  current: number;
+  total: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  previousDisabled?: boolean;
+  nextDisabled?: boolean;
 };
 
 function dateTimeText(value?: string | null) {
@@ -45,18 +54,52 @@ function workLogKindLabel(record: WorkLog) {
   return (record.kind ?? "DAILY") === "PLAN" ? "工作计划" : "工作日报";
 }
 
-export function WorkLogDetailTitle({ record, readOnly }: { record: WorkLog; readOnly?: boolean }) {
+export function WorkLogDetailTitle({
+  record,
+  readOnly,
+  navigation
+}: {
+  record: WorkLog;
+  readOnly?: boolean;
+  navigation?: WorkLogDetailNavigation | null;
+}) {
   const status = workLogDetailStatus(record);
   const detailKind = workLogKindLabel(record);
+  const canNavigate = Boolean(navigation && navigation.total > 1);
   return (
     <div className="work-log-detail-titlebar">
       <div className="work-log-detail-title-copy">
         <div className="work-log-detail-title-main">{dayjs(record.date).format("YYYY-MM-DD")} · {detailKind}</div>
         <div className="work-log-detail-title-sub">{record.title}</div>
       </div>
-      <div className="work-log-detail-title-tags">
-        <Tag color={status.color}>{status.label}</Tag>
-        {readOnly ? <Tag>仅可查看</Tag> : null}
+      <div className="work-log-detail-title-actions">
+        <div className="work-log-detail-title-tags">
+          <Tag color={status.color}>{status.label}</Tag>
+          {readOnly ? <Tag>仅可查看</Tag> : null}
+        </div>
+        {canNavigate ? (
+          <div className="work-log-detail-pager" aria-label={`切换该成员的其他${detailKind}`}>
+            <Button
+              type="text"
+              shape="circle"
+              icon={<ChevronLeft size={16} />}
+              aria-label={`上一条${detailKind}`}
+              disabled={navigation?.previousDisabled}
+              onClick={navigation?.onPrevious}
+            />
+            <span>
+              第 {navigation?.current}/{navigation?.total} 条
+            </span>
+            <Button
+              type="text"
+              shape="circle"
+              icon={<ChevronRight size={16} />}
+              aria-label={`下一条${detailKind}`}
+              disabled={navigation?.nextDisabled}
+              onClick={navigation?.onNext}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

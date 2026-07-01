@@ -19,7 +19,7 @@ type AiProvider = "mock" | "openai" | "deepseek";
 type AiCallContext = {
   tenantId: string;
   userId?: string | null;
-  operation: "work_log_analysis" | "report_generation" | "calendar_chat" | "work_log_draft";
+  operation: "work_log_analysis" | "report_generation" | "calendar_chat" | "project_chat" | "work_log_draft";
   targetType?: string;
   targetId?: string | null;
   containsAttachments?: boolean;

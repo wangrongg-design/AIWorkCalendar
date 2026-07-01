@@ -4,6 +4,7 @@ import { CurrentUserParam } from "../../common/decorators/current-user.decorator
 import { CurrentUser } from "../../common/types/current-user";
 import { AiService } from "./ai.service";
 import { CalendarChatDto } from "./dto/calendar-chat.dto";
+import { ProjectChatDto } from "./dto/project-chat.dto";
 import { WorkLogDraftDto } from "./dto/work-log-draft.dto";
 
 @ApiBearerAuth()
@@ -25,6 +26,11 @@ export class AiController {
   @Post("chat/calendar")
   chatCalendar(@CurrentUserParam() user: CurrentUser, @Body() dto: CalendarChatDto) {
     return this.aiService.chatCalendar(user, dto);
+  }
+
+  @Post("chat/project")
+  chatProject(@CurrentUserParam() user: CurrentUser, @Body() dto: ProjectChatDto) {
+    return this.aiService.chatProject(user, dto);
   }
 
   @Post("work-log-draft")

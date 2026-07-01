@@ -746,6 +746,30 @@ export default function CalendarPage() {
       ].filter((section) => section.employees.length > 0),
     [detailFilledEmployees, selectedDate]
   );
+  const selectedWorkLogNavigation = useMemo(() => {
+    if (!selectedWorkLog) return null;
+    const selectedKind = selectedWorkLog.kind ?? "DAILY";
+    const employee = detailFilledEmployees.find((item) => item.id === selectedWorkLog.userId || item.logs.some((log) => log.id === selectedWorkLog.id));
+    if (!employee) return null;
+
+    const employeeLogs = sortWorkLogs(employee.logs.filter((log) => (log.kind ?? "DAILY") === selectedKind));
+    const currentIndex = employeeLogs.findIndex((log) => log.id === selectedWorkLog.id);
+    if (currentIndex < 0 || employeeLogs.length <= 1) return null;
+
+    const navigateTo = (index: number) => {
+      const nextLog = employeeLogs[index];
+      if (nextLog) setSelectedWorkLog(nextLog);
+    };
+
+    return {
+      current: currentIndex + 1,
+      total: employeeLogs.length,
+      previousDisabled: currentIndex <= 0,
+      nextDisabled: currentIndex >= employeeLogs.length - 1,
+      onPrevious: () => navigateTo(currentIndex - 1),
+      onNext: () => navigateTo(currentIndex + 1)
+    };
+  }, [detailFilledEmployees, selectedWorkLog]);
   const detailProjectGroups = useMemo(() => {
     const map = new Map<string, { key: string; name: string; hours: number; count: number }>();
     for (const log of detailLogs) {
@@ -1743,7 +1767,7 @@ export default function CalendarPage() {
       </Modal>
 
       <Modal
-        title={selectedWorkLog ? <WorkLogDetailTitle record={selectedWorkLog} readOnly /> : "填报详情"}
+        title={selectedWorkLog ? <WorkLogDetailTitle record={selectedWorkLog} readOnly navigation={selectedWorkLogNavigation} /> : "填报详情"}
         open={Boolean(selectedWorkLog)}
         onCancel={() => setSelectedWorkLog(null)}
         footer={null}

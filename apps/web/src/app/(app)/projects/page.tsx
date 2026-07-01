@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, DatePicker, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Edit2, FolderKanban, MessageSquare, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Bot, Edit2, FolderKanban, MessageSquare, Plus, Send, Trash2 } from "lucide-react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
@@ -31,6 +31,42 @@ type ProjectWorkLogForm = {
   content: string;
   hours?: number | null;
   projectId?: string | null;
+};
+
+type ProjectChatSource = {
+  id: string;
+  date: string;
+  title: string;
+  userName: string;
+  departmentName?: string | null;
+  hours: number;
+  evidence: string;
+  riskCount: number;
+  blockerCount: number;
+};
+
+type ProjectChatResponse = {
+  answer: string;
+  contextCount: number;
+  period: {
+    start: string;
+    end: string;
+  };
+  project: {
+    id: string;
+    name: string;
+    code?: string | null;
+    ownerName?: string | null;
+  };
+  sources: ProjectChatSource[];
+};
+
+type ProjectChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources?: ProjectChatSource[];
+  contextCount?: number;
 };
 
 const statusOptions: Array<{ value: ProjectStatus; label: string; color: string }> = [
@@ -110,6 +146,90 @@ function rangeText(range: [Dayjs, Dayjs] | null) {
   return `${range[0].format("YYYY-MM-DD")} 至 ${range[1].format("YYYY-MM-DD")}`;
 }
 
+function projectChatPayload(projectId: string, question: string, range: [Dayjs, Dayjs] | null) {
+  return {
+    projectId,
+    question,
+    startDate: range?.[0].format("YYYY-MM-DD"),
+    endDate: range?.[1].format("YYYY-MM-DD")
+  };
+}
+
+function projectQuestionPrompt(label: string) {
+  if (label === "总结近期进展") return "请总结这个项目近期进展，按已完成、正在推进、需要跟进输出，并列出依据日报。";
+  if (label === "查看风险/阻塞") return "这个项目当前最大的风险或阻塞是什么？请给出结论、依据日报和建议动作。";
+  if (label === "生成项目周报") return "请基于当前项目日报生成一份项目周报，包含关键进展、风险/阻塞、下周动作和来源。";
+  if (label === "整理下一步动作") return "请从这个项目最近日报中提取下一步待办，按负责人或事项整理，并说明依据。";
+  return label;
+}
+
+function renderMarkdownInline(text: string) {
+  const nodes: ReactNode[] = [];
+  const pattern = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    nodes.push(<strong key={`${match.index}-${match[1]}`}>{match[1]}</strong>);
+    lastIndex = pattern.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+  return nodes.length ? nodes : text;
+}
+
+function renderAssistantMarkdown(content: string) {
+  const nodes: ReactNode[] = [];
+  let list: { type: "ul" | "ol"; items: ReactNode[] } | null = null;
+
+  const flushList = () => {
+    if (!list) return;
+    const ListTag = list.type;
+    nodes.push(
+      <ListTag key={`list-${nodes.length}`} className="ai-copilot-markdown-list">
+        {list.items}
+      </ListTag>
+    );
+    list = null;
+  };
+
+  content.replace(/\r\n/g, "\n").split("\n").forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      flushList();
+      nodes.push(
+        <strong key={`heading-${index}`} className="ai-copilot-markdown-heading">
+          {renderMarkdownInline(heading[2])}
+        </strong>
+      );
+      return;
+    }
+    const unordered = /^[-*]\s+(.+)$/.exec(trimmed);
+    const ordered = /^\d+\.\s+(.+)$/.exec(trimmed);
+    if (unordered || ordered) {
+      const type = unordered ? "ul" : "ol";
+      if (!list || list.type !== type) {
+        flushList();
+        list = { type, items: [] };
+      }
+      list.items.push(<li key={`item-${index}`}>{renderMarkdownInline((unordered ?? ordered)?.[1] ?? trimmed)}</li>);
+      return;
+    }
+    flushList();
+    nodes.push(<p key={`paragraph-${index}`}>{renderMarkdownInline(trimmed)}</p>);
+  });
+  flushList();
+  return nodes;
+}
+
 function projectOverviewText(project: Project, analysis: ReturnType<typeof summarizeProjectLogs>) {
   if (!analysis.totalLogs) {
     return `${project.name} 当前周期还没有关联日报。`;
@@ -172,6 +292,7 @@ export default function ProjectsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<ProjectForm>();
   const [workLogForm] = Form.useForm<ProjectWorkLogForm>();
+  const projectChatThreadRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<Project | null>(null);
   const [detailLog, setDetailLog] = useState<WorkLog | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
@@ -179,6 +300,8 @@ export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "ALL">("ACTIVE");
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>([dayjs().subtract(14, "day"), dayjs().add(7, "day")]);
+  const [projectChatInput, setProjectChatInput] = useState("");
+  const [projectChatMessages, setProjectChatMessages] = useState<ProjectChatMessage[]>([]);
 
   const projects = useQuery({
     queryKey: ["projects"],
@@ -228,6 +351,19 @@ export default function ProjectsPage() {
   const projectAnalysis = useMemo(() => {
     return summarizeProjectLogs(projectLogs.data ?? []);
   }, [projectLogs.data]);
+  const projectLogById = useMemo(() => new Map((projectLogs.data ?? []).map((item) => [item.id, item])), [projectLogs.data]);
+  const projectQuickQuestions = useMemo(
+    () =>
+      selectedProject
+        ? [
+            "总结近期进展",
+            "查看风险/阻塞",
+            "生成项目周报",
+            "整理下一步动作"
+          ]
+        : [],
+    [selectedProject]
+  );
   const projectActions = useMemo(() => (selectedProject ? projectNextActions(selectedProject, projectAnalysis) : []), [projectAnalysis, selectedProject]);
   const selectedProjectSources = useMemo(
     () => (selectedProject ? (communicationSources.data ?? []).filter((item) => item.projectIds.includes(selectedProject.id)) : []),
@@ -313,6 +449,29 @@ export default function ProjectsPage() {
     }
   });
 
+  const projectChat = useMutation({
+    mutationFn: ({ projectId, question }: { projectId: string; question: string }) =>
+      apiFetch<ProjectChatResponse>("/ai/chat/project", {
+        method: "POST",
+        body: JSON.stringify(projectChatPayload(projectId, question, range))
+      }),
+    onSuccess: (data) => {
+      setProjectChatMessages((items) => [
+        ...items,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: data.answer,
+          sources: data.sources,
+          contextCount: data.contextCount
+        }
+      ]);
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "项目助手暂时无法回答，请稍后重试");
+    }
+  });
+
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
@@ -339,6 +498,21 @@ export default function ProjectsPage() {
     setDetailEditing(false);
   };
 
+  const askProjectQuestion = (question = projectChatInput) => {
+    const normalized = question.trim();
+    if (!normalized || !selectedProject || projectChat.isPending) return;
+    setProjectChatMessages((items) => [
+      ...items,
+      {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: normalized
+      }
+    ]);
+    setProjectChatInput("");
+    projectChat.mutate({ projectId: selectedProject.id, question: normalized });
+  };
+
   useEffect(() => {
     if (!detailEditing || !detailLog) return;
     workLogForm.setFieldsValue({
@@ -349,6 +523,21 @@ export default function ProjectsPage() {
       projectId: detailLog.projectId ?? selectedProject?.id ?? undefined
     });
   }, [detailEditing, detailLog, selectedProject?.id, workLogForm]);
+
+  useEffect(() => {
+    setProjectChatMessages([]);
+    setProjectChatInput("");
+  }, [selectedProject?.id, range?.[0]?.format("YYYY-MM-DD"), range?.[1]?.format("YYYY-MM-DD")]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const thread = projectChatThreadRef.current;
+      if (!thread) return;
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      thread.scrollTo({ top: thread.scrollHeight, behavior: prefersReducedMotion ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [projectChatMessages, projectChat.isPending]);
 
   const logColumns: ColumnsType<WorkLog> = [
     { title: "日期", dataIndex: "date", width: 112, render: (value: string) => dayjs(value).format("MM-DD") },
@@ -381,7 +570,7 @@ export default function ProjectsPage() {
       <div className="page-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            项目
+            项目中心
           </Typography.Title>
           <Typography.Text className="page-subtitle">项目日报沉淀为进展、风险/阻塞和下一步动作。</Typography.Text>
         </div>
@@ -612,6 +801,111 @@ export default function ProjectsPage() {
             </div>
           )}
         </section>
+
+        <aside className="surface-panel project-ai-panel">
+          {selectedProject ? (
+            <>
+              <div className="project-ai-head">
+                <div className="project-ai-icon">
+                  <Bot size={18} />
+                </div>
+                <div className="min-w-0">
+                  <div className="project-ai-title">项目 AI 助手</div>
+                  <div className="project-ai-context">
+                    当前项目 · {rangeText(range)} · {projectAnalysis.totalLogs} 条日报 · {projectAnalysis.members.length} 个成员
+                  </div>
+                </div>
+              </div>
+
+              <div className="project-ai-quick">
+                {projectQuickQuestions.map((item) => (
+                  <button key={item} type="button" disabled={projectChat.isPending} onClick={() => askProjectQuestion(projectQuestionPrompt(item))}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+
+              <div ref={projectChatThreadRef} className="project-ai-thread">
+                {projectChatMessages.length ? (
+                  projectChatMessages.map((item) => (
+                    <div key={item.id} className={`project-ai-message is-${item.role}`}>
+                      <div className="project-ai-message-body">
+                        {item.role === "assistant" ? <div className="ai-copilot-markdown">{renderAssistantMarkdown(item.content)}</div> : item.content}
+                      </div>
+                      {item.role === "assistant" ? (
+                        <div className="project-ai-sources">
+                          <div className="project-ai-source-title">
+                            依据 · {item.contextCount ?? 0} 条上下文
+                          </div>
+                          {item.sources?.length ? (
+                            item.sources.slice(0, 4).map((source) => {
+                              const sourceLog = projectLogById.get(source.id);
+                              return (
+                                <button
+                                  key={source.id}
+                                  type="button"
+                                  className="project-ai-source"
+                                  disabled={!sourceLog}
+                                  onClick={() => sourceLog && openLogDetail(sourceLog)}
+                                >
+                                  <span>{dayjs(source.date).format("MM-DD")} · {source.userName}</span>
+                                  <strong>{source.title}</strong>
+                                  <em>
+                                    {source.evidence}
+                                    {source.riskCount + source.blockerCount > 0 ? ` · 风险/阻塞 ${source.riskCount + source.blockerCount} 条` : ""}
+                                  </em>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="project-ai-source-empty">暂无可展示来源。</div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <div className="project-ai-empty">
+                    <strong>问问这个项目</strong>
+                    <span>可以问近期进展、风险/阻塞、项目周报和下一步动作。回答会带来源日报。</span>
+                  </div>
+                )}
+                {projectChat.isPending ? (
+                  <div className="project-ai-message is-assistant">
+                    <div className="project-ai-message-body">正在读取项目日报并生成回答…</div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="project-ai-input-row">
+                <Input.TextArea
+                  value={projectChatInput}
+                  autoSize={{ minRows: 1, maxRows: 4 }}
+                  placeholder="问问这个项目…"
+                  disabled={projectChat.isPending}
+                  onChange={(event) => setProjectChatInput(event.target.value)}
+                  onPressEnter={(event) => {
+                    if (!event.shiftKey) {
+                      event.preventDefault();
+                      askProjectQuestion();
+                    }
+                  }}
+                />
+                <Button
+                  type="primary"
+                  icon={<Send size={15} />}
+                  disabled={!projectChatInput.trim() || projectChat.isPending}
+                  loading={projectChat.isPending}
+                  onClick={() => askProjectQuestion()}
+                >
+                  发送
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Empty description="选择项目后可使用项目 AI 助手" />
+          )}
+        </aside>
       </div>
 
       <Modal

@@ -313,6 +313,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, retryAnalysis(requireUser(currentUser), id));
     }
     if (route === "POST /ai/chat/calendar") return json(res, calendarChat(requireUser(currentUser), body));
+    if (route === "POST /ai/chat/project") return json(res, projectChat(requireUser(currentUser), body));
     if (route === "POST /ai/work-log-draft") return json(res, workLogDraft(requireUser(currentUser), body));
 
     if (route === "GET /reports/readiness") return json(res, reportReadiness(requireUser(currentUser), Object.fromEntries(url.searchParams.entries())));
@@ -2768,6 +2769,55 @@ function calendarChat(user, body) {
     scope: resolveScope(user, url),
     period: { start, end }
   };
+}
+
+function projectChat(user, body) {
+  const projectId = String(body.projectId ?? "").trim();
+  assertProject(user, projectId);
+  const project = projectWithOwner(projects.find((item) => item.id === projectId && item.tenantId === user.tenantId && !item.deletedAt));
+  if ((body.startDate && !body.endDate) || (!body.startDate && body.endDate)) {
+    throw httpError(400, "请选择完整的开始日期和结束日期");
+  }
+  const end = body.endDate ?? todayKey;
+  const start = body.startDate ?? dateKey(addDays(new Date(`${end}T00:00:00.000Z`), -29));
+  if (end < start) {
+    throw httpError(400, "结束日期不能早于开始日期");
+  }
+  const visibleLogs = filterLogsByAccess(user, new URL("http://localhost/"))
+    .filter((item) => item.status === "SUBMITTED" && !item.deletedAt)
+    .filter((item) => item.projectId === projectId)
+    .filter((item) => item.date >= start && item.date <= end)
+    .map(enrichLog)
+    .sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+  return {
+    answer: localCalendarAnswer(body.question ?? "", visibleLogs, body.startDate && body.endDate ? `${start} 至 ${end}` : "最近 30 天"),
+    contextCount: visibleLogs.length,
+    project: {
+      id: project.id,
+      name: project.name,
+      code: project.code,
+      ownerName: project.owner?.name ?? null
+    },
+    period: { start, end },
+    sources: projectChatSources(visibleLogs)
+  };
+}
+
+function projectChatSources(logs) {
+  return logs.slice(0, 8).map((log) => {
+    const analysis = analyses.get(log.id);
+    return {
+      id: log.id,
+      date: log.date,
+      title: log.title,
+      userName: log.user?.name ?? "员工",
+      departmentName: log.user?.department?.name ?? null,
+      hours: Number(log.hours ?? 0),
+      evidence: analysis?.summary || String(log.content ?? "").slice(0, 120),
+      riskCount: Array.isArray(analysis?.risks) ? analysis.risks.length : 0,
+      blockerCount: Array.isArray(analysis?.blockers) ? analysis.blockers.length : 0
+    };
+  });
 }
 
 function workLogDraft(user, body) {
