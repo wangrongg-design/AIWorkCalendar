@@ -478,23 +478,38 @@ function createDemoWorkLogs() {
   ];
 }
 
+function localAchievementPhrase(log) {
+  const text = `${log.title} ${log.content}`;
+  const reviewSubmit = text.match(/第([一二三四五六七八九十\d]+)次.*?(模型审查|模型审核|审查|审核|审批).*?(提交|申报)|第([一二三四五六七八九十\d]+)次.*?(提交|申报).*?(模型审查|模型审核|审查|审核|审批)/);
+  if (reviewSubmit) return `完成第${reviewSubmit[1] ?? reviewSubmit[4]}次${reviewSubmit[2] ?? reviewSubmit[6]}提交`;
+  const title = String(log.title ?? "").trim();
+  if (/^(完成|提交|确认|交付|修复|整理|梳理|输出|建立|上线|推进|解决|优化|复盘|评审|核对|补齐|同步|制定|更新|发布|测试|联调|归档)/.test(title)) return title;
+  return "";
+}
+
+function localAnalysisSummary(log) {
+  const hours = `${Number(log.hours || 0).toFixed(1).replace(/\.0$/, "")} 小时`;
+  return `${log.date} 的记录围绕「${log.title}」展开，耗时 ${hours}。`;
+}
+
 function createAnalysis(log) {
   const text = `${log.title} ${log.content}`;
   const risks = /风险|问题|阻塞|延迟/i.test(text) ? ["填报内容中提到风险或问题，需要管理者关注。"] : [];
   const blockers = /阻塞|依赖|卡住/i.test(text) ? ["存在阻塞或外部依赖。"] : [];
+  const achievement = localAchievementPhrase(log);
   return {
     id: `analysis-${log.id}`,
     tenantId: log.tenantId,
     workLogId: log.id,
     userId: log.userId,
     category: /产品|需求|页面/.test(text) ? "产品规划" : "研发交付",
-    achievements: [log.title],
+    achievements: achievement ? [achievement] : [],
     risks,
     blockers,
     keywords: Array.from(new Set(text.replace(/[，。！？、,.!?]/g, " ").split(/\s+/).filter((item) => item.length >= 2))).slice(0, 6),
     tags: ["本地分析", Number(log.hours) > 8 ? "工时偏高" : "常规工时"],
     timeReasonableness: Number(log.hours) > 10 ? "工时偏高，建议确认是否拆分记录。" : "工时与填报内容基本匹配。",
-    summary: log.content.length > 80 ? `${log.content.slice(0, 80)}...` : log.content,
+    summary: localAnalysisSummary(log),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };

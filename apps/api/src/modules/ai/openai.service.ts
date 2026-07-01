@@ -572,6 +572,26 @@ export class OpenAiService {
     };
   }
 
+  private localAchievementPhrase(input: WorkLogAnalysisInput) {
+    const text = `${input.title} ${input.content}`;
+    const reviewSubmit = text.match(/第([一二三四五六七八九十\d]+)次.*?(模型审查|模型审核|审查|审核|审批).*?(提交|申报)|第([一二三四五六七八九十\d]+)次.*?(提交|申报).*?(模型审查|模型审核|审查|审核|审批)/);
+    if (reviewSubmit) {
+      return `完成第${reviewSubmit[1] ?? reviewSubmit[4]}次${reviewSubmit[2] ?? reviewSubmit[6]}提交`;
+    }
+    const title = input.title.trim();
+    if (/^(完成|提交|确认|交付|修复|整理|梳理|输出|建立|上线|推进|解决|优化|复盘|评审|核对|补齐|同步|制定|更新|发布|测试|联调|归档)/.test(title)) {
+      return title;
+    }
+    return "";
+  }
+
+  private localWorkLogSummary(input: WorkLogAnalysisInput, hasAttachments: boolean) {
+    const date = input.date.toISOString().slice(0, 10);
+    const hours = `${Number(input.hours || 0).toFixed(1).replace(/\.0$/, "")} 小时`;
+    const attachmentText = hasAttachments ? `，包含 ${input.attachments?.length ?? 0} 个附件` : "";
+    return `${date} 的记录围绕「${input.title}」展开，耗时 ${hours}${attachmentText}。`;
+  }
+
   private localWorkLogAnalysis(input: WorkLogAnalysisInput): WorkLogAnalysisResult {
     const attachmentText = (input.attachments ?? [])
       .map((attachment) => [attachment.fileName, attachment.aiSummary, attachment.textContent].filter(Boolean).join(" "))
@@ -581,6 +601,7 @@ export class OpenAiService {
     const hasBlocker = /阻塞|卡住|依赖|blocked/i.test(text);
     const hasAttachments = Boolean(input.attachments?.length);
     const hasImages = Boolean(input.attachments?.some((attachment) => attachment.kind === "IMAGE"));
+    const achievement = this.localAchievementPhrase(input);
     const keywords = Array.from(
       new Set(
         text
@@ -592,7 +613,7 @@ export class OpenAiService {
     );
     return {
       category: /客户|销售|合同/.test(text) ? "客户与销售" : /设计|需求|产品/.test(text) ? "产品规划" : "研发交付",
-      achievements: [input.title],
+      achievements: achievement ? [achievement] : [],
       risks: hasRisk ? ["填报内容中提到风险、延迟或问题，需要管理者关注。"] : [],
       blockers: hasBlocker ? ["填报内容中提到阻塞或外部依赖。"] : [],
       keywords,
@@ -600,9 +621,7 @@ export class OpenAiService {
         Boolean
       ) as string[],
       timeReasonableness: input.hours > 10 ? "工时偏高，建议确认是否拆分记录。" : "工时与填报内容基本匹配。",
-      summary: `${input.content.length > 80 ? `${input.content.slice(0, 80)}...` : input.content}${
-        hasAttachments ? `（含 ${input.attachments?.length ?? 0} 个附件）` : ""
-      }`
+      summary: this.localWorkLogSummary(input, hasAttachments)
     };
   }
 

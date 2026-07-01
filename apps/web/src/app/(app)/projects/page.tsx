@@ -3,12 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, DatePicker, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag, Typography, message } from "antd";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, Bot, Clock, Edit2, FileText, FolderKanban, MessageSquare, Plus, Search, Send, Trash2, Users } from "lucide-react";
+import { Bot, Edit2, Plus, Search, Send, Trash2 } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
-import { CommunicationInsight, CommunicationSource, OrgUser, Project, ProjectStatus, WorkLog } from "@/lib/types";
+import { OrgUser, Project, ProjectStatus, WorkLog } from "@/lib/types";
 
 type OrgResponse = {
   users: OrgUser[];
@@ -84,14 +84,6 @@ function statusColor(status: ProjectStatus) {
   return statusOptions.find((item) => item.value === status)?.color ?? "default";
 }
 
-function dateText(value?: string | null) {
-  return value ? dayjs(value).format("YYYY-MM-DD") : "未设置";
-}
-
-function formatHours(value: string | number | null | undefined) {
-  return `${Number(value ?? 0).toFixed(1)}h`;
-}
-
 function projectHealth(project: Project) {
   if (project.status === "ARCHIVED") return { label: "已归档", color: "default" };
   if (project.status === "PAUSED") return { label: "暂停观察", color: "orange" };
@@ -127,10 +119,6 @@ function workLogPayload(values: ProjectWorkLogForm) {
 
 function uniqueTexts(values: Array<string | null | undefined>, limit = 8) {
   return Array.from(new Set(values.map((item) => item?.trim()).filter(Boolean) as string[])).slice(0, limit);
-}
-
-function logRiskBlockerCount(record: WorkLog) {
-  return (record.aiAnalysis?.risks?.length ?? 0) + (record.aiAnalysis?.blockers?.length ?? 0);
 }
 
 function buildWorkLogRangeQuery(range: [Dayjs, Dayjs] | null) {
@@ -294,31 +282,6 @@ function assistantIntro(project: Project, analysis: ProjectListStats, range: [Da
   };
 }
 
-function projectNextActions(project: Project, analysis: ReturnType<typeof summarizeProjectLogs>) {
-  const actions: string[] = [];
-  if (!project.owner?.name) {
-    actions.push("先补充项目负责人，避免风险归属不清。");
-  }
-  if (analysis.riskBlockerCount) {
-    actions.push(`请 ${project.owner?.name ?? "项目负责人"} 核对风险/阻塞日报，确认影响范围和处理动作。`);
-  }
-  if (project.endDate) {
-    const daysLeft = dayjs(project.endDate).startOf("day").diff(dayjs().startOf("day"), "day");
-    if (daysLeft < 0) {
-      actions.push("项目已超过结束日期，建议复核交付状态或调整项目周期。");
-    } else if (daysLeft <= 7) {
-      actions.push(`距离结束日期还有 ${daysLeft} 天，建议确认剩余任务和延期风险。`);
-    }
-  }
-  if (!analysis.totalLogs) {
-    actions.push("当前周期缺少关联日报，先提醒成员按项目归属提交记录。");
-  }
-  if (!actions.length) {
-    actions.push("继续保持日报归属，周会前复核关键进展即可。");
-  }
-  return actions.slice(0, 3);
-}
-
 function summarizeProjectLogs(logs: WorkLog[]) {
   const totalHours = logs.reduce((sum, item) => sum + Number(item.hours ?? 0), 0);
   const riskCount = logs.reduce((sum, item) => sum + (item.aiAnalysis?.risks?.length ?? 0), 0);
@@ -358,7 +321,6 @@ export default function ProjectsPage() {
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>([dayjs().subtract(14, "day"), dayjs().add(7, "day")]);
   const [projectChatInput, setProjectChatInput] = useState("");
   const [projectChatMessages, setProjectChatMessages] = useState<ProjectChatMessage[]>([]);
-  const [showAllSourceLogs, setShowAllSourceLogs] = useState(false);
 
   const projects = useQuery({
     queryKey: ["projects"],
@@ -411,21 +373,10 @@ export default function ProjectsPage() {
     enabled: Boolean(selectedProject?.id)
   });
 
-  const communicationSources = useQuery({
-    queryKey: ["wecom-sources"],
-    queryFn: () => apiFetch<CommunicationSource[]>("/wecom/sources")
-  });
-
-  const communicationDrafts = useQuery({
-    queryKey: ["wecom-log-drafts"],
-    queryFn: () => apiFetch<CommunicationInsight[]>("/wecom/log-drafts")
-  });
-
   const projectAnalysis = useMemo(() => {
     return summarizeProjectLogs((projectLogs.data ?? []).filter((item) => isLogInRange(item, range)));
   }, [projectLogs.data, range]);
   const sourceLogs = useMemo(() => (projectLogs.data ?? []).filter((item) => isLogInRange(item, range)), [projectLogs.data, range]);
-  const visibleSourceLogs = useMemo(() => (showAllSourceLogs ? sourceLogs : sourceLogs.slice(0, 5)), [showAllSourceLogs, sourceLogs]);
   const projectLogById = useMemo(() => new Map(sourceLogs.map((item) => [item.id, item])), [sourceLogs]);
   const projectQuickQuestions = useMemo(
     () =>
@@ -443,20 +394,6 @@ export default function ProjectsPage() {
   const projectAssistantIntro = useMemo(
     () => (selectedProject ? assistantIntro(selectedProject, projectAnalysis, range) : null),
     [projectAnalysis, range, selectedProject]
-  );
-  const projectActions = useMemo(() => (selectedProject ? projectNextActions(selectedProject, projectAnalysis) : []), [projectAnalysis, selectedProject]);
-  const selectedProjectSources = useMemo(
-    () => (selectedProject ? (communicationSources.data ?? []).filter((item) => item.projectIds.includes(selectedProject.id)) : []),
-    [communicationSources.data, selectedProject]
-  );
-  const selectedProjectDrafts = useMemo(
-    () =>
-      selectedProject
-        ? (communicationDrafts.data ?? []).filter(
-            (item) => item.projectId === selectedProject.id || item.projectHints?.some((hint) => hint.includes(selectedProject.name) || (selectedProject.code && hint.includes(selectedProject.code)))
-          )
-        : [],
-    [communicationDrafts.data, selectedProject]
   );
 
   const saveProject = useMutation({
@@ -478,14 +415,6 @@ export default function ProjectsPage() {
       setModalOpen(false);
       setEditing(null);
       form.resetFields();
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-    }
-  });
-
-  const deleteProject = useMutation({
-    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/projects/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      message.success("项目已归档");
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     }
   });
@@ -559,20 +488,6 @@ export default function ProjectsPage() {
     setModalOpen(true);
   };
 
-  const openEdit = (record: Project) => {
-    setEditing(record);
-    form.setFieldsValue({
-      code: record.code ?? undefined,
-      name: record.name,
-      description: record.description ?? undefined,
-      status: record.status,
-      ownerUserId: record.ownerUserId ?? undefined,
-      startDate: record.startDate ? dayjs(record.startDate) : undefined,
-      endDate: record.endDate ? dayjs(record.endDate) : undefined
-    });
-    setModalOpen(true);
-  };
-
   const openLogDetail = (record: WorkLog) => {
     setDetailLog(record);
     setDetailEditing(false);
@@ -611,7 +526,6 @@ export default function ProjectsPage() {
   useEffect(() => {
     setProjectChatMessages([]);
     setProjectChatInput("");
-    setShowAllSourceLogs(false);
   }, [selectedProject?.id, range?.[0]?.format("YYYY-MM-DD"), range?.[1]?.format("YYYY-MM-DD")]);
 
   useEffect(() => {
@@ -732,192 +646,6 @@ export default function ProjectsPage() {
               <Empty description="暂无匹配项目" />
             )}
           </div>
-        </section>
-
-        <section className="project-analysis-main">
-          {selectedProject ? (
-            <>
-              <div className="surface-panel project-analysis-hero">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <FolderKanban size={18} className="text-primary" />
-                    <Typography.Title level={4} className="!mb-0 !text-[20px] !leading-7">
-                      {selectedProject.name}
-                    </Typography.Title>
-                    {selectedProject.code ? <Tag>{selectedProject.code}</Tag> : null}
-                    <Tag color={statusColor(selectedProject.status)}>{statusLabel(selectedProject.status)}</Tag>
-                    <Tag color={projectHealth(selectedProject).color}>{projectHealth(selectedProject).label}</Tag>
-                  </div>
-                  <div className="project-hero-description">
-                    {selectedProject.description || "暂无项目说明。"}
-                  </div>
-                  <div className="project-hero-meta">
-                    <span>负责人：{selectedProject.owner?.name ?? "未设置"}</span>
-                    <span>项目周期：{dateText(selectedProject.startDate)} 至 {dateText(selectedProject.endDate)}</span>
-                    <span>{projectRecentText(projectStatsById.get(selectedProject.id))}</span>
-                  </div>
-                </div>
-                {canManage ? (
-                  <Space className="project-hero-actions" wrap>
-                    <Button icon={<Edit2 size={15} />} onClick={() => openEdit(selectedProject)}>
-                      编辑
-                    </Button>
-                    <Popconfirm title="确认归档该项目？历史日报仍保留项目归属。" onConfirm={() => deleteProject.mutate(selectedProject.id)}>
-                      <Button danger icon={<Trash2 size={15} />} />
-                    </Popconfirm>
-                  </Space>
-                ) : null}
-              </div>
-
-              <div className="surface-panel project-focus-panel">
-                <div className="project-focus-head">
-                  <div className="min-w-0">
-                    <div className="section-title">项目概览</div>
-                    <div className="section-subtitle">{rangeText(range)}</div>
-                  </div>
-                  <div className="project-focus-stats" aria-label="项目工作摘要数据">
-                    <span><FileText size={13} /><strong>{projectAnalysis.totalLogs}</strong>条日报/计划</span>
-                    <span><Users size={13} /><strong>{projectAnalysis.members.length}</strong>人</span>
-                    <span><AlertTriangle size={13} /><strong>{projectAnalysis.riskBlockerCount}</strong>条风险/阻塞</span>
-                    <span><Clock size={13} /><strong>{projectAnalysis.totalHours.toFixed(1)}</strong>h</span>
-                  </div>
-                </div>
-                <p className={`project-focus-summary ${projectAnalysis.riskBlockerCount ? "is-risk" : ""}`}>
-                  {projectOverviewText(selectedProject, projectAnalysis)}
-                </p>
-                <div className="project-focus-grid">
-                  <section>
-                    <div className="project-focus-title">主要进展</div>
-                    {projectAnalysis.completed.length ? (
-                      <ul className="project-insight-list">
-                        {projectAnalysis.completed.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
-                      </ul>
-                    ) : (
-                      <Empty description="当前周期暂无日报内容" />
-                    )}
-                  </section>
-                  <section>
-                    <div className="project-focus-title">风险/阻塞</div>
-                    {projectAnalysis.risks.length ? (
-                      <ul className="project-insight-list is-risk">
-                        {projectAnalysis.risks.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
-                      </ul>
-                    ) : (
-                      <div className="project-focus-empty">暂无风险或阻塞。</div>
-                    )}
-                  </section>
-                  <section>
-                    <div className="project-focus-title">下一步动作</div>
-                    <ul className="project-insight-list">
-                      {projectActions.map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                  </section>
-                </div>
-              </div>
-
-              <div className="project-log-section">
-                <div className="history-section-head">
-                  <div>
-                    <div className="section-title">来源日报</div>
-                    <div className="section-subtitle">默认展示最近 5 条，点击可查看详情。</div>
-                  </div>
-                  {sourceLogs.length > 5 ? (
-                    <Button size="small" onClick={() => setShowAllSourceLogs((value) => !value)}>
-                      {showAllSourceLogs ? "收起" : `查看全部 ${sourceLogs.length} 条`}
-                    </Button>
-                  ) : null}
-                </div>
-                {projectLogs.isFetching ? (
-                  <div className="project-source-log-empty">正在加载来源日报…</div>
-                ) : visibleSourceLogs.length ? (
-                  <div className="project-source-log-list">
-                    {visibleSourceLogs.map((record) => {
-                      const riskBlockerCount = logRiskBlockerCount(record);
-                      return (
-                        <button key={record.id} type="button" className="project-source-log-item" onClick={() => openLogDetail(record)}>
-                          <span className="project-source-log-meta">
-                            {dayjs(record.date).format("MM-DD")} · {record.user?.name ?? "员工"} · {formatHours(record.hours)}
-                            {record.sourceLinks?.length ? ` · 沟通来源 ${record.sourceLinks.length}` : ""}
-                          </span>
-                          <strong>{record.title}</strong>
-                          <span className="project-source-log-summary">{record.aiAnalysis?.summary ?? record.content}</span>
-                          <span className="project-source-log-tags">
-                            <Tag color={riskBlockerCount ? "red" : "default"}>{riskBlockerCount ? `风险/阻塞 ${riskBlockerCount} 条` : "无风险/阻塞"}</Tag>
-                            {record.kind === "PLAN" ? <Tag color="blue">计划</Tag> : <Tag color="green">日报</Tag>}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <Empty description="当前项目暂无来源日报" />
-                )}
-              </div>
-
-              <div className="surface-panel project-communication-panel">
-                <div className="project-focus-head">
-                  <div className="min-w-0">
-                    <div className="section-title">沟通来源</div>
-                    <div className="section-subtitle">来自企业微信群的项目线索，确认后才会写入正式日报。</div>
-                  </div>
-                  <div className="project-focus-stats" aria-label="项目沟通来源数据">
-                    <span><strong>{selectedProjectSources.length}</strong>个群聊</span>
-                    <span><strong>{selectedProjectDrafts.length}</strong>条候选</span>
-                    <span><strong>{selectedProjectDrafts.reduce((sum, item) => sum + (item.risks?.length ?? 0), 0)}</strong>条风险</span>
-                  </div>
-                </div>
-                {selectedProjectSources.length || selectedProjectDrafts.length ? (
-                  <div className="project-communication-grid">
-                    <section>
-                      <div className="project-focus-title">
-                        <MessageSquare size={15} />
-                        已绑定群聊
-                      </div>
-                      {selectedProjectSources.length ? (
-                        <div className="project-source-list">
-                          {selectedProjectSources.map((source) => (
-                            <div key={source.id} className="project-source-item">
-                              <strong>{source.name}</strong>
-                              <span>{source.chatId}</span>
-                              <div>
-                                <Tag color={source.generateLogDrafts ? "green" : "default"}>{source.generateLogDrafts ? "生成草稿" : "不生成草稿"}</Tag>
-                                <Tag color={source.generateProjectRisks ? "orange" : "default"}>{source.generateProjectRisks ? "识别风险" : "不识别风险"}</Tag>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="project-focus-empty">暂无绑定群聊，可在企业微信集成页绑定项目群。</div>
-                      )}
-                    </section>
-                    <section>
-                      <div className="project-focus-title">
-                        <AlertTriangle size={15} />
-                        候选线索
-                      </div>
-                      {selectedProjectDrafts.length ? (
-                        <ul className="project-insight-list is-risk">
-                          {selectedProjectDrafts.slice(0, 4).map((draft) => (
-                            <li key={draft.id}>
-                              {draft.title} · {draft.risks?.[0] ?? draft.nextActions?.[0] ?? "待确认"}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="project-focus-empty">暂无来自群聊的项目候选内容。</div>
-                      )}
-                    </section>
-                  </div>
-                ) : (
-                  <Empty description="暂无沟通来源，后续可在企业微信集成页绑定项目群" />
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="surface-panel p-8">
-              <Empty description="暂无可查看项目" />
-            </div>
-          )}
         </section>
 
         <aside className="surface-panel project-ai-panel">

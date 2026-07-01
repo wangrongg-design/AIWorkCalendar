@@ -54,6 +54,90 @@ function workLogKindLabel(record: WorkLog) {
   return (record.kind ?? "DAILY") === "PLAN" ? "工作计划" : "工作日报";
 }
 
+function compactDisplayText(value?: string | null) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeComparableText(value?: string | null) {
+  return compactDisplayText(value)
+    .toLowerCase()
+    .replace(/[，。！？、,.!?；;：:\-—_'"“”‘’（）()【】\[\]《》<>/\s]/g, "");
+}
+
+function textOverlapScore(source: string, target: string) {
+  const sourceChars = Array.from(source);
+  if (!sourceChars.length) return 0;
+  const targetChars = new Set(Array.from(target));
+  const hits = sourceChars.filter((char) => targetChars.has(char)).length;
+  return hits / sourceChars.length;
+}
+
+function isCompactResultPhrase(value: string, reference: string) {
+  const text = compactDisplayText(value);
+  const normalizedValue = normalizeComparableText(value);
+  const normalizedReference = normalizeComparableText(reference);
+  if (!normalizedValue || !normalizedReference) return false;
+  const lengthRatio = normalizedValue.length / normalizedReference.length;
+  return /^(完成|提交|确认|交付|修复|整理|梳理|输出|建立|上线|推进|解决|优化|复盘|评审|核对|补齐|同步|制定|更新|发布|测试|联调|归档)/.test(text) && lengthRatio <= 0.72;
+}
+
+function isSimilarText(a?: string | null, b?: string | null) {
+  const first = normalizeComparableText(a);
+  const second = normalizeComparableText(b);
+  if (!first || !second) return false;
+  if (first === second) return true;
+  const shorter = first.length <= second.length ? first : second;
+  const longer = first.length > second.length ? first : second;
+  const lengthRatio = shorter.length / longer.length;
+  if (shorter.length >= 8 && longer.includes(shorter) && lengthRatio >= 0.72) return true;
+  return lengthRatio >= 0.82 && textOverlapScore(shorter, longer) >= 0.84;
+}
+
+function formatDisplayHours(value: WorkLog["hours"]) {
+  const hours = Number(value) || 0;
+  return `${hours.toFixed(1).replace(/\.0$/, "")} 小时`;
+}
+
+function fallbackAnalysisSummary(record: WorkLog, projectName: string) {
+  const detailKind = workLogKindLabel(record);
+  const title = compactDisplayText(record.title);
+  const projectText = projectName && projectName !== "未关联" ? `，关联项目「${projectName}」` : "";
+  if (!title) return "该记录内容较短，暂未形成更多分析结论。";
+  return `本次${detailKind === "工作计划" ? "计划" : "记录"}围绕「${title}」展开${projectText}，耗时 ${formatDisplayHours(record.hours)}。`;
+}
+
+function displayAnalysisSummary(record: WorkLog, projectName: string) {
+  const summary = compactDisplayText(record.aiAnalysis?.summary);
+  if (summary && !isSimilarText(summary, record.content)) return summary;
+  return fallbackAnalysisSummary(record, projectName);
+}
+
+function uniqueTextList(items?: string[]) {
+  const seen = new Set<string>();
+  return (items ?? [])
+    .map(compactDisplayText)
+    .filter(Boolean)
+    .filter((item) => {
+      const key = normalizeComparableText(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function displayAchievements(record: WorkLog, summary: string) {
+  return uniqueTextList(record.aiAnalysis?.achievements).filter((item) => {
+    if (isCompactResultPhrase(item, record.content)) return true;
+    if (isSimilarText(item, record.content) || isSimilarText(item, summary)) return false;
+    return true;
+  });
+}
+
+function displayTags(record: WorkLog) {
+  const mutedTags = new Set(["自动分析", "本地分析", "常规工时"]);
+  return uniqueTextList([...(record.aiAnalysis?.keywords ?? []), ...(record.aiAnalysis?.tags ?? [])]).filter((item) => !mutedTags.has(item));
+}
+
 export function WorkLogDetailTitle({
   record,
   currentUserId,
@@ -129,15 +213,18 @@ function AnalysisList({
   tone,
   icon,
   items,
-  emptyText
+  emptyText,
+  hideWhenEmpty = false
 }: {
   title: string;
   tone: AnalysisTone;
   icon: ReactNode;
   items?: string[];
   emptyText: string;
+  hideWhenEmpty?: boolean;
 }) {
   const safeItems = items?.filter(Boolean) ?? [];
+  if (!safeItems.length && hideWhenEmpty) return null;
   return (
     <section className={`work-log-analysis-card is-${tone}${safeItems.length ? "" : " is-empty"}`}>
       <div className="work-log-analysis-card-title">
@@ -161,6 +248,11 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
   const timeInfo = workLogTimeInfo(record);
   const status = workLogDetailStatus(record);
   const projectName = record.project?.name ?? projectNameFallback ?? "未关联";
+  const analysisSummary = record.aiAnalysis ? displayAnalysisSummary(record, projectName) : "";
+  const achievements = record.aiAnalysis ? displayAchievements(record, analysisSummary) : [];
+  const risks = uniqueTextList(record.aiAnalysis?.risks);
+  const blockers = uniqueTextList(record.aiAnalysis?.blockers);
+  const tags = displayTags(record);
 
   return (
     <div className="work-log-detail-shell">
@@ -186,40 +278,49 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
         )}
       </div>
 
-      <DetailSection title="工作内容">
+      <DetailSection title="原始记录">
         <div className="work-log-detail-content">{record.content}</div>
       </DetailSection>
 
       {record.aiAnalysis ? (
-        <DetailSection title="分析结果" icon={<Bot size={16} />}>
-          <p className="work-log-analysis-summary">{record.aiAnalysis.summary}</p>
+        <DetailSection title="AI 分析" icon={<Bot size={16} />}>
+          <div className="work-log-analysis-summary-box">
+            <span>摘要</span>
+            <p className="work-log-analysis-summary">{analysisSummary}</p>
+          </div>
+          <div className="work-log-analysis-subhead">结构化结果</div>
           <div className="work-log-analysis-grid">
             <AnalysisList
               title="成果"
               tone="success"
               icon={<CheckCircle2 size={15} />}
-              items={record.aiAnalysis.achievements}
+              items={achievements}
               emptyText="暂无明确成果"
+              hideWhenEmpty
             />
             <AnalysisList
               title="风险"
               tone="risk"
               icon={<AlertTriangle size={15} />}
-              items={record.aiAnalysis.risks}
+              items={risks}
               emptyText="暂无风险"
             />
             <AnalysisList
               title="阻塞"
               tone="blocker"
               icon={<Ban size={15} />}
-              items={record.aiAnalysis.blockers}
+              items={blockers}
               emptyText="暂无阻塞"
             />
           </div>
-          <div className="work-log-analysis-tags">
-            <Tag color="blue">{record.aiAnalysis.category}</Tag>
-            {record.aiAnalysis.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-          </div>
+          {tags.length ? (
+            <div className="work-log-analysis-tag-section">
+              <span>标签</span>
+              <div className="work-log-analysis-tags">
+                {tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+              </div>
+            </div>
+          ) : null}
         </DetailSection>
       ) : record.status === "SUBMITTED" ? (
         <DetailSection title="分析生成中" icon={<Clock3 size={16} />}>
