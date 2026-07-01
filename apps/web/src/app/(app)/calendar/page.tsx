@@ -808,6 +808,9 @@ export default function CalendarPage() {
   const [copilotStartDate, copilotEndDate] = normalizedCopilotRange;
   const assistantRangeLabel = copilotRangeLabel(copilotStartDate, copilotEndDate);
   const copilotRangeDays = copilotEndDate.diff(copilotStartDate, "day") + 1;
+  const displayedCopilotRange: [Dayjs, Dayjs] = selectedDate ? [dayjs(selectedDate), dayjs(selectedDate)] : normalizedCopilotRange;
+  const displayedCopilotRangeLabel = selectedDate ? chineseDateLabel(selectedDate) : assistantRangeLabel;
+  const displayedCopilotRangeDays = selectedDate ? 1 : copilotRangeDays;
   const assistantRangeIsVisibleMonth =
     copilotStartDate.isSame(month.startOf("month"), "day") && copilotEndDate.isSame(month.endOf("month").startOf("day"), "day");
   const copilotRangePresets = useMemo(() => {
@@ -823,6 +826,10 @@ export default function CalendarPage() {
   const updateCopilotRange = (range: [Dayjs, Dayjs]) => {
     setSelectedDate(null);
     setCopilotRange(normalizeCopilotRange(range));
+  };
+  const switchCopilotToRangeMode = () => {
+    setSelectedDate(null);
+    setCopilotRange(normalizedCopilotRange);
   };
   const copilotObservations = useMemo(() => {
     if (selectedDate) {
@@ -862,13 +869,14 @@ export default function CalendarPage() {
   ]);
   const copilotContext = useMemo(
     () => [
-      selectedDate ? chineseDateLabel(selectedDate) : assistantRangeLabel,
+      displayedCopilotRangeLabel,
+      `${displayedCopilotRangeDays}天范围`,
       scope === "self" ? user?.name ?? "我" : scope === "department" ? "本部门" : "全公司",
       "日历看板",
       "日报数据",
       "工作计划"
     ],
-    [assistantRangeLabel, scope, selectedDate, user?.name]
+    [displayedCopilotRangeDays, displayedCopilotRangeLabel, scope, user?.name]
   );
   const calendarChat = useMutation({
     mutationFn: (question: string) =>
@@ -1401,35 +1409,42 @@ export default function CalendarPage() {
         <div className="ai-copilot">
           <div className="ai-copilot-context">
             <div className="ai-copilot-kicker">正在分析</div>
-            <div className="ai-copilot-context-title">当前分析范围</div>
+            <div className="ai-copilot-context-title">{selectedDate ? "单日分析范围" : "跨月统计范围"}</div>
+            <div className="ai-copilot-range-summary">
+              <strong>{displayedCopilotRangeLabel}</strong>
+              <span>{selectedDate ? "当前按单日查看，可直接切换为日期范围统计。" : `共 ${copilotRangeDays} 天，可跨月统计日报、计划、风险和工时。`}</span>
+            </div>
             <div className="ai-copilot-context-list">
               {copilotContext.map((item) => (
                 <span key={item}>{item}</span>
               ))}
             </div>
-            {!selectedDate ? (
-              <div className="ai-copilot-range-controls">
-                <RangePicker
-                  className="ai-copilot-range-picker"
-                  value={normalizedCopilotRange}
-                  allowClear={false}
-                  format="YYYY-MM-DD"
-                  onChange={(value) => {
-                    if (!value?.[0] || !value?.[1]) return;
-                    updateCopilotRange([value[0], value[1]]);
-                  }}
-                />
-                <div className="ai-copilot-range-presets">
-                  {copilotRangePresets.map((preset) => (
-                    <button key={preset.label} type="button" onClick={() => updateCopilotRange(preset.range)}>
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
+            <div className="ai-copilot-range-controls">
+              <div className="ai-copilot-range-label">统计日期范围</div>
+              <RangePicker
+                className="ai-copilot-range-picker"
+                value={displayedCopilotRange}
+                allowClear={false}
+                format="YYYY-MM-DD"
+                onChange={(value) => {
+                  if (!value?.[0] || !value?.[1]) return;
+                  updateCopilotRange([value[0], value[1]]);
+                }}
+              />
+              <div className="ai-copilot-range-presets">
+                {selectedDate ? (
+                  <button type="button" className="is-primary" onClick={switchCopilotToRangeMode}>
+                    改用日期范围
+                  </button>
+                ) : null}
+                {copilotRangePresets.map((preset) => (
+                  <button key={preset.label} type="button" onClick={() => updateCopilotRange(preset.range)}>
+                    {preset.label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <div className="ai-copilot-range-note">正在查看单日详情；关闭日期详情后，可切换为跨月范围分析。</div>
-            )}
+              <div className="ai-copilot-range-note">支持跨月选择，单次最多分析 366 天。月历只用于查看单日，不限制助手统计范围。</div>
+            </div>
           </div>
 
           <div className="ai-copilot-section">
