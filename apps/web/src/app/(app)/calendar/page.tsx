@@ -25,6 +25,15 @@ import {
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import {
+  defaultOnboardingProgress,
+  dismissOnboarding,
+  firstOpenOnboardingTask,
+  loadOnboardingProgress,
+  onboardingCompletion,
+  saveOnboardingProgress,
+  type OnboardingProgressState
+} from "@/lib/onboarding";
 import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 
 type OrgResponse = {
@@ -347,6 +356,7 @@ export default function CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
+  const [onboardingProgressState, setOnboardingProgressState] = useState<OnboardingProgressState>(defaultOnboardingProgress);
   const today = dayjs().format("YYYY-MM-DD");
   const [quickFillDate, setQuickFillDate] = useState(dayjs());
   const [month, setMonth] = useState(dayjs());
@@ -392,6 +402,18 @@ export default function CalendarPage() {
     setMonth(nextDate);
     setSelectedDate(dateParam);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!user) return;
+    const syncOnboardingProgress = () => setOnboardingProgressState(loadOnboardingProgress(user));
+    syncOnboardingProgress();
+    window.addEventListener("storage", syncOnboardingProgress);
+    window.addEventListener("work-calendar-ai-onboarding-updated", syncOnboardingProgress);
+    return () => {
+      window.removeEventListener("storage", syncOnboardingProgress);
+      window.removeEventListener("work-calendar-ai-onboarding-updated", syncOnboardingProgress);
+    };
+  }, [user]);
 
   const org = useQuery({
     queryKey: ["org"],
@@ -1203,6 +1225,14 @@ export default function CalendarPage() {
     setMonth(value);
     setCopilotRange(normalizeCopilotRange([value.startOf("month"), value.endOf("month")]));
   };
+  const onboardingStatus = onboardingCompletion(user, onboardingProgressState);
+  const nextOnboardingTask = firstOpenOnboardingTask(user, onboardingProgressState);
+  const showOnboardingChecklist = Boolean(user && !onboardingProgressState.dismissed && !onboardingStatus.isComplete);
+  const hideOnboardingChecklist = () => {
+    const next = dismissOnboarding(onboardingProgressState);
+    setOnboardingProgressState(next);
+    saveOnboardingProgress(user, next);
+  };
   const quickFillKindTitle = quickFillDate.format("YYYY-MM-DD") > today ? "填写计划" : "填写日报";
 
   return (
@@ -1259,6 +1289,31 @@ export default function CalendarPage() {
             </Button>
           }
         />
+      ) : null}
+
+      {showOnboardingChecklist ? (
+        <section className="calendar-onboarding-banner" aria-label="启动助手进度">
+          <div className="calendar-onboarding-main">
+            <span className="calendar-onboarding-icon">
+              <Bot size={18} />
+            </span>
+            <div>
+              <strong>启动助手还差 {onboardingStatus.totalCount - onboardingStatus.doneCount} 步</strong>
+              <p>
+                已完成 {onboardingStatus.doneCount}/{onboardingStatus.totalCount} · 下一步：{nextOnboardingTask?.title ?? "继续完成企业启动"}
+              </p>
+            </div>
+          </div>
+          <Progress className="calendar-onboarding-progress" percent={Math.round((onboardingStatus.doneCount / onboardingStatus.totalCount) * 100)} size="small" strokeColor="var(--color-ai)" />
+          <div className="calendar-onboarding-actions">
+            <Button type="primary" onClick={() => router.push("/onboarding")}>
+              继续启动
+            </Button>
+            <Button type="text" onClick={hideOnboardingChecklist}>
+              收起
+            </Button>
+          </div>
+        </section>
       ) : null}
 
       <section className="calendar-main-panel calendar-main-panel-full">

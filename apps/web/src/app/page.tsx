@@ -128,8 +128,8 @@ export default function HomePage() {
       }),
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
-      message.success("企业已创建，已进入工作台。");
-      router.replace("/calendar");
+      message.success("企业已创建，先完成启动助手。");
+      router.replace("/onboarding");
     }
   });
 

@@ -122,6 +122,16 @@ function formatDisplayHours(value: WorkLog["hours"]) {
   return `${hours.toFixed(1).replace(/\.0$/, "")} 小时`;
 }
 
+function displayOriginalRecordContent(value?: string | null) {
+  const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
+  if (!text) return "";
+  const normalized = text.replace(/^\s*(?:工作内容|原始记录|日报内容)\s*[：:]\s*/u, "").trim();
+  const structuredSectionIndex = normalized.search(/\n\s*(?:成果|风险|阻塞|下一步|建议动作|AI\s*分析|分析结果|摘要|标签|关键词)\s*[：:]/u);
+  if (structuredSectionIndex < 0) return normalized;
+  const originalOnly = normalized.slice(0, structuredSectionIndex).trim();
+  return originalOnly || normalized;
+}
+
 function fallbackAnalysisSummary(record: WorkLog, projectName: string) {
   const detailKind = workLogKindLabel(record);
   const title = compactDisplayText(record.title);
@@ -279,6 +289,7 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
   const risks = uniqueTextList(record.aiAnalysis?.risks);
   const blockers = uniqueTextList(record.aiAnalysis?.blockers);
   const tags = displayTags(record);
+  const originalRecordContent = displayOriginalRecordContent(record.content);
 
   return (
     <div className="work-log-detail-shell">
@@ -305,7 +316,7 @@ export function WorkLogDetailView({ record, projectNameFallback, showTimeInfo = 
       </div>
 
       <DetailSection title="原始记录">
-        <div className="work-log-detail-content">{record.content}</div>
+        <div className="work-log-detail-content">{originalRecordContent}</div>
       </DetailSection>
 
       {record.aiAnalysis ? (
