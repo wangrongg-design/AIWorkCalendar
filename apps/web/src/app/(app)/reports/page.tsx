@@ -123,7 +123,7 @@ function readinessSummary(readiness?: ReportReadiness | null) {
 
 function readinessMetricItems(stats?: ReportReadinessStats | null) {
   return [
-    { label: "日报/计划", value: stats?.workLogCount ?? 0, suffix: "条" },
+    { label: "需看记录", value: stats?.workLogCount ?? 0, suffix: "条" },
     { label: "覆盖成员", value: stats?.coveredMemberCount ?? 0, suffix: "人" },
     { label: "未填报", value: stats?.missingMemberCount ?? 0, suffix: "人" },
     { label: "风险/阻塞", value: (stats?.riskCount ?? 0) + (stats?.blockerCount ?? 0), suffix: "条" },
@@ -248,13 +248,13 @@ function statsFromReport(report: Report): ReportReadinessStats | null {
 }
 
 function statusTag(report: Report) {
-  if (report.status === "COMPLETED") return <Tag color="green">已完成</Tag>;
-  if (report.status === "FAILED") return <Tag color="red">失败</Tag>;
+  if (report.status === "COMPLETED") return <Tag color="green">已生成</Tag>;
+  if (report.status === "FAILED") return <Tag color="red">生成失败</Tag>;
   return <Tag color="processing">生成中</Tag>;
 }
 
 function reportErrorText(value?: string | null) {
-  return humanizeApiError(value || "报告生成失败，请调整时间范围后重试。");
+  return humanizeApiError(value || "汇报生成失败，请调整时间范围后重试。");
 }
 
 function downloadReportWord(report: Report) {
@@ -286,7 +286,7 @@ function downloadReportWord(report: Report) {
 </head>
 <body>
   <h1>${escapeHtml(title)}</h1>
-  <div class="meta">报告周期：${escapeHtml(period)} · 生成时间：${dateTimeText(report.createdAt)}</div>
+  <div class="meta">汇报周期：${escapeHtml(period)} · 生成时间：${dateTimeText(report.createdAt)}</div>
   ${evidence ? `<div class="note">基于 ${evidence.stats.workLogCount} 条日报/计划、${evidence.stats.coveredMemberCount} 名成员、${evidence.stats.projectCount} 个项目生成。请结合实际业务确认。</div>` : ""}
   <h2>汇报摘要</h2>
   <p>${escapeHtml(content.summary)}</p>
@@ -335,6 +335,7 @@ export default function ReportsPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [generateError, setGenerateError] = useState<Error | null>(null);
   const canCompanyScope = Boolean(user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN"));
   const canDepartmentReport = Boolean(canCompanyScope || user?.roles.includes("DEPARTMENT_MANAGER"));
   const defaultDepartmentId = canCompanyScope ? COMPANY_SCOPE : user?.departmentId ?? undefined;
@@ -382,7 +383,7 @@ export default function ReportsPage() {
       return [
         {
           id: "today-team",
-          title: canCompanyScope ? "生成今日团队简报" : "生成今日部门简报",
+          title: canCompanyScope ? "今日团队简报" : "今日部门简报",
           kind: "团队日报",
           copy: "适合晨会、晚会快速同步。",
           type: "DEPARTMENT_DAILY",
@@ -391,18 +392,18 @@ export default function ReportsPage() {
         },
         {
           id: "this-week-team",
-          title: canCompanyScope ? "生成本周团队周报" : "生成本周部门周报",
+          title: canCompanyScope ? "本周团队周报" : "本周部门周报",
           kind: "团队周报",
-          copy: "汇总本周进展、风险/阻塞和工时。",
+          copy: "适合周会前整理进展、风险和工时。",
           type: "DEPARTMENT_WEEKLY",
           range: ranges.thisWeek,
           departmentId: defaultDepartmentId
         },
         {
           id: "last-week-team",
-          title: canCompanyScope ? "生成上周团队复盘" : "生成上周部门复盘",
+          title: canCompanyScope ? "上周团队复盘" : "上周部门复盘",
           kind: "复盘周报",
-          copy: "用于周会复盘和下周计划。",
+          copy: "适合复盘问题和安排下周计划。",
           type: "DEPARTMENT_WEEKLY",
           range: ranges.lastWeek,
           departmentId: defaultDepartmentId
@@ -412,7 +413,7 @@ export default function ReportsPage() {
     return [
       {
         id: "today-personal",
-        title: "生成我的今日汇报",
+        title: "我的今日汇报",
         kind: "个人日报",
         copy: "把今天的日报整理成可转发摘要。",
         type: "PERSONAL_DAILY",
@@ -420,7 +421,7 @@ export default function ReportsPage() {
       },
       {
         id: "this-week-personal",
-        title: "生成我的本周汇报",
+        title: "我的本周汇报",
         kind: "个人周报",
         copy: "汇总本周完成、风险/阻塞和下一步。",
         type: "PERSONAL_WEEKLY",
@@ -448,6 +449,9 @@ export default function ReportsPage() {
           departmentId: values.departmentId === COMPANY_SCOPE ? undefined : values.departmentId
         })
       }),
+    onMutate: () => {
+      setGenerateError(null);
+    },
     onSuccess: (report) => {
       setSelectedReport(report);
       message.success(report.status === "COMPLETED" ? "已打开已有汇报" : "已提交汇报生成任务");
@@ -455,7 +459,9 @@ export default function ReportsPage() {
       queryClient.invalidateQueries({ queryKey: ["report-readiness"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "报告生成失败，请调整后重试。");
+      const nextError = error instanceof Error ? error : new Error("汇报生成失败，请调整后重试。");
+      setGenerateError(nextError);
+      message.error(nextError.message);
     }
   });
 
@@ -477,28 +483,28 @@ export default function ReportsPage() {
     ? "时间范围过长"
     : activeExistingReport
       ? activeExistingReport.status === "PENDING"
-        ? "这个范围已有报告正在生成"
-        : "这个范围已有报告"
+        ? "这个范围已有汇报正在生成"
+        : "这个范围已有汇报"
       : readiness.isError
         ? "检查失败，可重试"
       : readiness.isFetching
-        ? "正在检查数据准备度"
+        ? "正在检查可用数据"
       : readiness.data?.canGenerate
           ? "数据足够，可以生成"
           : readiness.data
-            ? "当前周期数据不足"
-            : "先选择报告范围";
+            ? "数据不足，建议调整范围"
+            : "先确认汇报范围";
   const readinessDescription = periodTooLong
     ? `单次最多分析 ${MAX_REPORT_PERIOD_DAYS} 天，请缩短时间范围。`
     : activeExistingReport
       ? activeExistingReport.status === "PENDING"
-        ? "系统正在整理这份报告，完成后会自动进入历史汇报。"
-        : "同一类型、范围和部门已经生成过报告，可以直接查看。"
+        ? "系统正在整理这份汇报，完成后会自动进入历史汇报。"
+        : "同一类型、范围和部门已经生成过汇报，可以直接查看。"
       : readiness.isError
         ? readiness.error instanceof Error ? readiness.error.message : "数据检查失败，请重试。"
       : readiness.data?.canGenerate
         ? `${readiness.data.stats.workLogCount} 条日报/计划，覆盖 ${readiness.data.stats.coveredMemberCount} 人，${activeRiskCount} 条风险/阻塞。`
-        : readiness.data?.emptyReason ?? "选择类型、时间和范围后，我会先判断数据是否足够。";
+        : "当前范围内没有足够日报/计划，无法生成有效汇报。";
   const readinessTone = periodTooLong || readiness.isError
     ? "error"
     : activeExistingReport
@@ -518,12 +524,13 @@ export default function ReportsPage() {
 
   const applyRecommendation = (item: Recommendation) => {
     form.setFieldsValue({ type: item.type, range: item.range, departmentId: item.departmentId });
-    message.success("已选择报告场景，请确认范围和数据准备度。");
+    setGenerateError(null);
+    message.success("已选择汇报，请确认统计范围和数据覆盖。");
   };
 
   const submitForm = (values: ReportForm) => {
     if (rangeDays(values.range) > MAX_REPORT_PERIOD_DAYS) {
-      message.warning("报告周期不能超过 31 天");
+      message.warning("汇报周期不能超过 31 天");
       return;
     }
     if (isDepartmentReport(values.type) && !values.departmentId) {
@@ -563,7 +570,7 @@ export default function ReportsPage() {
           <Typography.Title level={3} className="page-title">
             周期汇报
           </Typography.Title>
-          <Typography.Text className="page-subtitle">选择报告场景，确认范围，检查数据后生成可复用的管理汇报。</Typography.Text>
+          <Typography.Text className="page-subtitle">选择要生成的汇报，确认统计范围和数据覆盖后生成可复用的管理内容。</Typography.Text>
         </div>
         <Button icon={<RotateCw size={16} />} onClick={() => reports.refetch()} loading={reports.isFetching}>
           刷新列表
@@ -573,8 +580,8 @@ export default function ReportsPage() {
       <section className="surface-panel report-guide-panel">
         <div className="report-guide-head">
           <div>
-            <div className="section-title">报告生成向导</div>
-            <div className="section-subtitle">按常用场景开始，也可以手动调整类型、周期和范围。</div>
+            <div className="section-title">汇报生成向导</div>
+            <div className="section-subtitle">选择常用汇报类型，也可以手动调整类型、周期和范围。</div>
           </div>
         </div>
 
@@ -583,8 +590,8 @@ export default function ReportsPage() {
             <div className="report-step-head">
               <span>步骤 1</span>
               <div>
-                <strong>选择报告场景</strong>
-                <p>推荐卡只会更新下面的范围和数据检查，不会直接生成报告。</p>
+                <strong>选择要生成的汇报</strong>
+                <p>推荐卡只会更新下面的统计范围和数据检查，不会直接生成汇报。</p>
               </div>
             </div>
 
@@ -597,7 +604,7 @@ export default function ReportsPage() {
                 const statusText = existingReport
                   ? existingReport.status === "PENDING"
                     ? "生成中"
-                    : "已有报告"
+                    : "已有汇报"
                   : current.isLoading
                     ? "读取中"
                     : data?.canGenerate
@@ -610,7 +617,6 @@ export default function ReportsPage() {
                   >
                     <div className="report-scenario-top">
                       <Tag color={selected ? "blue" : "default"}>{item.kind}</Tag>
-                      {selected ? <Tag color="processing">已选择</Tag> : null}
                     </div>
                     <h3>{item.title}</h3>
                     <p>{item.copy}</p>
@@ -621,7 +627,7 @@ export default function ReportsPage() {
                     <div className="report-scenario-coverage">{statusText}</div>
                     <div className="report-scenario-actions">
                       <Button size="small" onClick={() => applyRecommendation(item)}>
-                        {selected ? "已选择" : "选择场景"}
+                        {selected ? "已选择" : "选择"}
                       </Button>
                       {existingReport ? (
                         <Button size="small" type="link" onClick={() => setSelectedReport(existingReport)}>
@@ -639,8 +645,8 @@ export default function ReportsPage() {
             <div className="report-step-head">
               <span>步骤 2</span>
               <div>
-                <strong>确认生成范围</strong>
-                <p>修改任意字段后，系统会自动重新检查数据准备度。</p>
+                <strong>确认统计范围</strong>
+                <p>修改任意字段后，系统会自动重新检查可用数据。</p>
               </div>
             </div>
             <Form
@@ -654,14 +660,14 @@ export default function ReportsPage() {
               }}
               onFinish={submitForm}
             >
-              <Form.Item name="type" label="报告类型" rules={[{ required: true }]}>
+              <Form.Item name="type" label="汇报类型" rules={[{ required: true }]}>
                 <Select options={visibleTypeOptions} />
               </Form.Item>
               <Form.Item name="range" label="时间范围" rules={[{ required: true }]}>
                 <DatePicker.RangePicker className="w-full" />
               </Form.Item>
               {isDepartmentReport(reportType) ? (
-                <Form.Item name="departmentId" label="报告范围" rules={[{ required: true, message: "请选择部门或全公司" }]}>
+                <Form.Item name="departmentId" label="汇报范围" rules={[{ required: true, message: "请选择部门或全公司" }]}>
                   <Select
                     disabled={!canCompanyScope && Boolean(user?.departmentId)}
                     placeholder="选择部门或全公司"
@@ -670,7 +676,7 @@ export default function ReportsPage() {
                   />
                 </Form.Item>
               ) : (
-                <Form.Item label="报告范围">
+                <Form.Item label="汇报范围">
                   <div className="report-scope-static">{user?.name ?? "我"}</div>
                 </Form.Item>
               )}
@@ -693,7 +699,7 @@ export default function ReportsPage() {
             <div className="report-step-head">
               <span>步骤 3</span>
               <div>
-                <strong>检查数据准备度</strong>
+                <strong>检查可用数据</strong>
                 <p>生成前先确认日报、成员、项目、风险/阻塞和工时覆盖。</p>
               </div>
             </div>
@@ -721,16 +727,17 @@ export default function ReportsPage() {
                   </Button>
                 ) : (
                   <Button type="primary" icon={<FileText size={16} />} loading={generate.isPending} disabled={!canGenerateReport} onClick={() => form.submit()}>
-                    生成这份报告
+                    生成这份汇报
                   </Button>
                 )}
                 {readiness.data && !readiness.data.canGenerate ? (
                   <>
-                    <Button onClick={() => router.push("/work-logs")}>去填报记录</Button>
-                    <Button onClick={() => router.push("/calendar")}>查看工作日历</Button>
+                    <Button onClick={() => readiness.refetch()} loading={readiness.isFetching}>重新检查</Button>
+                    <Button onClick={() => applyQuickRange(ranges.thisWeek)}>调整时间范围</Button>
+                    <Button onClick={() => router.push("/calendar")}>查看缺失人员</Button>
                   </>
                 ) : null}
-                {(readiness.isError || readiness.data || readiness.isFetching || periodTooLong) && !activeExistingReport ? (
+                {(readiness.isError || (!readiness.data || readiness.data.canGenerate) || periodTooLong) && !activeExistingReport ? (
                   <Button onClick={() => readiness.refetch()} loading={readiness.isFetching}>重新检查</Button>
                 ) : null}
               </div>
@@ -743,14 +750,36 @@ export default function ReportsPage() {
                 <span>步骤 4</span>
                 <div>
                   <strong>生成状态</strong>
-                  <p>报告任务会在本页自动刷新，完成后进入已生成汇报。</p>
+                  <p>汇报任务会在本页自动刷新，完成后进入已生成汇报。</p>
                 </div>
               </div>
               <div className="report-generate-status">
                 <Loader2 className="report-spin" size={18} />
                 <div>
-                  <strong>{generate.isPending ? "正在生成报告" : "还有报告在生成"}</strong>
+                  <strong>{generate.isPending ? "正在生成汇报" : "还有汇报在生成"}</strong>
                   <p>通常需要几十秒。你可以留在本页等待，也可以稍后回来查看。{reports.isFetching ? "正在自动刷新状态。" : "列表会定时刷新。"}</p>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {generateError ? (
+            <section className="report-guide-step">
+              <div className="report-step-head">
+                <span>失败</span>
+                <div>
+                  <strong>汇报生成失败</strong>
+                  <p>错误原因已保留在当前向导内，可以调整范围后重试。</p>
+                </div>
+              </div>
+              <div className="report-generate-error">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>{generateError.message}</strong>
+                  <div className="report-guide-actions">
+                    <Button onClick={() => form.submit()} loading={generate.isPending}>重试</Button>
+                    <Button onClick={() => readiness.refetch()} loading={readiness.isFetching}>重新检查</Button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -784,20 +813,23 @@ export default function ReportsPage() {
                     <span><FileText size={14} />{stats ? `${stats.workLogCount} 条来源记录` : "来源整理中"}</span>
                     {stats ? <span><AlertTriangle size={14} />{stats.riskCount + stats.blockerCount} 条风险/阻塞</span> : null}
                   </div>
-                  <p>{report.status === "FAILED" ? reportErrorText(report.error) : content?.summary ?? "正在生成报告，系统会自动刷新状态。"}</p>
+                  <p>{report.status === "FAILED" ? reportErrorText(report.error) : content?.summary ?? "正在生成汇报，系统会自动刷新状态。"}</p>
                 </div>
                 <div className="report-history-actions">
-                  <Button onClick={() => setSelectedReport(report)}>查看详情</Button>
-                  <Button icon={<FileDown size={15} />} disabled={report.status !== "COMPLETED" || !content} onClick={() => downloadReportWord(report)}>
-                    下载 Word
+                  <Button onClick={() => setSelectedReport(report)}>查看</Button>
+                  <Button icon={<ClipboardCopy size={15} />} disabled={!content} onClick={() => copyText("摘要", content?.summary)}>
+                    复制
                   </Button>
-                  {report.status === "FAILED" ? <Button onClick={() => retryReport(report)}>重试</Button> : null}
+                  <Button icon={<FileDown size={15} />} disabled={report.status !== "COMPLETED" || !content} onClick={() => downloadReportWord(report)}>
+                    下载
+                  </Button>
+                  {report.status === "FAILED" ? <Button onClick={() => retryReport(report)}>重新生成</Button> : null}
                 </div>
               </article>
             );
           }) : (
             <div className="surface-panel report-empty">
-              <Empty description="暂无已生成汇报，先在报告生成向导里生成一份" />
+              <Empty description="暂无已生成汇报，先在汇报生成向导里生成一份" />
             </div>
           )}
         </div>
@@ -822,7 +854,7 @@ export default function ReportsPage() {
               <Alert
                 type="error"
                 showIcon
-                message="报告生成失败"
+                message="汇报生成失败"
                 description={reportErrorText(selectedReport.error)}
                 action={
                   <Space wrap>
@@ -843,7 +875,7 @@ export default function ReportsPage() {
                   description={
                     selectedContent.evidence
                       ? `基于 ${selectedContent.evidence.stats.workLogCount} 条日报/计划、${selectedContent.evidence.stats.coveredMemberCount} 名成员、${selectedContent.evidence.stats.projectCount} 个项目生成。`
-                      : "这份报告基于已提交日报生成。"
+                      : "这份汇报基于已提交日报生成。"
                   }
                 />
 
@@ -869,7 +901,7 @@ export default function ReportsPage() {
                       {selectedContent.risks.map((item) => <li key={item}>{item}</li>)}
                     </ul>
                   ) : (
-                    <div className="report-muted-box">当前报告未识别到明确风险或阻塞。</div>
+                    <div className="report-muted-box">当前汇报未识别到明确风险或阻塞。</div>
                   )}
                 </section>
 
@@ -911,7 +943,7 @@ export default function ReportsPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="report-muted-box">旧报告暂无来源摘要。新生成报告会自动记录来源依据。</div>
+                    <div className="report-muted-box">旧汇报暂无来源摘要。新生成汇报会自动记录来源依据。</div>
                   )}
                 </section>
               </>
@@ -921,7 +953,7 @@ export default function ReportsPage() {
                 showIcon
                 icon={<Loader2 className="report-spin" size={18} />}
                 message="正在生成"
-                description="系统正在生成报告并自动刷新列表，通常需要几十秒。"
+                description="系统正在生成汇报并自动刷新列表，通常需要几十秒。"
                 action={<Button size="small" onClick={() => reports.refetch()} loading={reports.isFetching}>刷新状态</Button>}
               />
             ) : null}

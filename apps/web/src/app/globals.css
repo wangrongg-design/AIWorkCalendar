@@ -3910,8 +3910,8 @@ body {
 }
 
 .report-readiness-card.is-insufficient {
-  border-color: var(--color-warning-soft);
-  background: var(--color-warning-bg);
+  border-color: var(--color-danger-soft);
+  background: var(--color-danger-bg);
 }
 
 .report-readiness-card.is-error {
@@ -3937,7 +3937,7 @@ body {
 }
 
 .report-readiness-card.is-insufficient .report-readiness-head svg {
-  color: var(--color-warning);
+  color: var(--color-danger);
 }
 
 .report-readiness-card.is-error .report-readiness-head svg {
@@ -3960,6 +3960,30 @@ body {
 
 .report-generate-status svg {
   color: var(--color-primary);
+}
+
+.report-generate-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--color-danger-soft);
+  border-radius: var(--radius-panel);
+  background: var(--color-danger-bg);
+  padding: 12px 14px;
+}
+
+.report-generate-error svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-danger);
+}
+
+.report-generate-error strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--md-on-error-container);
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
 }
 
 .report-dialogue-panel {
