@@ -3713,6 +3713,255 @@ body {
   gap: 18px;
 }
 
+.report-guide-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--md-outline-variant);
+  box-shadow: none;
+}
+
+.report-guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.report-guide-steps {
+  display: grid;
+  gap: 0;
+}
+
+.report-guide-step {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.report-guide-step:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.report-guide-step:last-child {
+  padding-bottom: 0;
+}
+
+.report-step-head {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.report-step-head > span {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--md-surface-container);
+  padding: 4px 10px;
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  font-weight: 650;
+  line-height: var(--leading-caption);
+}
+
+.report-step-head strong,
+.report-readiness-head strong,
+.report-generate-status strong {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+}
+
+.report-step-head p,
+.report-readiness-head p,
+.report-generate-status p {
+  margin: 2px 0 0;
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}
+
+.report-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.report-scenario-card {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-panel);
+  background: var(--md-surface-bright);
+  padding: 14px;
+}
+
+.report-scenario-card.is-selected {
+  border-color: var(--color-primary-soft);
+  background: var(--color-primary-bg);
+}
+
+.report-scenario-top,
+.report-scenario-actions,
+.report-scenario-meta,
+.report-quick-ranges,
+.report-guide-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-scenario-top {
+  justify-content: space-between;
+}
+
+.report-scenario-card h3 {
+  margin: 0;
+  color: var(--md-on-surface);
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-subtitle);
+}
+
+.report-scenario-card p,
+.report-scenario-meta,
+.report-scenario-coverage {
+  margin: 0;
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}
+
+.report-scenario-meta {
+  gap: 6px;
+}
+
+.report-scenario-meta span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.report-scenario-coverage {
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--md-surface-container);
+  padding: 8px 10px;
+}
+
+.report-scenario-card.is-selected .report-scenario-coverage {
+  background: var(--md-surface-bright);
+}
+
+.report-scope-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(260px, 1.25fr) minmax(190px, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.report-scope-form .ant-form-item {
+  margin-bottom: 0;
+}
+
+.report-scope-static {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-container-low);
+  padding: 0 12px;
+  color: var(--md-on-surface);
+}
+
+.report-quick-ranges {
+  margin-top: -2px;
+}
+
+.report-quick-ranges > span {
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  font-weight: 650;
+  line-height: var(--leading-caption);
+}
+
+.report-readiness-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-panel);
+  background: var(--md-surface-container);
+  padding: 14px;
+}
+
+.report-readiness-card.is-ready {
+  border-color: var(--color-success-soft);
+  background: var(--color-success-bg);
+}
+
+.report-readiness-card.is-insufficient {
+  border-color: var(--color-warning-soft);
+  background: var(--color-warning-bg);
+}
+
+.report-readiness-card.is-error {
+  border-color: var(--color-danger-soft);
+  background: var(--color-danger-bg);
+}
+
+.report-readiness-card.is-existing,
+.report-readiness-card.is-checking {
+  border-color: var(--color-primary-soft);
+  background: var(--color-primary-bg);
+}
+
+.report-readiness-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.report-readiness-head svg {
+  color: var(--color-ai);
+}
+
+.report-readiness-card.is-insufficient .report-readiness-head svg {
+  color: var(--color-warning);
+}
+
+.report-readiness-card.is-error .report-readiness-head svg {
+  color: var(--color-danger);
+}
+
+.report-guide-actions .ant-btn {
+  min-height: 40px;
+}
+
+.report-generate-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--color-primary-soft);
+  border-radius: var(--radius-panel);
+  background: var(--color-primary-bg);
+  padding: 12px 14px;
+}
+
+.report-generate-status svg {
+  color: var(--color-primary);
+}
+
 .report-dialogue-panel {
   display: grid;
   gap: 18px;
@@ -4218,6 +4467,14 @@ body {
 }
 
 @media (max-width: 1100px) {
+  .report-scenario-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-scope-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .report-builder-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4232,6 +4489,31 @@ body {
 }
 
 @media (max-width: 760px) {
+  .report-guide-panel {
+    padding: 14px;
+  }
+
+  .report-step-head,
+  .report-scope-form {
+    grid-template-columns: 1fr;
+  }
+
+  .report-step-head > span {
+    min-height: 26px;
+  }
+
+  .report-scenario-card,
+  .report-readiness-card,
+  .report-generate-status {
+    border-radius: var(--radius-lg);
+  }
+
+  .report-guide-actions .ant-btn,
+  .report-scenario-actions .ant-btn,
+  .report-quick-ranges .ant-btn {
+    min-height: 44px;
+  }
+
   .report-dialogue-panel {
     padding: 14px;
   }

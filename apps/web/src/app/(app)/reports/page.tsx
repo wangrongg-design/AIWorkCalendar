@@ -3,7 +3,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DatePicker, Drawer, Empty, Form, Select, Space, Tag, Typography, message } from "antd";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, CalendarDays, ClipboardCopy, FileDown, FileText, Loader2, RotateCw, Sparkles, Users, WandSparkles } from "lucide-react";
+import { AlertTriangle, CalendarDays, ClipboardCopy, FileDown, FileText, Loader2, RotateCw, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, humanizeApiError } from "@/lib/api";
@@ -220,6 +220,17 @@ function reportMatchesRequest(report: Report, request: ReportRequest) {
   );
 }
 
+function requestMatchesRequest(left: ReportRequest, right: ReportRequest) {
+  const leftDepartmentId = left.departmentId && left.departmentId !== COMPANY_SCOPE ? left.departmentId : null;
+  const rightDepartmentId = right.departmentId && right.departmentId !== COMPANY_SCOPE ? right.departmentId : null;
+  return (
+    left.type === right.type &&
+    left.range[0].format("YYYY-MM-DD") === right.range[0].format("YYYY-MM-DD") &&
+    left.range[1].format("YYYY-MM-DD") === right.range[1].format("YYYY-MM-DD") &&
+    leftDepartmentId === rightDepartmentId
+  );
+}
+
 function statsFromReport(report: Report): ReportReadinessStats | null {
   const content = normalizeReportContent(report);
   if (content?.evidence?.stats) return content.evidence.stats;
@@ -355,7 +366,7 @@ export default function ReportsPage() {
   const range = Form.useWatch("range", form) ?? ranges.today;
   const departmentId = Form.useWatch("departmentId", form) ?? defaultDepartmentId;
   const periodTooLong = rangeDays(range) > MAX_REPORT_PERIOD_DAYS;
-  const activeRequest: ReportRequest = { type: reportType, range, departmentId };
+  const activeRequest: ReportRequest = { type: reportType, range, departmentId: isDepartmentReport(reportType) ? departmentId : undefined };
   const findExistingReport = (request: ReportRequest) => (reports.data ?? []).find((report) => reportMatchesRequest(report, request));
   const activeExistingReport = findExistingReport(activeRequest);
 
@@ -468,12 +479,14 @@ export default function ReportsPage() {
       ? activeExistingReport.status === "PENDING"
         ? "这个范围已有报告正在生成"
         : "这个范围已有报告"
+      : readiness.isError
+        ? "检查失败，可重试"
       : readiness.isFetching
         ? "正在检查数据准备度"
-        : readiness.data?.canGenerate
+      : readiness.data?.canGenerate
           ? "数据足够，可以生成"
           : readiness.data
-            ? "数据不足，建议先补齐"
+            ? "当前周期数据不足"
             : "先选择报告范围";
   const readinessDescription = periodTooLong
     ? `单次最多分析 ${MAX_REPORT_PERIOD_DAYS} 天，请缩短时间范围。`
@@ -481,9 +494,23 @@ export default function ReportsPage() {
       ? activeExistingReport.status === "PENDING"
         ? "系统正在整理这份报告，完成后会自动进入历史汇报。"
         : "同一类型、范围和部门已经生成过报告，可以直接查看。"
+      : readiness.isError
+        ? readiness.error instanceof Error ? readiness.error.message : "数据检查失败，请重试。"
       : readiness.data?.canGenerate
         ? `${readiness.data.stats.workLogCount} 条日报/计划，覆盖 ${readiness.data.stats.coveredMemberCount} 人，${activeRiskCount} 条风险/阻塞。`
         : readiness.data?.emptyReason ?? "选择类型、时间和范围后，我会先判断数据是否足够。";
+  const readinessTone = periodTooLong || readiness.isError
+    ? "error"
+    : activeExistingReport
+      ? "existing"
+      : readiness.isFetching
+        ? "checking"
+        : readiness.data?.canGenerate
+          ? "ready"
+          : readiness.data
+            ? "insufficient"
+            : "idle";
+  const canGenerateReport = Boolean(readiness.data?.canGenerate && !readiness.isFetching && !readiness.isError && !periodTooLong && !activeExistingReport && !generate.isPending);
 
   const applyQuickRange = (value: [Dayjs, Dayjs]) => {
     form.setFieldsValue({ range: value });
@@ -491,14 +518,7 @@ export default function ReportsPage() {
 
   const applyRecommendation = (item: Recommendation) => {
     form.setFieldsValue({ type: item.type, range: item.range, departmentId: item.departmentId });
-    if (!rangeDays(item.range) || rangeDays(item.range) > MAX_REPORT_PERIOD_DAYS) return;
-    const existingReport = findExistingReport(item);
-    if (existingReport) {
-      setSelectedReport(existingReport);
-      message.info(existingReport.status === "PENDING" ? "同范围汇报正在生成，已打开已有记录。" : "同范围已有汇报，已打开。");
-      return;
-    }
-    generate.mutate(item);
+    message.success("已选择报告场景，请确认范围和数据准备度。");
   };
 
   const submitForm = (values: ReportForm) => {
@@ -514,13 +534,14 @@ export default function ReportsPage() {
       message.warning(readiness.data.emptyReason ?? "当前周期暂无可用日报");
       return;
     }
-    const existingReport = findExistingReport(values);
+    const request = { ...values, departmentId: isDepartmentReport(values.type) ? values.departmentId : undefined };
+    const existingReport = findExistingReport(request);
     if (existingReport) {
       setSelectedReport(existingReport);
       message.info(existingReport.status === "PENDING" ? "同范围汇报正在生成，已打开已有记录。" : "同范围已有汇报，已打开。");
       return;
     }
-    generate.mutate(values);
+    generate.mutate(request);
   };
 
   const retryReport = (report: Report) => {
@@ -542,33 +563,37 @@ export default function ReportsPage() {
           <Typography.Title level={3} className="page-title">
             周期汇报
           </Typography.Title>
-          <Typography.Text className="page-subtitle">和报告助手确认范围、检查数据，再生成可查看、可复制、可下载的管理汇报。</Typography.Text>
+          <Typography.Text className="page-subtitle">选择报告场景，确认范围，检查数据后生成可复用的管理汇报。</Typography.Text>
         </div>
         <Button icon={<RotateCw size={16} />} onClick={() => reports.refetch()} loading={reports.isFetching}>
           刷新列表
         </Button>
       </div>
 
-      <section className="surface-panel report-dialogue-panel">
-        <div className="report-dialogue-head">
-          <div className="report-dialogue-avatar">
-            <WandSparkles size={20} />
-          </div>
+      <section className="surface-panel report-guide-panel">
+        <div className="report-guide-head">
           <div>
-            <div className="section-title">报告助手</div>
-            <div className="section-subtitle">用对话的方式确定范围、检查数据，再生成可复用的管理汇报。</div>
+            <div className="section-title">报告生成向导</div>
+            <div className="section-subtitle">按常用场景开始，也可以手动调整类型、周期和范围。</div>
           </div>
         </div>
 
-        <div className="report-dialogue-thread">
-          <div className="report-message report-message-assistant">
-            <strong>你要生成哪份报告？</strong>
-            <p>可以直接点常用场景，也可以在下面调整类型、周期和范围。</p>
-            <div className="report-suggestion-list">
+        <div className="report-guide-steps">
+          <section className="report-guide-step">
+            <div className="report-step-head">
+              <span>步骤 1</span>
+              <div>
+                <strong>选择报告场景</strong>
+                <p>推荐卡只会更新下面的范围和数据检查，不会直接生成报告。</p>
+              </div>
+            </div>
+
+            <div className="report-scenario-grid">
               {recommendations.map((item, index) => {
                 const current = recommendationReadiness[index];
                 const data = current.data;
                 const existingReport = findExistingReport(item);
+                const selected = requestMatchesRequest(item, activeRequest);
                 const statusText = existingReport
                   ? existingReport.status === "PENDING"
                     ? "生成中"
@@ -579,28 +604,49 @@ export default function ReportsPage() {
                       ? readinessSummary(data)
                       : data?.emptyReason ?? "暂无可用数据";
                 return (
-                  <button
+                  <article
                     key={item.id}
-                    type="button"
-                    className="report-suggestion-chip"
-                    disabled={!existingReport && current.isLoading}
-                    onClick={() => (existingReport ? setSelectedReport(existingReport) : applyRecommendation(item))}
+                    className={`report-scenario-card${selected ? " is-selected" : ""}`}
                   >
-                    <span>{item.kind}</span>
-                    <strong>{item.title}</strong>
-                    <small>{statusText}</small>
-                  </button>
+                    <div className="report-scenario-top">
+                      <Tag color={selected ? "blue" : "default"}>{item.kind}</Tag>
+                      {selected ? <Tag color="processing">已选择</Tag> : null}
+                    </div>
+                    <h3>{item.title}</h3>
+                    <p>{item.copy}</p>
+                    <div className="report-scenario-meta">
+                      <span>{periodText(item.range[0], item.range[1])}</span>
+                      <span>{item.departmentId === COMPANY_SCOPE ? "全公司" : item.departmentId ? org.data?.departments.find((department) => department.id === item.departmentId)?.name ?? "已选部门" : user?.name ?? "我"}</span>
+                    </div>
+                    <div className="report-scenario-coverage">{statusText}</div>
+                    <div className="report-scenario-actions">
+                      <Button size="small" onClick={() => applyRecommendation(item)}>
+                        {selected ? "已选择" : "选择场景"}
+                      </Button>
+                      {existingReport ? (
+                        <Button size="small" type="link" onClick={() => setSelectedReport(existingReport)}>
+                          查看已有
+                        </Button>
+                      ) : null}
+                    </div>
+                  </article>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          <div className="report-message report-message-user">
-            <strong>当前选择</strong>
+          <section className="report-guide-step">
+            <div className="report-step-head">
+              <span>步骤 2</span>
+              <div>
+                <strong>确认生成范围</strong>
+                <p>修改任意字段后，系统会自动重新检查数据准备度。</p>
+              </div>
+            </div>
             <Form
               form={form}
               layout="vertical"
-              className="report-dialogue-form"
+              className="report-scope-form"
               initialValues={{
                 type: canDepartmentReport ? "DEPARTMENT_DAILY" : "PERSONAL_DAILY",
                 range: ranges.today,
@@ -623,67 +669,91 @@ export default function ReportsPage() {
                     options={departmentOptions}
                   />
                 </Form.Item>
-              ) : null}
+              ) : (
+                <Form.Item label="报告范围">
+                  <div className="report-scope-static">{user?.name ?? "我"}</div>
+                </Form.Item>
+              )}
             </Form>
-            <div className="report-dialogue-ranges">
+            <div className="report-quick-ranges">
+              <span>快捷范围</span>
               <Button size="small" onClick={() => applyQuickRange(ranges.today)}>今天</Button>
               <Button size="small" onClick={() => applyQuickRange(ranges.thisWeek)}>本周</Button>
               <Button size="small" onClick={() => applyQuickRange(ranges.lastWeek)}>上周</Button>
               <Button size="small" onClick={() => applyQuickRange(ranges.thisMonth)}>本月</Button>
             </div>
-            <div className="report-current-summary">
+            <div className="report-current-summary" aria-label="当前选择">
               <span>{reportTypeLabels[reportType]}</span>
               <span>{activeRangeText}</span>
               <span>{activeScopeLabel}</span>
             </div>
-          </div>
+          </section>
 
-          <div className={`report-message report-message-assistant ${readiness.data?.canGenerate ? "is-ready" : ""}`}>
-            <strong>{readinessTitle}</strong>
-            <p>{readinessDescription}</p>
-            <div className="report-readiness-grid report-readiness-grid-compact">
-              {[
-                { label: "需看记录", value: activeStats?.workLogCount ?? 0, suffix: "条" },
-                { label: "覆盖成员", value: activeStats?.coveredMemberCount ?? 0, suffix: "人" },
-                { label: "未填报", value: activeStats?.missingMemberCount ?? 0, suffix: "人" },
-                { label: "风险/阻塞", value: activeRiskCount, suffix: "条" },
-                { label: "关联项目", value: activeStats?.projectCount ?? 0, suffix: "个" },
-                { label: "总工时", value: activeStats?.totalHours ?? 0, suffix: "h" }
-              ].map((item) => (
-                <div key={item.label} className="report-readiness-item">
-                  <span>{item.label}</span>
-                  <strong>{item.value}{item.suffix}</strong>
-                </div>
-              ))}
-            </div>
-            <div className="report-dialogue-actions">
-              <Button
-                type="primary"
-                icon={activeExistingReport ? <FileText size={16} /> : <Sparkles size={16} />}
-                loading={!activeExistingReport && generate.isPending}
-                disabled={!activeExistingReport && (generate.isPending || periodTooLong || readiness.isFetching || !readiness.data?.canGenerate)}
-                onClick={activeExistingReport ? () => setSelectedReport(activeExistingReport) : () => form.submit()}
-              >
-                {activeExistingReport ? "查看已有汇报" : "生成这份报告"}
-              </Button>
-              <Button onClick={() => readiness.refetch()} loading={readiness.isFetching}>重新检查</Button>
-              {readiness.data && !readiness.data.canGenerate ? (
-                <>
-                  <Button onClick={() => router.push("/work-logs")}>去填报记录</Button>
-                  <Button onClick={() => router.push("/calendar")}>看工作日历</Button>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          {generate.isPending || hasPendingReport ? (
-            <div className="report-message report-message-assistant is-working">
-              <Loader2 className="report-spin" size={18} />
+          <section className="report-guide-step">
+            <div className="report-step-head">
+              <span>步骤 3</span>
               <div>
-                <strong>{generate.isPending ? "正在生成报告" : "还有报告在生成"}</strong>
-                <p>系统会自动刷新状态。生成完成后可以在历史汇报中查看，也可以直接打开详情。</p>
+                <strong>检查数据准备度</strong>
+                <p>生成前先确认日报、成员、项目、风险/阻塞和工时覆盖。</p>
               </div>
             </div>
+
+            <div className={`report-readiness-card is-${readinessTone}`}>
+              <div className="report-readiness-head">
+                <div>
+                  <strong>{readinessTitle}</strong>
+                  <p>{readinessDescription}</p>
+                </div>
+                {readiness.isFetching ? <Loader2 className="report-spin" size={20} /> : readinessTone === "insufficient" || readinessTone === "error" ? <AlertTriangle size={20} /> : <FileText size={20} />}
+              </div>
+              <div className="report-readiness-grid">
+                {readinessMetricItems(activeStats).map((item) => (
+                  <div key={item.label} className="report-readiness-item">
+                    <span>{item.label}</span>
+                    <strong>{item.value}{item.suffix}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="report-guide-actions">
+                {activeExistingReport ? (
+                  <Button icon={<FileText size={16} />} onClick={() => setSelectedReport(activeExistingReport)}>
+                    查看已有汇报
+                  </Button>
+                ) : (
+                  <Button type="primary" icon={<FileText size={16} />} loading={generate.isPending} disabled={!canGenerateReport} onClick={() => form.submit()}>
+                    生成这份报告
+                  </Button>
+                )}
+                {readiness.data && !readiness.data.canGenerate ? (
+                  <>
+                    <Button onClick={() => router.push("/work-logs")}>去填报记录</Button>
+                    <Button onClick={() => router.push("/calendar")}>查看工作日历</Button>
+                  </>
+                ) : null}
+                {(readiness.isError || readiness.data || readiness.isFetching || periodTooLong) && !activeExistingReport ? (
+                  <Button onClick={() => readiness.refetch()} loading={readiness.isFetching}>重新检查</Button>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          {generate.isPending || hasPendingReport ? (
+            <section className="report-guide-step">
+              <div className="report-step-head">
+                <span>步骤 4</span>
+                <div>
+                  <strong>生成状态</strong>
+                  <p>报告任务会在本页自动刷新，完成后进入已生成汇报。</p>
+                </div>
+              </div>
+              <div className="report-generate-status">
+                <Loader2 className="report-spin" size={18} />
+                <div>
+                  <strong>{generate.isPending ? "正在生成报告" : "还有报告在生成"}</strong>
+                  <p>通常需要几十秒。你可以留在本页等待，也可以稍后回来查看。{reports.isFetching ? "正在自动刷新状态。" : "列表会定时刷新。"}</p>
+                </div>
+              </div>
+            </section>
           ) : null}
         </div>
       </section>
@@ -710,7 +780,8 @@ export default function ReportsPage() {
                   </div>
                   <div className="report-history-meta">
                     <span><CalendarDays size={14} />{periodText(report.periodStart, report.periodEnd)}</span>
-                    <span><Users size={14} />{stats ? `${stats.coveredMemberCount} 人 · ${stats.workLogCount} 条记录` : "等待生成"}</span>
+                    <span><Users size={14} />{stats ? `${stats.coveredMemberCount} 人` : "等待生成"}</span>
+                    <span><FileText size={14} />{stats ? `${stats.workLogCount} 条来源记录` : "来源整理中"}</span>
                     {stats ? <span><AlertTriangle size={14} />{stats.riskCount + stats.blockerCount} 条风险/阻塞</span> : null}
                   </div>
                   <p>{report.status === "FAILED" ? reportErrorText(report.error) : content?.summary ?? "正在生成报告，系统会自动刷新状态。"}</p>
@@ -726,7 +797,7 @@ export default function ReportsPage() {
             );
           }) : (
             <div className="surface-panel report-empty">
-              <Empty description="暂无已生成汇报，先在报告助手里生成一份" />
+              <Empty description="暂无已生成汇报，先在报告生成向导里生成一份" />
             </div>
           )}
         </div>
