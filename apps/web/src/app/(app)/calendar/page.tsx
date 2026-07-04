@@ -1568,7 +1568,7 @@ export default function CalendarPage() {
               <Input.TextArea
                 ref={chatInputRef}
                 value={chatInput}
-                rows={4}
+                rows={2}
                 placeholder="询问团队风险/阻塞、项目进展、人员投入情况…"
                 disabled={calendarChat.isPending}
                 onChange={(event) => setChatInput(event.target.value)}

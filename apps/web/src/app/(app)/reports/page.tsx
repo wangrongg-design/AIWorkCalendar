@@ -3,9 +3,9 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DatePicker, Drawer, Empty, Form, Select, Space, Tag, Typography, message } from "antd";
 import dayjs, { Dayjs } from "dayjs";
-import { AlertTriangle, CalendarDays, CheckCircle2, ClipboardCopy, FileDown, FileText, Loader2, RotateCw, Sparkles, Users, WandSparkles } from "lucide-react";
+import { AlertTriangle, CalendarDays, ClipboardCopy, FileDown, FileText, Loader2, RotateCw, Sparkles, Users, WandSparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch, humanizeApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { Department, Report, ReportReadiness, ReportReadinessStats, ReportType } from "@/lib/types";
@@ -343,6 +343,14 @@ export default function ReportsPage() {
   const hiddenReportCount = Math.max((reports.data?.length ?? 0) - visibleReports.length, 0);
   const selectedContent = selectedReport ? normalizeReportContent(selectedReport) : null;
 
+  useEffect(() => {
+    if (!selectedReport || !reports.data?.length) return;
+    const latest = reports.data.find((report) => report.id === selectedReport.id);
+    if (!latest) return;
+    if (latest === selectedReport) return;
+    setSelectedReport(latest);
+  }, [reports.data, selectedReport]);
+
   const reportType = Form.useWatch("type", form) ?? "PERSONAL_DAILY";
   const range = Form.useWatch("range", form) ?? ranges.today;
   const departmentId = Form.useWatch("departmentId", form) ?? defaultDepartmentId;
@@ -447,6 +455,35 @@ export default function ReportsPage() {
   const visibleTypeOptions = reportTypeOptions.filter((item) => canDepartmentReport || item.value.startsWith("PERSONAL"));
   const activeStats = readiness.data?.stats;
   const hasPendingReport = reports.data?.some((item) => item.status === "PENDING") ?? false;
+  const activeRangeText = range?.[0] && range?.[1] ? periodText(range[0], range[1]) : "未选择时间";
+  const activeScopeLabel = isDepartmentReport(reportType)
+    ? departmentId === COMPANY_SCOPE || !departmentId
+      ? "全公司"
+      : org.data?.departments.find((item) => item.id === departmentId)?.name ?? "已选部门"
+    : user?.name ?? "我";
+  const activeRiskCount = (activeStats?.riskCount ?? 0) + (activeStats?.blockerCount ?? 0);
+  const readinessTitle = periodTooLong
+    ? "时间范围过长"
+    : activeExistingReport
+      ? activeExistingReport.status === "PENDING"
+        ? "这个范围已有报告正在生成"
+        : "这个范围已有报告"
+      : readiness.isFetching
+        ? "正在检查数据准备度"
+        : readiness.data?.canGenerate
+          ? "数据足够，可以生成"
+          : readiness.data
+            ? "数据不足，建议先补齐"
+            : "先选择报告范围";
+  const readinessDescription = periodTooLong
+    ? `单次最多分析 ${MAX_REPORT_PERIOD_DAYS} 天，请缩短时间范围。`
+    : activeExistingReport
+      ? activeExistingReport.status === "PENDING"
+        ? "系统正在整理这份报告，完成后会自动进入历史汇报。"
+        : "同一类型、范围和部门已经生成过报告，可以直接查看。"
+      : readiness.data?.canGenerate
+        ? `${readiness.data.stats.workLogCount} 条日报/计划，覆盖 ${readiness.data.stats.coveredMemberCount} 人，${activeRiskCount} 条风险/阻塞。`
+        : readiness.data?.emptyReason ?? "选择类型、时间和范围后，我会先判断数据是否足够。";
 
   const applyQuickRange = (value: [Dayjs, Dayjs]) => {
     form.setFieldsValue({ range: value });
@@ -505,159 +542,150 @@ export default function ReportsPage() {
           <Typography.Title level={3} className="page-title">
             周期汇报
           </Typography.Title>
-          <Typography.Text className="page-subtitle">先确认数据是否足够，再生成可查看、可复制、可下载的管理汇报。</Typography.Text>
+          <Typography.Text className="page-subtitle">和报告助手确认范围、检查数据，再生成可查看、可复制、可下载的管理汇报。</Typography.Text>
         </div>
         <Button icon={<RotateCw size={16} />} onClick={() => reports.refetch()} loading={reports.isFetching}>
           刷新列表
         </Button>
       </div>
 
-      <section className="report-recommend-section">
-        <div className="section-head">
+      <section className="surface-panel report-dialogue-panel">
+        <div className="report-dialogue-head">
+          <div className="report-dialogue-avatar">
+            <WandSparkles size={20} />
+          </div>
           <div>
-            <div className="section-title">推荐生成</div>
-            <div className="section-subtitle">按你的角色预设常用报告，不需要先理解参数。</div>
+            <div className="section-title">报告助手</div>
+            <div className="section-subtitle">用对话的方式确定范围、检查数据，再生成可复用的管理汇报。</div>
           </div>
         </div>
-        <div className="report-recommend-grid">
-          {recommendations.map((item, index) => {
-            const current = recommendationReadiness[index];
-            const data = current.data;
-            const existingReport = findExistingReport(item);
-            return (
-              <article key={item.id} className="report-recommend-card">
-                <div className="report-card-top">
-                  <Tag color="blue">{item.kind}</Tag>
-                  <span>{periodText(item.range[0], item.range[1])}</span>
-                </div>
-                <h3>{item.title}</h3>
-                <p>{item.copy}</p>
-                <div className="report-card-coverage">{current.isLoading ? "正在读取数据准备度" : readinessSummary(data)}</div>
-                <div className="report-card-metrics">
-                  {readinessMetricItems(data?.stats).map((metric) => (
-                    <span key={metric.label}>
-                      <strong>{metric.value}{metric.suffix}</strong>
-                      {metric.label}
-                    </span>
-                  ))}
-                </div>
-                <Button
-                  type={index === 0 ? "primary" : "default"}
-                  icon={existingReport ? <FileText size={16} /> : <WandSparkles size={16} />}
-                  loading={!existingReport && generate.isPending && generate.variables?.type === item.type}
-                  disabled={!existingReport && (current.isLoading || !data?.canGenerate || generate.isPending)}
-                  onClick={() => (existingReport ? setSelectedReport(existingReport) : applyRecommendation(item))}
-                >
-                  {existingReport ? "查看已有汇报" : "生成"}
-                </Button>
-              </article>
-            );
-          })}
-        </div>
-      </section>
 
-      <section className="surface-panel report-builder-panel">
-        <div className="report-builder-head">
-          <div>
-            <div className="section-title">生成前检查</div>
-            <div className="section-subtitle">系统会先读取本周期日报、人员、项目和风险/阻塞，再允许生成报告。</div>
-          </div>
-          <Space wrap>
-            <Button onClick={() => applyQuickRange(ranges.today)}>今天</Button>
-            <Button onClick={() => applyQuickRange(ranges.thisWeek)}>本周</Button>
-            <Button onClick={() => applyQuickRange(ranges.lastWeek)}>上周</Button>
-            <Button onClick={() => applyQuickRange(ranges.thisMonth)}>本月</Button>
-          </Space>
-        </div>
-
-        <Form
-          form={form}
-          layout="vertical"
-          className="report-builder-form"
-          initialValues={{
-            type: canDepartmentReport ? "DEPARTMENT_DAILY" : "PERSONAL_DAILY",
-            range: ranges.today,
-            departmentId: defaultDepartmentId
-          }}
-          onFinish={submitForm}
-        >
-          <Form.Item name="type" label="报告类型" rules={[{ required: true }]}>
-            <Select options={visibleTypeOptions} />
-          </Form.Item>
-          <Form.Item name="range" label="时间范围" rules={[{ required: true }]}>
-            <DatePicker.RangePicker className="w-full" />
-          </Form.Item>
-          {isDepartmentReport(reportType) ? (
-            <Form.Item name="departmentId" label="报告范围" rules={[{ required: true, message: "请选择部门或全公司" }]}>
-              <Select
-                disabled={!canCompanyScope && Boolean(user?.departmentId)}
-                placeholder="选择部门或全公司"
-                loading={org.isFetching}
-                options={departmentOptions}
-              />
-            </Form.Item>
-          ) : null}
-          <Form.Item label=" ">
-            <Button
-              type="primary"
-              htmlType={activeExistingReport ? "button" : "submit"}
-              icon={activeExistingReport ? <FileText size={16} /> : <Sparkles size={16} />}
-              loading={!activeExistingReport && generate.isPending}
-              disabled={!activeExistingReport && (generate.isPending || periodTooLong || readiness.isFetching || !readiness.data?.canGenerate)}
-              onClick={activeExistingReport ? () => setSelectedReport(activeExistingReport) : undefined}
-              block
-            >
-              {activeExistingReport ? "查看已有汇报" : "生成汇报"}
-            </Button>
-          </Form.Item>
-        </Form>
-
-        {periodTooLong ? (
-          <Alert className="mt-3" type="warning" showIcon message="时间范围不能超过 31 天" description="请使用快捷范围，或缩短起止日期后再生成。" />
-        ) : null}
-
-        <div className="report-readiness-grid">
-          {[
-            { label: "日报/计划", value: activeStats?.workLogCount ?? 0, suffix: "条" },
-            { label: "覆盖成员", value: activeStats?.coveredMemberCount ?? 0, suffix: "人" },
-            { label: "未填报", value: activeStats?.missingMemberCount ?? 0, suffix: "人" },
-            { label: "风险/阻塞", value: (activeStats?.riskCount ?? 0) + (activeStats?.blockerCount ?? 0), suffix: "条" },
-            { label: "关联项目", value: activeStats?.projectCount ?? 0, suffix: "个" },
-            { label: "总工时", value: activeStats?.totalHours ?? 0, suffix: "h" }
-          ].map((item) => (
-            <div key={item.label} className="report-readiness-item">
-              <span>{item.label}</span>
-              <strong>{item.value}{item.suffix}</strong>
+        <div className="report-dialogue-thread">
+          <div className="report-message report-message-assistant">
+            <strong>你要生成哪份报告？</strong>
+            <p>可以直接点常用场景，也可以在下面调整类型、周期和范围。</p>
+            <div className="report-suggestion-list">
+              {recommendations.map((item, index) => {
+                const current = recommendationReadiness[index];
+                const data = current.data;
+                const existingReport = findExistingReport(item);
+                const statusText = existingReport
+                  ? existingReport.status === "PENDING"
+                    ? "生成中"
+                    : "已有报告"
+                  : current.isLoading
+                    ? "读取中"
+                    : data?.canGenerate
+                      ? readinessSummary(data)
+                      : data?.emptyReason ?? "暂无可用数据";
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="report-suggestion-chip"
+                    disabled={!existingReport && current.isLoading}
+                    onClick={() => (existingReport ? setSelectedReport(existingReport) : applyRecommendation(item))}
+                  >
+                    <span>{item.kind}</span>
+                    <strong>{item.title}</strong>
+                    <small>{statusText}</small>
+                  </button>
+                );
+              })}
             </div>
-          ))}
+          </div>
+
+          <div className="report-message report-message-user">
+            <strong>当前选择</strong>
+            <Form
+              form={form}
+              layout="vertical"
+              className="report-dialogue-form"
+              initialValues={{
+                type: canDepartmentReport ? "DEPARTMENT_DAILY" : "PERSONAL_DAILY",
+                range: ranges.today,
+                departmentId: defaultDepartmentId
+              }}
+              onFinish={submitForm}
+            >
+              <Form.Item name="type" label="报告类型" rules={[{ required: true }]}>
+                <Select options={visibleTypeOptions} />
+              </Form.Item>
+              <Form.Item name="range" label="时间范围" rules={[{ required: true }]}>
+                <DatePicker.RangePicker className="w-full" />
+              </Form.Item>
+              {isDepartmentReport(reportType) ? (
+                <Form.Item name="departmentId" label="报告范围" rules={[{ required: true, message: "请选择部门或全公司" }]}>
+                  <Select
+                    disabled={!canCompanyScope && Boolean(user?.departmentId)}
+                    placeholder="选择部门或全公司"
+                    loading={org.isFetching}
+                    options={departmentOptions}
+                  />
+                </Form.Item>
+              ) : null}
+            </Form>
+            <div className="report-dialogue-ranges">
+              <Button size="small" onClick={() => applyQuickRange(ranges.today)}>今天</Button>
+              <Button size="small" onClick={() => applyQuickRange(ranges.thisWeek)}>本周</Button>
+              <Button size="small" onClick={() => applyQuickRange(ranges.lastWeek)}>上周</Button>
+              <Button size="small" onClick={() => applyQuickRange(ranges.thisMonth)}>本月</Button>
+            </div>
+            <div className="report-current-summary">
+              <span>{reportTypeLabels[reportType]}</span>
+              <span>{activeRangeText}</span>
+              <span>{activeScopeLabel}</span>
+            </div>
+          </div>
+
+          <div className={`report-message report-message-assistant ${readiness.data?.canGenerate ? "is-ready" : ""}`}>
+            <strong>{readinessTitle}</strong>
+            <p>{readinessDescription}</p>
+            <div className="report-readiness-grid report-readiness-grid-compact">
+              {[
+                { label: "需看记录", value: activeStats?.workLogCount ?? 0, suffix: "条" },
+                { label: "覆盖成员", value: activeStats?.coveredMemberCount ?? 0, suffix: "人" },
+                { label: "未填报", value: activeStats?.missingMemberCount ?? 0, suffix: "人" },
+                { label: "风险/阻塞", value: activeRiskCount, suffix: "条" },
+                { label: "关联项目", value: activeStats?.projectCount ?? 0, suffix: "个" },
+                { label: "总工时", value: activeStats?.totalHours ?? 0, suffix: "h" }
+              ].map((item) => (
+                <div key={item.label} className="report-readiness-item">
+                  <span>{item.label}</span>
+                  <strong>{item.value}{item.suffix}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="report-dialogue-actions">
+              <Button
+                type="primary"
+                icon={activeExistingReport ? <FileText size={16} /> : <Sparkles size={16} />}
+                loading={!activeExistingReport && generate.isPending}
+                disabled={!activeExistingReport && (generate.isPending || periodTooLong || readiness.isFetching || !readiness.data?.canGenerate)}
+                onClick={activeExistingReport ? () => setSelectedReport(activeExistingReport) : () => form.submit()}
+              >
+                {activeExistingReport ? "查看已有汇报" : "生成这份报告"}
+              </Button>
+              <Button onClick={() => readiness.refetch()} loading={readiness.isFetching}>重新检查</Button>
+              {readiness.data && !readiness.data.canGenerate ? (
+                <>
+                  <Button onClick={() => router.push("/work-logs")}>去填报记录</Button>
+                  <Button onClick={() => router.push("/calendar")}>看工作日历</Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {generate.isPending || hasPendingReport ? (
+            <div className="report-message report-message-assistant is-working">
+              <Loader2 className="report-spin" size={18} />
+              <div>
+                <strong>{generate.isPending ? "正在生成报告" : "还有报告在生成"}</strong>
+                <p>系统会自动刷新状态。生成完成后可以在历史汇报中查看，也可以直接打开详情。</p>
+              </div>
+            </div>
+          ) : null}
         </div>
-
-        {readiness.data && !readiness.data.canGenerate ? (
-          <Alert
-            className="mt-3"
-            type="warning"
-            showIcon
-            message={readiness.data.emptyReason}
-            description="补充日报后再生成，报告会更可信。"
-            action={
-              <Space wrap>
-                <Button size="small" onClick={() => router.push("/work-logs")}>去填报记录</Button>
-                <Button size="small" onClick={() => router.push("/calendar")}>看工作日历</Button>
-              </Space>
-            }
-          />
-        ) : null}
-
-        {generate.isPending || hasPendingReport ? (
-          <Alert
-            className="mt-3"
-            type="info"
-            showIcon
-            icon={<Loader2 className="report-spin" size={18} />}
-            message={generate.isPending ? "正在生成" : "自动刷新中"}
-            description="正在整理日报、项目、风险/阻塞和工时，通常需要几十秒。你可以留在本页等待，也可以稍后回来查看。"
-          />
-        ) : null}
       </section>
 
       <section className="history-section">
@@ -698,7 +726,7 @@ export default function ReportsPage() {
             );
           }) : (
             <div className="surface-panel report-empty">
-              <Empty description="暂无已生成汇报，先从推荐卡片生成一份" />
+              <Empty description="暂无已生成汇报，先在报告助手里生成一份" />
             </div>
           )}
         </div>
@@ -817,7 +845,14 @@ export default function ReportsPage() {
                 </section>
               </>
             ) : selectedReport.status === "PENDING" ? (
-              <Alert type="info" showIcon icon={<Loader2 className="report-spin" size={18} />} message="正在生成" description="系统正在生成报告并自动刷新列表，通常需要几十秒。" />
+              <Alert
+                type="info"
+                showIcon
+                icon={<Loader2 className="report-spin" size={18} />}
+                message="正在生成"
+                description="系统正在生成报告并自动刷新列表，通常需要几十秒。"
+                action={<Button size="small" onClick={() => reports.refetch()} loading={reports.isFetching}>刷新状态</Button>}
+              />
             ) : null}
           </div>
         ) : null}

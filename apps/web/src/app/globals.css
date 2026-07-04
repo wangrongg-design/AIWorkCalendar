@@ -3713,6 +3713,168 @@ body {
   gap: 18px;
 }
 
+.report-dialogue-panel {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.report-dialogue-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.report-dialogue-avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  background: var(--color-ai-bg);
+  color: var(--color-ai-pressed);
+}
+
+.report-dialogue-thread {
+  display: grid;
+  gap: 14px;
+}
+
+.report-message {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 1040px);
+  padding: 14px 16px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-panel);
+  background: var(--md-surface-bright);
+}
+
+.report-message-assistant {
+  justify-self: start;
+  background: var(--md-surface-container);
+}
+
+.report-message-user {
+  justify-self: end;
+}
+
+.report-message.is-ready {
+  border-color: var(--color-success-soft);
+  background: var(--color-success-bg);
+}
+
+.report-message.is-working {
+  display: flex;
+  align-items: flex-start;
+  color: var(--color-primary);
+}
+
+.report-message strong {
+  color: var(--md-on-surface);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+}
+
+.report-message p {
+  margin: 0;
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}
+
+.report-suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.report-suggestion-chip {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-bright);
+  color: var(--md-on-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.report-suggestion-chip:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+  transform: translateY(-1px);
+}
+
+.report-suggestion-chip:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
+.report-suggestion-chip span,
+.report-suggestion-chip small {
+  overflow: hidden;
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-suggestion-chip strong {
+  overflow: hidden;
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-dialogue-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(260px, 1.4fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.report-dialogue-form .ant-form-item {
+  margin-bottom: 0;
+}
+
+.report-dialogue-ranges,
+.report-dialogue-actions,
+.report-current-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-current-summary {
+  padding-top: 2px;
+}
+
+.report-current-summary span {
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--md-surface-container);
+  color: var(--md-on-surface-variant);
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
+  overflow-wrap: anywhere;
+}
+
+.report-readiness-grid-compact {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .report-recommend-section {
   display: grid;
   gap: 12px;
@@ -4045,10 +4207,22 @@ body {
   .report-spin {
     animation: none;
   }
+
+  .report-suggestion-chip {
+    transition: none;
+  }
+
+  .report-suggestion-chip:hover {
+    transform: none;
+  }
 }
 
 @media (max-width: 1100px) {
   .report-builder-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-dialogue-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -4058,9 +4232,22 @@ body {
 }
 
 @media (max-width: 760px) {
+  .report-dialogue-panel {
+    padding: 14px;
+  }
+
+  .report-dialogue-head {
+    align-items: flex-start;
+  }
+
   .report-builder-form,
+  .report-dialogue-form,
   .report-history-item {
     grid-template-columns: 1fr;
+  }
+
+  .report-message {
+    width: 100%;
   }
 
   .report-readiness-grid {
@@ -8181,86 +8368,177 @@ body {
   object-fit: contain;
 }
 
-/* Larger AI work assistant dialog. Keep page context compact and give conversation the main space. */
+/* AI work assistant dialog: compact context, clear answer area, fixed composer. */
 .ai-copilot-modal .ant-modal-content {
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  border-radius: 22px;
+  background: #f5f5f7;
 }
 
 .ai-copilot-modal .ant-modal-header {
-  padding: 16px 20px 8px !important;
+  padding: 14px 20px 8px !important;
+  background: #ffffff !important;
 }
 
 .ai-copilot-modal .ai-copilot {
   display: grid;
-  height: min(780px, calc(100vh - 112px));
-  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+  height: min(760px, calc(100vh - 104px));
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 0 18px 18px;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px 18px 16px;
+  background: #f5f5f7;
 }
 
 .ai-copilot-modal .ai-copilot-context,
 .ai-copilot-modal .ai-copilot-section,
 .ai-copilot-modal .ai-copilot-action-bar {
   min-height: 0;
+  border: 0;
   box-shadow: none;
 }
 
 .ai-copilot-modal .ai-copilot-context {
   grid-column: 1;
   grid-row: 1;
-  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 12px 14px;
 }
 
 .ai-copilot-modal .ai-copilot-section {
   grid-column: 2;
   grid-row: 1;
+  border-radius: 16px;
+  background: #ffffff;
   padding: 12px 14px;
 }
 
+.ai-copilot-modal .ai-copilot-kicker,
+.ai-copilot-modal .ai-copilot-context-list,
+.ai-copilot-modal .ai-copilot-range-note,
+.ai-copilot-modal .ai-copilot-prompt-bar {
+  display: none;
+}
+
 .ai-copilot-modal .ai-copilot-context-title {
-  margin-top: 3px;
-  font-size: 15px;
-  line-height: 20px;
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 14px;
+  line-height: 18px;
 }
 
-.ai-copilot-modal .ai-copilot-context-list {
+.ai-copilot-modal .ai-copilot-range-summary {
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.ai-copilot-modal .ai-copilot-range-summary strong {
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.ai-copilot-modal .ai-copilot-range-summary span {
+  max-width: 62ch;
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ai-copilot-modal .ai-copilot-range-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.ai-copilot-modal .ai-copilot-range-label {
+  display: none;
+}
+
+.ai-copilot-modal .ai-copilot-range-picker {
+  width: 100%;
+  min-width: 0;
+}
+
+.ai-copilot-modal .ai-copilot-range-presets {
+  display: flex;
+  min-width: 0;
+  flex-wrap: nowrap;
   gap: 6px;
-  margin-top: 8px;
+  overflow-x: auto;
+  padding-bottom: 1px;
 }
 
-.ai-copilot-modal .ai-copilot-context-list span {
-  padding: 4px 8px;
+.ai-copilot-modal .ai-copilot-range-presets button {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .ai-copilot-modal .ai-copilot-insights {
-  margin-top: 6px;
   display: grid;
-  gap: 2px;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: #3a3a3c;
+  font-size: 13px;
   line-height: 1.5;
 }
 
 .ai-copilot-modal .ai-copilot-action-bar {
   grid-column: 1 / -1;
   grid-row: 2;
-  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 9px 12px;
+}
+
+.ai-copilot-modal .ai-copilot-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-copilot-modal .ai-copilot-actions button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 10px;
 }
 
 .ai-copilot-modal .ai-copilot-thread {
   grid-column: 1 / -1;
   grid-row: 3;
-  min-height: 360px;
+  min-height: 0;
   border: 0;
-  border-radius: 18px;
-  background: var(--color-gray-1);
+  border-radius: 16px;
+  background: #ffffff;
   padding: 14px;
 }
 
 .ai-copilot-modal .ai-copilot-message {
-  max-width: 78%;
-  padding: 12px 14px;
+  max-width: min(78%, 760px);
+  padding: 10px 12px;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 .ai-copilot-modal .ai-copilot-message.user {
@@ -8270,17 +8548,27 @@ body {
 .ai-copilot-modal .ai-copilot-compose {
   grid-column: 1 / -1;
   grid-row: 4;
-  gap: 8px;
+  display: grid;
+  gap: 6px;
 }
 
 .ai-copilot-modal .ai-copilot-input {
-  padding: 12px;
+  border: 1px solid rgba(60, 60, 67, 0.1);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: none;
 }
 
 .ai-copilot-modal .ai-copilot-input .ant-input {
-  min-height: 112px;
+  min-height: 58px;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.6;
+}
+
+.ai-copilot-modal .ai-copilot-input .ant-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
 }
 
 .ai-copilot-waiting {
@@ -8297,13 +8585,66 @@ body {
 
 @media (max-width: 760px) {
   .ai-copilot-modal .ai-copilot {
-    height: min(780px, calc(100vh - 96px));
-    display: flex;
-    flex-direction: column;
+    height: min(760px, calc(100vh - 92px));
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    padding: 10px 12px 12px;
+  }
+
+  .ai-copilot-modal .ai-copilot-context,
+  .ai-copilot-modal .ai-copilot-section,
+  .ai-copilot-modal .ai-copilot-action-bar,
+  .ai-copilot-modal .ai-copilot-thread,
+  .ai-copilot-modal .ai-copilot-compose {
+    grid-column: 1;
+  }
+
+  .ai-copilot-modal .ai-copilot-context {
+    grid-row: 1;
+  }
+
+  .ai-copilot-modal .ai-copilot-range-summary span {
+    display: none;
+  }
+
+  .ai-copilot-modal .ai-copilot-range-controls {
+    display: none;
+  }
+
+  .ai-copilot-modal .ai-copilot-section {
+    grid-row: 2;
+    padding: 10px 12px;
+  }
+
+  .ai-copilot-modal .ai-copilot-insights {
+    max-height: 88px;
+    overflow: auto;
+  }
+
+  .ai-copilot-modal .ai-copilot-action-bar {
+    grid-row: 3;
+    grid-template-columns: 1fr;
   }
 
   .ai-copilot-modal .ai-copilot-thread {
-    min-height: 320px;
+    grid-row: 4;
+    min-height: 180px;
+  }
+
+  .ai-copilot-modal .ai-copilot-compose {
+    grid-row: 5;
+  }
+
+  .ai-copilot-modal .ai-copilot-range-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-copilot-modal .ai-copilot-actions {
+    flex-wrap: wrap;
+  }
+
+  .ai-copilot-modal .ai-copilot-actions button {
+    flex-basis: calc(50% - 4px);
   }
 
   .ai-copilot-modal .ai-copilot-message {
