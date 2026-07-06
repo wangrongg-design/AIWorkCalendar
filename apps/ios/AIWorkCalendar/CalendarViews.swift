@@ -806,7 +806,7 @@ struct CalendarDashboardView: View {
     }
 
     private var topTitle: String {
-        "AI日历"
+        "工作日历"
     }
 
     private var homeSubtitle: String {
@@ -989,7 +989,7 @@ struct CalendarDashboardView: View {
         }
         do {
             let _: GeneratedReport = try await auth.client().request("/reports/generate", method: .post, body: request)
-            actionMessage = "周报已开始生成，稍后可在报告列表查看。"
+            actionMessage = "周报已开始生成，稍后可在汇报列表查看。"
         } catch {
             actionMessage = error.localizedDescription
         }

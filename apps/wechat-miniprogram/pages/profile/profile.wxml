@@ -31,7 +31,7 @@
       <text>{{user.tenantName}}</text>
     </view>
     <view class="info-row">
-      <text>企业代码</text>
+      <text>统一社会信用代码</text>
       <text>{{user.tenantCode}}</text>
     </view>
     <view class="info-row">

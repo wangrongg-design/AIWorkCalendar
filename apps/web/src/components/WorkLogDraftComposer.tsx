@@ -215,7 +215,7 @@ export function selectedDraftComposerEntries(preview: WorkLogDraftComposerState 
 export function validateDraftComposerState(preview: WorkLogDraftComposerState | null) {
   const entries = selectedDraftComposerEntries(preview);
   if (!entries.length) {
-    return { ok: false as const, message: "请至少选择一条日报项。", index: -1 };
+    return { ok: false as const, message: "请至少选择一条工作记录。", index: -1 };
   }
   for (const { item, index } of entries) {
     if (!dayjs(item.date).isValid()) {
@@ -254,7 +254,7 @@ export function composeDraftComposerContent(item: WorkLogDraftComposerItem) {
       blocks.push(`${label}：\n${cleaned.map((value) => `- ${value}`).join("\n")}`);
     }
   }
-  return blocks.join("\n\n") || item.title || "工作填报";
+  return blocks.join("\n\n") || item.title || "工作记录";
 }
 
 const fieldLabels: Record<string, string> = {
@@ -554,8 +554,8 @@ export function WorkLogDraftComposer({
                               value={item.kind}
                               disabled={locked}
                               options={[
-                                { value: "DAILY", label: "工作日报" },
-                                { value: "PLAN", label: "工作计划" }
+                                { value: "DAILY", label: "日报" },
+                                { value: "PLAN", label: "计划" }
                               ]}
                               getPopupContainer={() => document.body}
                               onChange={(value) => onUpdateItem(index, { kind: value, status: item.status === "generated" ? "editing" : item.status })}
@@ -705,7 +705,7 @@ export function WorkLogDraftComposer({
                 <UploadCloud size={26} />
               </p>
               <p className="ant-upload-text">拖拽文件，或粘贴图片</p>
-              <p className="ant-upload-hint">{hasItems ? "有多条日报时，附件只关联到你选择的一条。" : "先生成或新增日报项后，再选择附件归属。"}</p>
+              <p className="ant-upload-hint">{hasItems ? "有多条记录时，附件只关联到你选择的一条。" : "先生成或新增记录后，再选择附件归属。"}</p>
             </Upload.Dragger>
           </div>
         </section>

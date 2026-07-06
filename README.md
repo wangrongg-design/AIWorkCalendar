@@ -1,6 +1,6 @@
 # Work Calendar AI
 
-面向企业的 AI 工作填报与智能汇报 SaaS。当前版本由北京七数智联科技有限公司开发，覆盖企业注册、登录、订阅计费、订阅订单、组织权限、项目基本信息、每日工作填报、管理月历、AI 分析、AI 汇报、系统内通知、运维监管、审计日志、数据导出和数据删除申请。
+面向企业的 AI 工作日历与周期汇报 SaaS。当前版本由北京七数智联科技有限公司开发，覆盖企业注册、登录、订阅计费、订阅订单、组织权限、项目基本信息、每日工作记录、工作日历、AI 分析、周期汇报、系统内通知、运维监管、审计日志、数据导出和数据删除申请。
 
 ## 技术栈
 
@@ -69,7 +69,7 @@ pnpm --filter @work-calendar-ai/api seed
 pnpm dev
 ```
 
-如果 `AI_PROVIDER=mock`，后端会使用本地 deterministic fallback 生成 AI 分析和报告，保证 MVP 闭环可跑。
+如果 `AI_PROVIDER=mock`，后端会使用本地 deterministic fallback 生成 AI 分析和汇报，保证 MVP 闭环可跑。
 
 ## AI Provider 配置
 
@@ -138,7 +138,7 @@ WECHAT_PAY_RETURN_URL=
 pnpm test:smoke
 ```
 
-该脚本会验证登录、组织读取、创建填报、提交填报、月历查询和报告生成任务。
+该脚本会验证登录、组织读取、创建填报、提交填报、月历查询和汇报生成任务。
 
 ## 发布前检查
 
@@ -269,7 +269,7 @@ bash scripts/prod-db-init.sh
 
 ## 微信小程序
 
-小程序工程位于 [apps/wechat-miniprogram](/Users/wangrong/Documents/AIWorkCalendar/apps/wechat-miniprogram)。它复用现有 API，提供移动端快速语音填报、提交日报/计划、查看月历看板和日期详情。导入微信开发者工具即可运行，具体步骤见 [apps/wechat-miniprogram/README.md](/Users/wangrong/Documents/AIWorkCalendar/apps/wechat-miniprogram/README.md)。
+小程序工程位于 [apps/wechat-miniprogram](/Users/wangrong/Documents/AIWorkCalendar/apps/wechat-miniprogram)。它复用现有 API，提供移动端快速语音填报、提交日报/计划、查看工作日历和日期详情。导入微信开发者工具即可运行，具体步骤见 [apps/wechat-miniprogram/README.md](/Users/wangrong/Documents/AIWorkCalendar/apps/wechat-miniprogram/README.md)。
 
 ## 统一部署配置
 

@@ -172,7 +172,7 @@ export class ReportContentService {
           tenantId: report.tenantId,
           userId: report.requesterId,
           type: NotificationType.REPORT_DONE,
-          title: "报告生成完成",
+          title: "汇报生成完成",
           body: `「${report.title}」已生成。`,
           data: { reportId: report.id }
         }

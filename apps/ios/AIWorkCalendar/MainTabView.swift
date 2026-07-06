@@ -40,7 +40,7 @@ struct MainTabView: View {
                 }
             )
                 .tabItem {
-                    Label("AI日历", systemImage: "calendar")
+                    Label("工作日历", systemImage: "calendar")
                 }
                 .tag(AppTab.calendar)
 

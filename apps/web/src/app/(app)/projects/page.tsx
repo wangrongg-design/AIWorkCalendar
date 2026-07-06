@@ -154,10 +154,10 @@ function projectChatPayload(projectId: string, question: string, range: [Dayjs, 
 }
 
 function projectQuestionPrompt(label: string) {
-  if (label === "总结最近 7 天进展") return "请总结这个项目最近 7 天的进展，按已完成、正在推进、需要跟进输出，并列出依据日报。";
-  if (label === "找出当前风险") return "这个项目当前最大的风险或阻塞是什么？请给出结论、依据日报和建议动作。";
-  if (label === "生成项目周报") return "请基于当前项目日报生成一份项目周报，包含关键进展、风险/阻塞、下周动作和来源。";
-  if (label === "整理负责人待办") return "请从这个项目最近日报中提取下一步待办，按负责人或事项整理，并说明依据。";
+  if (label === "总结最近 7 天进展") return "请总结这个项目最近 7 天的进展，按已完成、正在推进、需要跟进输出，并列出依据记录。";
+  if (label === "找出当前风险") return "这个项目当前最大的风险或阻塞是什么？请给出结论、依据记录和建议动作。";
+  if (label === "生成项目周报") return "请基于当前项目工作记录生成一份项目周报，包含关键进展、风险/阻塞、下周动作和来源。";
+  if (label === "整理负责人待办") return "请从这个项目最近工作记录中提取下一步待办，按负责人或事项整理，并说明依据。";
   if (label === "生成客户同步摘要") return "请生成一份适合发给客户或业务方的项目同步摘要，包含进展、风险、下一步和来源依据。";
   return label;
 }
@@ -231,12 +231,12 @@ function renderAssistantMarkdown(content: string) {
 
 function projectOverviewText(project: Project, analysis: ReturnType<typeof summarizeProjectLogs>) {
   if (!analysis.totalLogs) {
-    return `${project.name} 当前周期还没有关联日报。`;
+    return `${project.name} 当前周期还没有关联工作记录。`;
   }
   if (analysis.riskBlockerCount) {
-    return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，存在 ${analysis.riskBlockerCount} 条风险/阻塞记录。`;
+    return `${project.name} 当前周期有 ${analysis.totalLogs} 条工作记录，存在 ${analysis.riskBlockerCount} 条风险/阻塞记录。`;
   }
-  return `${project.name} 当前周期有 ${analysis.totalLogs} 条日报/计划，整体${projectHealth(project).label}，暂无明确风险/阻塞。`;
+  return `${project.name} 当前周期有 ${analysis.totalLogs} 条工作记录，整体${projectHealth(project).label}，暂无明确风险/阻塞。`;
 }
 
 function isLogInRange(log: WorkLog, range: [Dayjs, Dayjs] | null) {
@@ -263,22 +263,22 @@ function projectMatchesSearch(project: Project, keyword: string) {
 }
 
 function projectRecentText(stats?: ProjectListStats) {
-  if (!stats?.latestDate) return "当前周期暂无日报";
+  if (!stats?.latestDate) return "当前周期暂无工作记录";
   return `最近更新 ${dayjs(stats.latestDate).format("MM-DD")}`;
 }
 
 function assistantIntro(project: Project, analysis: ProjectListStats, range: [Dayjs, Dayjs] | null) {
   if (!analysis.totalLogs) {
     return {
-      overview: "当前项目暂无来源日报，先关联项目日报或调整时间范围。",
+      overview: "当前项目暂无来源记录，先关联项目工作记录或调整时间范围。",
       latestProgress: `${rangeText(range)} 内没有可分析记录。`,
-      action: "可以先让成员按项目提交日报，或扩大日期范围后再提问。"
+      action: "可以先让成员按项目提交工作记录，或扩大日期范围后再提问。"
     };
   }
   const latestText = analysis.latestDate ? `最近更新 ${dayjs(analysis.latestDate).format("MM-DD")}` : "暂无最近更新";
   return {
     overview: projectOverviewText(project, analysis),
-    latestProgress: `${rangeText(range)} · ${analysis.totalLogs} 条日报/计划 · ${analysis.members.length} 个成员 · ${latestText}。`,
+    latestProgress: `${rangeText(range)} · ${analysis.totalLogs} 条工作记录 · ${analysis.members.length} 个成员 · ${latestText}。`,
     action: analysis.riskBlockerCount ? "建议先追问当前风险，确认负责人和处理动作。" : "可以继续生成项目周报、整理负责人待办或准备客户同步摘要。"
   };
 }
@@ -431,7 +431,7 @@ export default function ProjectsPage() {
         body: JSON.stringify(workLogPayload(values))
       }),
     onSuccess: (updated) => {
-      message.success("日报已更新");
+      message.success("工作记录已更新");
       setDetailLog(updated);
       setDetailEditing(false);
       queryClient.invalidateQueries({ queryKey: ["project-work-logs"] });
@@ -439,14 +439,14 @@ export default function ProjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "更新日报失败");
+      message.error(error instanceof Error ? error.message : "更新工作记录失败");
     }
   });
 
   const deleteProjectWorkLog = useMutation({
     mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/work-logs/${id}`, { method: "DELETE" }),
     onSuccess: (_, id) => {
-      message.success("日报已删除");
+      message.success("工作记录已删除");
       setDetailLog((current) => (current?.id === id ? null : current));
       setDetailEditing(false);
       queryClient.invalidateQueries({ queryKey: ["project-work-logs"] });
@@ -455,7 +455,7 @@ export default function ProjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "删除日报失败");
+      message.error(error instanceof Error ? error.message : "删除工作记录失败");
     }
   });
 
@@ -498,7 +498,7 @@ export default function ProjectsPage() {
     const normalized = question.trim();
     if (!normalized || !selectedProject || projectChat.isPending) return;
     if (!projectAnalysis.totalLogs) {
-      message.info("当前项目暂无来源日报，先关联项目日报或调整时间范围。");
+      message.info("当前项目暂无来源记录，先关联项目工作记录或调整时间范围。");
       return;
     }
     setProjectChatMessages((items) => [
@@ -546,7 +546,7 @@ export default function ProjectsPage() {
           <Typography.Title level={3} className="page-title">
             项目中心
           </Typography.Title>
-          <Typography.Text className="page-subtitle">项目日报沉淀为进展、风险/阻塞和下一步动作。</Typography.Text>
+          <Typography.Text className="page-subtitle">项目工作记录沉淀为进展、风险/阻塞和下一步动作。</Typography.Text>
         </div>
         {canManage ? (
           <Button type="primary" icon={<Plus size={16} />} onClick={openCreate}>
@@ -637,7 +637,7 @@ export default function ProjectsPage() {
                     </span>
                     <span className="project-list-owner">{project.owner?.name ? `负责人：${project.owner.name}` : "负责人未设置"}</span>
                     <span className="project-list-foot">
-                      <span>{stats?.totalLogs ?? 0} 条日报</span>
+                      <span>{stats?.totalLogs ?? 0} 条记录</span>
                       <span>{projectRecentText(stats)}</span>
                     </span>
                   </button>
@@ -666,7 +666,7 @@ export default function ProjectsPage() {
 
               <div className="project-ai-coverage" aria-label="项目 AI 助手数据覆盖">
                 <span>{rangeText(range)}</span>
-                <span>{projectAnalysis.totalLogs} 条日报</span>
+                <span>{projectAnalysis.totalLogs} 条记录</span>
                 <span>{projectAnalysis.members.length} 个成员</span>
                 <span>{projectAnalysis.riskBlockerCount} 条风险/阻塞</span>
               </div>
@@ -730,7 +730,7 @@ export default function ProjectsPage() {
                 )}
                 {projectChat.isPending ? (
                   <div className="project-ai-message is-assistant">
-                    <div className="project-ai-message-body">正在读取项目日报并生成回答…</div>
+                    <div className="project-ai-message-body">正在读取项目工作记录并生成回答…</div>
                   </div>
                 ) : null}
               </div>
@@ -739,7 +739,7 @@ export default function ProjectsPage() {
                 <Input.TextArea
                   value={projectChatInput}
                   autoSize={{ minRows: 1, maxRows: 4 }}
-                  placeholder={projectAnalysis.totalLogs ? "问问这个项目…" : "当前项目暂无来源日报"}
+                  placeholder={projectAnalysis.totalLogs ? "问问这个项目…" : "当前项目暂无来源记录"}
                   disabled={projectChat.isPending || !projectAnalysis.totalLogs}
                   onChange={(event) => setProjectChatInput(event.target.value)}
                   onPressEnter={(event) => {
@@ -802,7 +802,7 @@ export default function ProjectsPage() {
       </Modal>
 
       <Drawer
-        title={detailLog ? <WorkLogDetailTitle record={detailLog} currentUserId={user?.id} readOnly={!canEditWorkLog(detailLog)} /> : "日报详情"}
+        title={detailLog ? <WorkLogDetailTitle record={detailLog} currentUserId={user?.id} readOnly={!canEditWorkLog(detailLog)} /> : "工作记录详情"}
         open={Boolean(detailLog)}
         onClose={() => {
           setDetailLog(null);
@@ -814,7 +814,7 @@ export default function ProjectsPage() {
           detailLog && canEditWorkLog(detailLog) ? (
             detailEditing ? (
               <Space>
-                <Popconfirm title="确认删除这条日报？删除后不会进入统计和汇报。" onConfirm={() => deleteProjectWorkLog.mutate(detailLog.id)}>
+                <Popconfirm title="确认删除这条工作记录？删除后不会进入统计和汇报。" onConfirm={() => deleteProjectWorkLog.mutate(detailLog.id)}>
                   <Button danger icon={<Trash2 size={15} />} loading={deleteProjectWorkLog.isPending && deleteProjectWorkLog.variables === detailLog.id}>
                     删除记录
                   </Button>
@@ -826,7 +826,7 @@ export default function ProjectsPage() {
               </Space>
             ) : (
               <Space>
-                <Popconfirm title="确认删除这条日报？删除后不会进入统计和汇报。" onConfirm={() => deleteProjectWorkLog.mutate(detailLog.id)}>
+                <Popconfirm title="确认删除这条工作记录？删除后不会进入统计和汇报。" onConfirm={() => deleteProjectWorkLog.mutate(detailLog.id)}>
                   <Button danger icon={<Trash2 size={15} />} loading={deleteProjectWorkLog.isPending && deleteProjectWorkLog.variables === detailLog.id}>
                     删除记录
                   </Button>

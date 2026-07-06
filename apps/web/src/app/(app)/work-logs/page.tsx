@@ -143,8 +143,8 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
   const hours = Number(item.hours);
   return {
     date: safeDate,
-    title: item.title || "工作填报",
-    content: item.content || item.title || "工作填报",
+    title: item.title || "工作记录",
+    content: item.content || item.title || "工作记录",
     hours: Number.isFinite(hours) ? hours : null,
     kind: item.kind,
     startTime: parseWorkLogTime(item.startTime, safeDate),
@@ -483,7 +483,7 @@ export default function WorkLogsPage() {
     mutationFn: async ({ preview, submit }: { preview: DraftPreview; submit: boolean }) => {
       const selectedEntries = selectedDraftComposerEntries(preview);
       if (!selectedEntries.length) {
-        throw new Error("请至少选择一条日报项。");
+        throw new Error("请至少选择一条工作记录。");
       }
       const hasAttachments = pendingAttachments.length > 0;
       const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
@@ -498,10 +498,10 @@ export default function WorkLogsPage() {
       return { ...preview, persistedCount: selectedEntries.length, hasAttachments, uploadTargetIndex, submit, attachmentUpload };
     },
     onSuccess: (preview) => {
-      message.success(preview.submit ? `已提交 ${preview.persistedCount} 条日报。` : `已保存 ${preview.persistedCount} 条草稿。`);
+      message.success(preview.submit ? `已提交 ${preview.persistedCount} 条工作记录。` : `已保存 ${preview.persistedCount} 条草稿。`);
       if (preview.attachmentUpload?.failedCount) {
         message.warning(
-          `${preview.submit ? "日报已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
+          `${preview.submit ? "工作记录已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
         );
       } else if (preview.hasAttachments && preview.persistedCount > 1) {
         message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
@@ -515,7 +515,7 @@ export default function WorkLogsPage() {
       queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "保存日报项失败，请检查后重试。");
+      message.error(error instanceof Error ? error.message : "保存工作记录失败，请检查后重试。");
     }
   });
 
@@ -542,7 +542,7 @@ export default function WorkLogsPage() {
     form.resetFields();
     form.setFieldsValue({
       date: dateValue,
-      title: isFuture ? "工作计划" : "工作日报",
+      title: isFuture ? "工作计划" : "工作记录",
       content: "",
       hours: null,
       kind: isFuture ? "PLAN" : "DAILY"
@@ -551,7 +551,7 @@ export default function WorkLogsPage() {
     setLastAiInput("");
     setAiMessages([]);
     setDraftPreview({
-      assistantMessage: "今日日报项",
+      assistantMessage: "今日工作记录",
       items: [],
       attachedToFirst: false,
       attachmentTargetIndex: 0
@@ -643,7 +643,7 @@ export default function WorkLogsPage() {
       const nextItem = createEmptyDraftComposerItem(entryDate);
       if (!current) {
         return {
-          assistantMessage: "手动新增项目日报项。",
+          assistantMessage: "手动新增工作记录。",
           items: [nextItem],
           attachedToFirst: false,
           attachmentTargetIndex: 0
@@ -769,17 +769,17 @@ export default function WorkLogsPage() {
           <Typography.Title level={3} className="page-title">
             填报记录
           </Typography.Title>
-          <Typography.Text className="page-subtitle">直接开始填写，提交后系统会自动进入分析队列。</Typography.Text>
+          <Typography.Text className="page-subtitle">填写日报和计划，提交后系统会自动进入分析队列。</Typography.Text>
         </div>
       </div>
 
       <div className="surface-panel worklog-entry-panel">
         <div className="worklog-entry-copy">
-          <div className="section-title">填写今日日报</div>
-          <div className="section-subtitle">把今天的多个项目工作整理成独立日报项，项目、工时和附件逐条确认。</div>
+          <div className="section-title">填写今日记录</div>
+          <div className="section-subtitle">把今天的多个项目工作整理成独立记录，项目、工时和附件逐条确认。</div>
         </div>
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
-          填写今日日报
+          填写今日记录
         </Button>
       </div>
 
@@ -1084,7 +1084,7 @@ export default function WorkLogsPage() {
             <Alert
               type={communicationDraft.missingFields?.length || communicationDraft.confidence < 0.8 ? "warning" : "info"}
               showIcon
-              message="请确认后再写入日报"
+              message="请确认后再写入工作记录"
               description="来源内容只会生成候选草稿。你可以修改日期、项目、工时、标题和内容，再选择保存草稿或确认提交。"
             />
             <div className="communication-draft-evidence">

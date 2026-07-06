@@ -64,7 +64,7 @@ struct LoginView: View {
             try await auth.login(account: account, password: password, tenantCode: nil)
         } catch {
             let message = error.localizedDescription
-            if message.contains("多个企业") || message.contains("企业代码") {
+            if message.contains("多个企业") || message.contains("企业代码") || message.contains("统一社会信用代码") {
                 errorMessage = "该账号存在于多个企业，请联系管理员或使用企业专属登录入口。"
             } else {
                 errorMessage = message

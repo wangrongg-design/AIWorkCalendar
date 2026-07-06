@@ -68,7 +68,7 @@ export function humanizeApiError(message: string, status?: number, path = "", me
     return "没有找到这个项目，可能已归档或被删除。请刷新项目列表后重试。";
   }
   if (normalized.includes("report not found")) {
-    return "没有找到这份报告，可能已被删除。请刷新报告列表后重试。";
+    return "没有找到这份汇报，可能已被删除。请刷新汇报列表后重试。";
   }
   if (normalized.includes("order not found")) {
     return "没有找到这笔订单，可能已过期。请刷新订阅订单后重试。";

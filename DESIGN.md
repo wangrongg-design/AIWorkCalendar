@@ -233,7 +233,7 @@ The product uses a hybrid of tonal layering, thin borders, and very light shadow
 
 - **Style:** persistent app shell with left navigation on desktop and drawer navigation on mobile.
 - **Active State:** primary blue text on soft blue background.
-- **Labels:** short, functional Chinese labels such as `AI日历`, `AI整体分析`, `填报记录`, `AI汇报`, `项目`, `团队`.
+- **Labels:** short, functional Chinese labels such as `工作日历`, `周期汇报`, `填报记录`, `项目中心`, `团队`.
 
 ### AI Insight Panels
 

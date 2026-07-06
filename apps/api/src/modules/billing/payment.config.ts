@@ -37,7 +37,7 @@ export const billingPlans: BillingPlanConfig[] = [
     monthlyPriceCents: activeMemberMonthlyPriceCents,
     yearlyPriceCents: 0,
     recommendedSeats: 1,
-    features: ["完整 AI 工作日历功能", "AI 日报、周报、月报", "AI 风险分析", "AI 工作问答", "日历看板", "项目管理", "数据导出", "可随时新增或停用成员"]
+    features: ["完整 AI 工作日历功能", "周期汇报", "AI 风险分析", "AI 工作助手", "工作日历", "项目管理", "数据导出", "可随时新增或停用成员"]
   }
 ];
 

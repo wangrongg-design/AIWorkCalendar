@@ -47,6 +47,7 @@ type RegisterResponse = {
 const navItems = [
   { label: "产品能力", href: "capabilities" },
   { label: "使用流程", href: "workflow" },
+  { label: "使用指南", href: "/guide" },
   { label: "价格", href: "pricing" },
   { label: "数据安全", href: "security" }
 ];
@@ -79,19 +80,19 @@ const capabilityCards = [
   { accent: "blue", title: "团队周报", lines: ["系统按周汇总团队工作重点。", "项目进展、风险变化和下周计划同步生成。"] },
   { accent: "blue", title: "月度汇总", lines: ["管理者快速查看团队月度产出。", "项目投入和关键问题集中呈现。"] },
   { accent: "red", title: "风险分析", lines: ["自动识别延期、阻塞和重复问题。", "异常投入和无人跟进事项会被提示。"] },
-  { accent: "black", title: "日历看板", lines: ["按日查看填报率和缺填人员。", "风险数量和团队状态集中呈现。"] },
-  { accent: "orange", title: "项目管理", lines: ["日报可关联项目。", "管理者按项目查看投入、进展和风险。"] }
+  { accent: "black", title: "工作日历", lines: ["按日查看填报率和缺填人员。", "风险数量和团队状态集中呈现。"] },
+  { accent: "orange", title: "项目管理", lines: ["工作记录可关联项目。", "管理者按项目查看投入、进展和风险。"] }
 ];
 
 const workflowSteps = [
-  { title: "创建企业", lines: ["管理员注册账号。", "创建企业工作空间。"] },
+  { title: "创建企业", lines: ["管理员注册账号。", "首次进入系统会看到使用指引。"] },
   { title: "邀请成员", lines: ["添加部门、成员和角色。", "员工进入同一个工作空间。"] },
-  { title: "每日填报", lines: ["员工每天填写工作日报。", "也可以填写未来计划。"] },
+  { title: "每日填报", lines: ["员工每天填写日报。", "也可以填写未来计划。"] },
   { title: "生成周期汇报", lines: ["系统自动整理日报、周报和月报。", "风险和项目进展同步生成。"] },
-  { title: "管理者查看团队状态", lines: ["管理者查看日历看板和周期汇报。", "及时发现问题并推进工作。"] }
+  { title: "管理者查看团队状态", lines: ["管理者查看工作日历和周期汇报。", "及时发现问题并推进工作。"] }
 ];
 
-const trialFeatures = ["创建企业空间", "邀请部门成员", "日报提炼", "周报归纳", "月报生成", "日历看板面板", "风险识别分析"];
+const trialFeatures = ["创建企业空间", "邀请部门成员", "日报提炼", "周报归纳", "月报生成", "工作日历", "风险识别分析"];
 const proFeatures = ["全部免费试用能力", "项目管理关联追踪", "团队状态图谱分析", "跨周期深度汇报生成", "企业历史数据导出", "多级管理员权限管理"];
 
 const securityCards = [
@@ -104,9 +105,9 @@ const securityCards = [
 const faqItems = [
   { question: "免费试用多久？", lines: ["企业可免费试用 1 个月。", "试用期内不限制人数。"] },
   { question: "正式版怎么收费？", lines: ["正式版为 ¥19 / 启用成员 / 月。", "只按启用成员计费。"] },
-  { question: "员工需要复杂培训吗？", lines: ["不需要。", "员工只需要像写普通日报一样填写工作内容。", "系统会自动整理和分析。"] },
+  { question: "员工需要复杂培训吗？", lines: ["不需要。", "员工只需要像写日常日报一样填写工作内容。", "系统会自动整理和分析。"] },
   { question: "系统会替员工写日报吗？", lines: ["系统不会凭空生成工作内容。", "只会基于员工填写的真实记录进行整理、分析和汇报。"] },
-  { question: "管理者能看到哪些数据？", lines: ["管理者只能查看自己权限范围内的数据。", "包括团队、部门、项目和日报数据。"] },
+  { question: "管理者能看到哪些数据？", lines: ["管理者只能查看自己权限范围内的数据。", "包括团队、部门、项目和工作记录。"] },
   { question: "企业数据是否隔离？", lines: ["是。", "企业数据按租户隔离。", "不同企业的数据相互独立。"] }
 ];
 
@@ -128,14 +129,22 @@ export default function HomePage() {
       }),
     onSuccess: (data) => {
       setSession(data.accessToken, data.user);
-      message.success("企业已创建，先完成启动助手。");
-      router.replace("/onboarding");
+      message.success("企业已创建，先完成首次使用指引。");
+      router.replace("/onboarding?from=signup");
     }
   });
 
   const scrollTo = (id: string) => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  };
+
+  const openNavItem = (href: string) => {
+    if (href.startsWith("/")) {
+      router.push(href);
+      return;
+    }
+    scrollTo(href);
   };
 
   return (
@@ -148,7 +157,7 @@ export default function HomePage() {
 
         <div className="calendarseven-nav-links" aria-label="官网导航">
           {navItems.map((item) => (
-            <button key={item.href} type="button" onClick={() => scrollTo(item.href)}>
+            <button key={item.href} type="button" onClick={() => openNavItem(item.href)}>
               {item.label}
             </button>
           ))}
@@ -171,7 +180,7 @@ export default function HomePage() {
             <span>企业工作日历</span>
           </div>
           <h1>让 AI 自动理解团队工作</h1>
-          <p className="calendarseven-lede">员工照常填报，管理者直接看到缺填、风险、项目进展和下一步动作。</p>
+          <p className="calendarseven-lede">员工照常记录工作，管理者直接看到缺填、风险、项目进展和下一步动作。</p>
           <p className="calendarseven-price-line">
             <span>企业免费试用 1 个月。</span>
             <span>按启用成员计费，管理员可随时停用成员。</span>
@@ -197,7 +206,7 @@ export default function HomePage() {
           <div className="calendarseven-window-body">
             <div className="calendarseven-window-head">
               <div>
-                <span>工作日历看板</span>
+                <span>工作日历</span>
                 <strong>今日团队状态</strong>
               </div>
               <em>已更新 09:42</em>
@@ -224,7 +233,7 @@ export default function HomePage() {
 
             <div className="calendarseven-week-panel">
               <span>本周项目进展已自动汇总</span>
-              <p>从日报中提取移动端重构进展，并匹配技术阻塞状态。</p>
+              <p>从工作记录中提取移动端重构进展，并匹配技术阻塞状态。</p>
             </div>
 
             <div className="calendarseven-attention">
@@ -294,7 +303,7 @@ export default function HomePage() {
         <div className="calendarseven-flow-visual">
           <CalendarDays size={26} />
           <strong>五步开始使用</strong>
-          <span>创建企业后即可邀请团队试用。</span>
+          <span>创建企业后先完成首次使用指引。</span>
         </div>
         <div className="calendarseven-flow-list">
           {workflowSteps.map((item, index) => (
@@ -378,10 +387,10 @@ export default function HomePage() {
                 className="mb-4"
                 type="info"
                 showIcon
-                message="你已登录，可以直接进入工作台。"
+                message="你已登录，可以直接进入工作空间。"
                 action={
                   <Button size="small" type="primary" onClick={() => router.push("/calendar")}>
-                    进入工作台
+                    进入工作空间
                   </Button>
                 }
               />
@@ -393,7 +402,7 @@ export default function HomePage() {
               </Form.Item>
               <Form.Item
                 name="tenantCode"
-                label="企业代码"
+                label="统一社会信用代码"
                 normalize={normalizeUnifiedSocialCreditCode}
                 rules={[{ required: true, pattern: unifiedSocialCreditCodePattern, message: unifiedSocialCreditCodeMessage }]}
                 extra="请填写营业执照上的 18 位统一社会信用代码。"
@@ -499,6 +508,9 @@ export default function HomePage() {
           </button>
           <button type="button" onClick={() => scrollTo("security")}>
             服务协议
+          </button>
+          <button type="button" onClick={() => router.push("/guide")}>
+            使用指南
           </button>
           <a href="mailto:support@calendarseven.com">联系方式</a>
         </nav>

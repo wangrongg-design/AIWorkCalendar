@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { loadOnboardingProgress, onboardingCompletion } from "@/lib/onboarding";
 import { Notification } from "@/lib/types";
 
 const { Sider, Content } = Layout;
@@ -16,7 +17,7 @@ const dailyNavItems: MenuProps["items"] = [
   { key: "/calendar", icon: <CalendarDays size={19} />, label: "工作日历" },
   { key: "/projects", icon: <FolderKanban size={19} />, label: "项目中心" },
   { key: "/work-logs", icon: <ClipboardList size={19} />, label: "填报记录" },
-  { key: "/reports", icon: <FileText size={19} />, label: "AI报告" }
+  { key: "/reports", icon: <FileText size={19} />, label: "周期汇报" }
 ];
 
 const adminNavItems: MenuProps["items"] = [
@@ -57,6 +58,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
   }, [authReady, router, token]);
+
+  useEffect(() => {
+    if (!authReady || !token || !user || pathname === "/onboarding") return;
+    const progress = loadOnboardingProgress(user);
+    const completion = onboardingCompletion(user, progress);
+    if (!progress.updatedAt && !progress.dismissed && !completion.isComplete) {
+      router.replace("/onboarding?from=first-login");
+    }
+  }, [authReady, pathname, router, token, user]);
 
   const notifications = useQuery({
     queryKey: ["notifications"],

@@ -38,7 +38,7 @@
     "list": [
       {
         "pagePath": "pages/calendar/calendar",
-        "text": "AI日历"
+        "text": "工作日历"
       },
       {
         "pagePath": "pages/report/report",

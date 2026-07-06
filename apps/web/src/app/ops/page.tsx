@@ -7,7 +7,7 @@ import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
 import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { tenantLogoSpec, validateTenantLogoFile } from "@/lib/tenant-logo";
@@ -129,6 +129,7 @@ export default function OpsPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
   const [companyAdminModalOpen, setCompanyAdminModalOpen] = useState(false);
+  const [selectedAccountTenantId, setSelectedAccountTenantId] = useState<string>();
 
   useEffect(() => {
     if (!token) {
@@ -141,6 +142,26 @@ export default function OpsPage() {
     queryFn: () => apiFetch<OpsOverview>("/ops/overview"),
     enabled: Boolean(token && isOps)
   });
+
+  const tenantOptions = useMemo(
+    () =>
+      (overview.data?.tenants ?? []).map((tenant) => ({
+        value: tenant.id,
+        label: `${tenant.name} · ${tenant.code}`
+      })),
+    [overview.data?.tenants]
+  );
+
+  const selectedAccountTenant = useMemo(
+    () => overview.data?.tenants.find((tenant) => tenant.id === selectedAccountTenantId),
+    [overview.data?.tenants, selectedAccountTenantId]
+  );
+
+  const filteredAccounts = useMemo(() => {
+    const accounts = overview.data?.accounts ?? [];
+    if (!selectedAccountTenantId) return accounts;
+    return accounts.filter((account) => account.tenantId === selectedAccountTenantId);
+  }, [overview.data?.accounts, selectedAccountTenantId]);
 
   const updateAccount = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -323,7 +344,7 @@ export default function OpsPage() {
     { title: "成员", width: 90, render: (_, record) => record.counts.users },
     { title: "项目", width: 90, render: (_, record) => record.counts.projects },
     { title: "填报", width: 90, render: (_, record) => record.counts.workLogs },
-    { title: "报告", width: 90, render: (_, record) => record.counts.reports },
+    { title: "汇报", width: 90, render: (_, record) => record.counts.reports },
     { title: "服务到期", width: 120, render: (_, record) => dateText(record.subscription?.currentPeriodEnd) },
     { title: "创建日期", width: 120, render: (_, record) => dateText(record.createdAt) },
     {
@@ -419,7 +440,7 @@ export default function OpsPage() {
             </Popconfirm>
             <Popconfirm
               title="确认删除这个账号？"
-              description="删除后该账号不能登录，账号列表不再显示；历史填报、报告和审计记录会保留。"
+              description="删除后该账号不能登录，账号列表不再显示；历史填报、汇报和审计记录会保留。"
               okText="确认删除"
               cancelText="取消"
               okButtonProps={{ danger: true, loading: deleteAccount.isPending }}
@@ -503,7 +524,7 @@ export default function OpsPage() {
             <div className="metric-value">{totals?.workLogs ?? 0}</div>
           </div>
           <div className="metric-card">
-            <div className="metric-label">AI 报告</div>
+            <div className="metric-label">周期汇报</div>
             <div className="metric-value">{totals?.reports ?? 0}</div>
           </div>
         </div>
@@ -521,7 +542,7 @@ export default function OpsPage() {
         </section>
 
         <section className="surface-panel bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <Typography.Title level={4} className="!m-0 !font-medium">
                 账号管理
@@ -530,10 +551,29 @@ export default function OpsPage() {
                 运维可新增和恢复企业管理员权限、重置密码、启停账号；关键操作会写入审计日志。
               </Typography.Text>
             </div>
-            <Space>
-              <Tag>最近 300 个账号</Tag>
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end md:w-auto">
+              <Select
+                allowClear
+                showSearch
+                className="w-full sm:w-[320px]"
+                placeholder="选择公司"
+                value={selectedAccountTenantId}
+                options={tenantOptions}
+                optionFilterProp="label"
+                notFoundContent="未找到公司"
+                onChange={(value) => setSelectedAccountTenantId(value)}
+                filterOption={(input, option) =>
+                  String(option?.label ?? "")
+                    .toLowerCase()
+                    .includes(input.trim().toLowerCase())
+                }
+              />
+              <Tag className="m-0 w-fit">
+                {selectedAccountTenant ? `${filteredAccounts.length} 个账号` : `最近 ${filteredAccounts.length} 个账号`}
+              </Tag>
               <Button
                 type="primary"
+                className="w-full sm:w-auto"
                 icon={<UserCog size={16} />}
                 onClick={() => {
                   companyAdminForm.resetFields();
@@ -542,9 +582,9 @@ export default function OpsPage() {
               >
                 新增企管
               </Button>
-            </Space>
+            </div>
           </div>
-          <Table rowKey="id" loading={overview.isFetching} dataSource={overview.data?.accounts ?? []} columns={accountColumns} pagination={{ pageSize: 10 }} />
+          <Table rowKey="id" loading={overview.isFetching} dataSource={filteredAccounts} columns={accountColumns} pagination={{ pageSize: 10 }} />
         </section>
       </main>
 
@@ -570,12 +610,16 @@ export default function OpsPage() {
           <Form.Item name="tenantId" label="企业" rules={[{ required: true, message: "请选择企业" }]}>
             <Select
               showSearch
+              allowClear
               optionFilterProp="label"
               placeholder="选择企业"
-              options={(overview.data?.tenants ?? []).map((tenant) => ({
-                value: tenant.id,
-                label: `${tenant.name} · ${tenant.code}`
-              }))}
+              options={tenantOptions}
+              notFoundContent="未找到企业"
+              filterOption={(input, option) =>
+                String(option?.label ?? "")
+                  .toLowerCase()
+                  .includes(input.trim().toLowerCase())
+              }
             />
           </Form.Item>
           <Form.Item name="name" label="姓名" rules={[{ required: true, min: 2, message: "请输入至少 2 个字符的姓名" }]}>

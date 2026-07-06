@@ -10,7 +10,7 @@ enum AppConfig {
     }
 
     static let companyName = "北京七数智联科技有限公司"
-    static let productLine = "企业级 AI 工作填报与智能汇报 SaaS"
+    static let productLine = "企业级 AI 工作日历与周期汇报 SaaS"
     static let businessQuote = "效率是把事情做对，效能是做对的事情。"
     static let businessQuoteAuthor = "Peter Drucker"
 }

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Checkbox, DatePicker, Form, Input, InputNumber, Progress, Select, Space, Tag, Typography, message } from "antd";
 import type { CheckboxChangeEvent } from "antd/es/checkbox";
 import dayjs, { Dayjs } from "dayjs";
-import { ArrowRight, Bot, Building2, CalendarDays, CheckCircle2, ClipboardList, FileText, FolderKanban, Send, Settings2, UsersRound } from "lucide-react";
+import { ArrowRight, BookOpen, Bot, Building2, CalendarDays, CheckCircle2, ClipboardList, FileText, FolderKanban, Send, Settings2, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { projectIdFromDraftItem } from "@/components/WorkLogDraftComposer";
@@ -13,6 +13,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import {
   completeOnboardingTask,
   defaultOnboardingProgress,
+  dismissOnboarding,
   firstOpenOnboardingTask,
   loadOnboardingProgress,
   onboardingCompletion,
@@ -71,9 +72,15 @@ const roleLabels: Record<string, string> = {
 const fallbackTask = {
   id: "profile" as const,
   title: "确认我的账号",
-  description: "确认当前账号信息后进入工作台。",
+  description: "确认当前账号信息后进入工作空间。",
   actionLabel: "确认账号"
 };
+
+const guideHrefByFlow = {
+  admin: "/guide#admin",
+  manager: "/guide#manager",
+  employee: "/guide#employee"
+} as const;
 
 function normalizedDraftItems(draft: WorkLogDraft): WorkLogDraftItem[] {
   return draft.items?.length ? draft.items : [draft];
@@ -90,8 +97,8 @@ function workLogPayload(item: DraftConfirmItem) {
   };
   return {
     date: safeDate.format("YYYY-MM-DD"),
-    title: item.title || "首条工作日志",
-    content: item.content || item.title || "首条工作日志",
+    title: item.title || "首条工作记录",
+    content: item.content || item.title || "首条工作记录",
     hours: Number.isFinite(hours) && hours > 0 ? hours : null,
     startTime: clockToIso(item.startTime),
     endTime: clockToIso(item.endTime),
@@ -139,7 +146,7 @@ export default function OnboardingPage() {
   const [reportRules, setReportRules] = useState(defaultReportRules);
   const [aiInput, setAiInput] = useState("今天完成了客户沟通和项目资料整理，准备明天继续推进需求确认。");
   const [aiMessages, setAiMessages] = useState<AiDraftMessage[]>([
-    { role: "assistant", content: "我会帮你把启动任务拆成可确认的工作项。所有日报都先生成草稿，确认后才提交。" }
+    { role: "assistant", content: "我会按你的角色带你完成首次使用指引。日报和计划都会先生成草稿，确认后才提交。" }
   ]);
   const [draftItems, setDraftItems] = useState<DraftConfirmItem[]>([]);
   const [memberForm] = Form.useForm<MemberForm>();
@@ -163,6 +170,7 @@ export default function OnboardingPage() {
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? firstOpenOnboardingTask(user, progress) ?? fallbackTask;
   const progressPercent = completion.totalCount ? Math.round((completion.doneCount / completion.totalCount) * 100) : 0;
   const isAdminFlow = flow === "admin";
+  const guideHref = guideHrefByFlow[flow];
   const projectOptions = useMemo(
     () =>
       (projects.data ?? []).map((project) => ({
@@ -206,6 +214,12 @@ export default function OnboardingPage() {
     const next = skipOnboardingTask(progress, taskId);
     persistProgress(next);
     setActiveTaskId(firstOpenOnboardingTask(user, next)?.id ?? taskId);
+  };
+
+  const closeGuide = () => {
+    const next = dismissOnboarding(progress);
+    persistProgress(next);
+    router.push("/calendar");
   };
 
   const createDepartments = useMutation({
@@ -293,7 +307,7 @@ export default function OnboardingPage() {
       }));
       setAiMessages([...nextMessages, { role: "assistant", content: `${draft.assistantMessage} 请确认草稿后再提交。` }]);
       setDraftItems(items);
-      message.success(items.length > 1 ? `已生成 ${items.length} 条候选日志。` : "已生成候选日志。");
+      message.success(items.length > 1 ? `已生成 ${items.length} 条候选记录。` : "已生成候选记录。");
     },
     onError: (error) => message.error(error instanceof Error ? error.message : "草稿生成失败")
   });
@@ -301,7 +315,7 @@ export default function OnboardingPage() {
   const submitDrafts = useMutation({
     mutationFn: async () => {
       const selected = draftItems.filter((item) => item.selected);
-      if (!selected.length) throw new Error("请至少选择一条日志草稿。");
+      if (!selected.length) throw new Error("请至少选择一条工作记录草稿。");
       for (const item of selected) {
         const workLog = await apiFetch<WorkLog>("/work-logs", { method: "POST", body: JSON.stringify(workLogPayload(item)) });
         await apiFetch<WorkLog>(`/work-logs/${workLog.id}/submit`, { method: "POST" });
@@ -311,9 +325,9 @@ export default function OnboardingPage() {
     onSuccess: (count) => {
       completeTask("firstLog");
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
-      message.success(`已提交 ${count} 条工作日志。`);
+      message.success(`已提交 ${count} 条工作记录。`);
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : "日志提交失败")
+    onError: (error) => message.error(error instanceof Error ? error.message : "工作记录提交失败")
   });
 
   const addDepartmentTemplate = () => {
@@ -342,7 +356,7 @@ export default function OnboardingPage() {
       <div className="onboarding-card-head">
         <div>
           <span>企业空间</span>
-          <h2>先确认这里是正确的企业工作台</h2>
+          <h2>先确认这里是正确的企业工作空间</h2>
         </div>
         <Tag color="processing">{roleText(user?.roles ?? [])}</Tag>
       </div>
@@ -352,7 +366,7 @@ export default function OnboardingPage() {
           <strong>{user?.tenantName ?? "-"}</strong>
         </div>
         <div>
-          <span>企业代码</span>
+          <span>统一社会信用代码</span>
           <strong>{user?.tenantCode ?? "-"}</strong>
         </div>
         <div>
@@ -535,7 +549,7 @@ export default function OnboardingPage() {
           </label>
         ))}
       </div>
-      <Alert type="info" showIcon message="当前版本先保存为启动助手进度。后续可在团队设置中统一管理规则。" />
+      <Alert type="info" showIcon message="当前设置会先保存到首次使用指引。后续可在团队设置中统一管理规则。" />
       <div className="onboarding-card-actions">
         <Button type="primary" onClick={() => completeTask("rules")}>
           使用推荐设置
@@ -549,7 +563,7 @@ export default function OnboardingPage() {
       <div className="onboarding-card-head">
         <div>
           <span>项目</span>
-          <h2>创建第一个项目，用来承接日报进展</h2>
+          <h2>创建第一个项目，用来承接工作记录和风险</h2>
         </div>
         <Tag>{projects.data?.length ?? 0} 个当前项目</Tag>
       </div>
@@ -588,7 +602,7 @@ export default function OnboardingPage() {
     <div className="onboarding-task-card">
       <div className="onboarding-card-head">
         <div>
-          <span>首条日志</span>
+          <span>首条记录</span>
           <h2>用一句话生成草稿，确认后再提交</h2>
         </div>
         <Tag color="processing">不会自动提交</Tag>
@@ -609,7 +623,7 @@ export default function OnboardingPage() {
       {draftItems.length ? (
         <div className="onboarding-draft-stack">
           <div className="onboarding-draft-summary">
-            <strong>识别到 {draftItems.length} 条候选日志</strong>
+            <strong>识别到 {draftItems.length} 条候选记录</strong>
             <span>已选 {selectedDraftCount} 条 · 合计 {selectedDraftHours.toFixed(1)}h</span>
           </div>
           {draftItems.map((item, index) => (
@@ -642,9 +656,9 @@ export default function OnboardingPage() {
             </article>
           ))}
           <div className="onboarding-submit-bar">
-            <span>共 {selectedDraftCount} 条日志，合计 {selectedDraftHours.toFixed(1)}h</span>
+            <span>共 {selectedDraftCount} 条记录，合计 {selectedDraftHours.toFixed(1)}h</span>
             <Button type="primary" loading={submitDrafts.isPending} disabled={!selectedDraftCount} onClick={() => submitDrafts.mutate()}>
-              提交 {selectedDraftCount} 条日志
+              提交 {selectedDraftCount} 条记录
             </Button>
           </div>
         </div>
@@ -678,10 +692,10 @@ export default function OnboardingPage() {
           <div className="onboarding-card-head">
             <div>
               <span>周期汇报</span>
-              <h2>基于日报生成部门汇报</h2>
+              <h2>基于工作记录生成部门汇报</h2>
             </div>
           </div>
-          <p className="onboarding-card-copy">有真实日报后，汇报页会显示数据准备度，并推荐今日/本周汇报。</p>
+          <p className="onboarding-card-copy">有真实工作记录后，汇报页会显示数据准备度，并推荐今日/本周汇报。</p>
           <div className="onboarding-card-actions">
             <Button type="primary" icon={<FileText size={16} />} onClick={() => completeTask("departmentReport")}>
               标记完成
@@ -696,7 +710,7 @@ export default function OnboardingPage() {
         <div className="onboarding-card-head">
           <div>
             <span>填报记录</span>
-            <h2>查看我的日报和草稿</h2>
+            <h2>查看我的工作记录和草稿</h2>
           </div>
         </div>
         <p className="onboarding-card-copy">提交后可以在填报记录里继续查看详情、编辑草稿和下载附件。</p>
@@ -721,21 +735,45 @@ export default function OnboardingPage() {
     return renderNavigationCard();
   };
 
+  const renderCompletionCard = () => (
+    <div className="onboarding-task-card">
+      <div className="onboarding-card-head">
+        <div>
+          <span>指引完成</span>
+          <h2>已经可以开始日常使用</h2>
+        </div>
+        <Tag color="success">已完成</Tag>
+      </div>
+      <p className="onboarding-card-copy">更多操作可以在官网使用指南中继续查看。指南已按企业管理员、部门经理和员工分别整理。</p>
+      <div className="onboarding-card-actions">
+        <Button type="primary" icon={<ArrowRight size={16} />} onClick={closeGuide}>
+          进入工作日历
+        </Button>
+        <Button icon={<BookOpen size={16} />} onClick={() => router.push(guideHref)}>
+          查看使用指南
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="page-stack onboarding-page">
       <div className="page-header onboarding-header">
         <div>
           <Typography.Title level={3} className="page-title">
-            AI 启动助手
+            首次使用指引
           </Typography.Title>
           <Typography.Text className="page-subtitle">
-            {isAdminFlow ? "我会帮你把企业空间配置到可用状态，先自动完成大部分基础工作。" : "先完成你的首条工作日志，再进入日常工作台。"}
+            {isAdminFlow ? "第一次进入系统时，先完成企业信息、成员和项目的关键设置。" : "第一次进入系统时，先确认账号范围，再完成一条工作记录。"}
           </Typography.Text>
         </div>
         <Space wrap>
-          <Button onClick={() => router.push("/calendar")}>进入工作日历</Button>
+          <Button icon={<BookOpen size={16} />} onClick={() => router.push(guideHref)}>
+            查看使用指南
+          </Button>
+          <Button onClick={closeGuide}>{completion.isComplete ? "完成指引，进入工作日历" : "稍后进入工作日历"}</Button>
           {completion.isComplete ? (
-            <Button type="primary" icon={<ArrowRight size={16} />} onClick={() => router.push("/calendar")}>
+            <Button type="primary" icon={<ArrowRight size={16} />} onClick={closeGuide}>
               开始使用
             </Button>
           ) : null}
@@ -750,8 +788,8 @@ export default function OnboardingPage() {
                 <Bot size={18} />
               </span>
               <div>
-                <strong>{flow === "admin" ? "企业管理员启动流程" : flow === "manager" ? "部门经理启动流程" : "员工启动流程"}</strong>
-                <p>当前任务：{activeTask.title}</p>
+                <strong>{flow === "admin" ? "企业管理员指引" : flow === "manager" ? "部门经理指引" : "员工指引"}</strong>
+                <p>当前任务：{completion.isComplete ? "查看使用指南或进入工作日历" : activeTask.title}</p>
               </div>
             </div>
             <div className="onboarding-chat-list">
@@ -763,13 +801,13 @@ export default function OnboardingPage() {
             </div>
           </section>
 
-          {renderActiveTask()}
+          {completion.isComplete ? renderCompletionCard() : renderActiveTask()}
         </main>
 
         <aside className="onboarding-checklist">
           <div className="onboarding-progress-head">
             <div>
-              <span>启动进度</span>
+              <span>指引进度</span>
               <strong>
                 {completion.doneCount}/{completion.totalCount}
               </strong>
@@ -792,9 +830,13 @@ export default function OnboardingPage() {
             })}
           </div>
           <div className="onboarding-next-panel">
-            <strong>{completion.isComplete ? "启动完成" : "建议下一步"}</strong>
-            <p>{completion.isComplete ? "现在可以进入工作日历，开始日常填报和管理。" : activeTask.description}</p>
-            {!completion.isComplete && activeTask.id !== "firstLog" ? (
+            <strong>{completion.isComplete ? "指引完成" : "建议下一步"}</strong>
+            <p>{completion.isComplete ? "可以进入工作日历，也可以先打开官网使用指南继续查看详细步骤。" : activeTask.description}</p>
+            {completion.isComplete ? (
+              <Button block icon={<BookOpen size={16} />} onClick={() => router.push(guideHref)}>
+                查看使用指南
+              </Button>
+            ) : activeTask.id !== "firstLog" ? (
               <Button block onClick={() => skipTask(activeTask.id)}>
                 这一步稍后处理
               </Button>

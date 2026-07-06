@@ -157,7 +157,7 @@ export default function LoginPage() {
                 <Typography.Title level={1} className="system-login-title">
                   登录 Work Calendar AI
                 </Typography.Title>
-                <Typography.Text className="system-login-subtitle">进入企业工作台，查看日报、项目、风险和 AI 汇报。</Typography.Text>
+                <Typography.Text className="system-login-subtitle">进入企业工作空间，查看日报、项目、风险和周期汇报。</Typography.Text>
 
                 {login.error ? <Alert className="mt-5" type="error" message={(login.error as Error).message} showIcon /> : null}
                 <Form className="system-login-form mt-6" layout="vertical" onFinish={submitLogin}>
@@ -184,7 +184,7 @@ export default function LoginPage() {
               </div>
             </Card>
             <div className="system-login-note">
-              登录后进入工作台。
+              登录后进入工作空间。
             </div>
           </div>
         </div>

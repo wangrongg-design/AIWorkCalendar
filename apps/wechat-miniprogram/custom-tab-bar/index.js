@@ -2,7 +2,7 @@ Component({
   data: {
     selected: 0,
     tabs: [
-      { pagePath: "/pages/calendar/calendar", label: "AI日历", icon: "calendar" },
+      { pagePath: "/pages/calendar/calendar", label: "工作日历", icon: "calendar" },
       { pagePath: "/pages/report/report", label: "填报", icon: "edit" },
       { pagePath: "/pages/work-logs/work-logs", label: "记录", icon: "list" },
       { pagePath: "/pages/projects/projects", label: "项目中心", icon: "folder" },

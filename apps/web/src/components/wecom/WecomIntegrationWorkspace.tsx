@@ -116,7 +116,7 @@ const guideSections = [
   {
     title: "1. 这项能力能做什么",
     content:
-      "企业微信集成可以将企业微信群中的工作沟通、文件和项目讨论同步到 AI Work Calendar。系统会根据发送人、群聊、项目关键词和文件内容，自动识别可形成日报、项目进展、风险和周期汇报的内容。同步内容默认只生成草稿，员工或管理员确认后才会进入正式工作日志。"
+      "企业微信集成可以将企业微信群中的工作沟通、文件和项目讨论同步到 AI Work Calendar。系统会根据发送人、群聊、项目关键词和文件内容，自动识别可形成工作记录、项目进展、风险和周期汇报的内容。同步内容默认只生成草稿，员工或管理员确认后才会进入正式工作记录。"
   },
   {
     title: "2. 使用前提",
@@ -137,7 +137,7 @@ const guideSections = [
       "本功能不使用外挂、抓包或模拟登录。",
       "只处理企业微信授权范围内的工作沟通。",
       "不会自动将聊天记录提交为正式日报。",
-      "所有日志草稿需要用户确认。",
+      "所有记录草稿需要用户确认。",
       "管理员应提前告知员工使用范围和数据用途。",
       "外部联系人不同意存档时，不得同步或分析相关内容。"
     ]
@@ -172,7 +172,7 @@ const guideSections = [
       "设置来源类型为项目群。",
       "选择绑定项目。",
       "设置是否同步文件。",
-      "开启生成日志草稿和生成项目风险。",
+      "开启生成记录草稿和生成项目风险。",
       "保存配置。",
       "等待下一次同步，或点击立即同步。"
     ]
@@ -188,14 +188,14 @@ const guideSections = [
     ]
   },
   {
-    title: "8. 员工如何确认日志草稿",
+    title: "8. 员工如何确认记录草稿",
     steps: [
       "打开填报记录。",
       "点击从沟通记录生成草稿。",
       "查看系统识别的日期、项目、内容、风险和来源消息。",
       "补充工时或修改项目。",
       "点击确认提交。",
-      "提交后，该日志会进入工作日历、项目页和 AI 报告。"
+      "提交后，该记录会进入工作日历、项目页和周期汇报。"
     ]
   },
   {
@@ -204,8 +204,8 @@ const guideSections = [
       "群文件会作为沟通来源文件保存。",
       "系统会提取文件名、类型、上传人、来源群、时间。",
       "支持对可解析文件生成摘要。",
-      "文件可作为日志、项目风险和 AI 报告的来源证据。",
-      "文件是否进入正式日志附件，需要用户确认。"
+      "文件可作为工作记录、项目风险和周期汇报的来源证据。",
+      "文件是否进入正式记录附件，需要用户确认。"
     ]
   },
   {
@@ -228,7 +228,7 @@ const guideSections = [
       ["一个项目可以绑定多个群吗？", "可以。适合研发群、客户群、测试群等多来源项目。"],
       ["一个群可以绑定多个项目吗？", "可以，但不建议作为默认方式。多项目群应开启人工确认。"],
       ["能否按发送人自动生成对应员工日报？", "可以。系统会根据企业微信 userid 映射到系统成员，再生成该成员的候选日报。名称只作为辅助信息，不作为唯一匹配依据。"],
-      ["文件会自动进入日报附件吗？", "不会。文件会先作为来源证据，用户确认后才可关联到日志。"],
+    ["文件会自动进入记录附件吗？", "不会。文件会先作为来源证据，用户确认后才可关联到工作记录。"],
       ["外部联系人不同意存档怎么办？", "不得同步和分析该外部联系人的沟通内容。"],
       ["同步失败怎么办？", "检查会话存档 secret、RSA 密钥、可信 IP、存档范围和企业微信服务状态。"]
     ]
@@ -489,7 +489,7 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
       width: 180,
       render: (_, record) => (
         <Space wrap size={4}>
-          <Tag color={record.generateLogDrafts ? "green" : "default"}>{record.generateLogDrafts ? "日志草稿" : "不生成草稿"}</Tag>
+          <Tag color={record.generateLogDrafts ? "green" : "default"}>{record.generateLogDrafts ? "记录草稿" : "不生成草稿"}</Tag>
           <Tag color={record.generateProjectRisks ? "orange" : "default"}>{record.generateProjectRisks ? "项目风险" : "不识别风险"}</Tag>
         </Space>
       )
@@ -899,7 +899,7 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
                         </Form.Item>
                       </div>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <Form.Item name="generateLogDrafts" label="生成日志草稿" valuePropName="checked">
+                        <Form.Item name="generateLogDrafts" label="生成记录草稿" valuePropName="checked">
                           <Switch checkedChildren="生成" unCheckedChildren="不生成" />
                         </Form.Item>
                         <Form.Item name="generateProjectRisks" label="生成项目风险" valuePropName="checked">
@@ -1170,7 +1170,7 @@ export function WecomIntegrationWorkspace({ canManage, departments, users, depar
             <Select mode="multiple" allowClear showSearch optionFilterProp="label" options={userOptions} placeholder="可留空，使用来源默认范围" />
           </Form.Item>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Form.Item name="generateLogDrafts" label="生成日志草稿" valuePropName="checked">
+            <Form.Item name="generateLogDrafts" label="生成记录草稿" valuePropName="checked">
               <Switch checkedChildren="生成" unCheckedChildren="关闭" />
             </Form.Item>
             <Form.Item name="generateProjectRisks" label="生成项目风险" valuePropName="checked">

@@ -34,21 +34,21 @@ const adminTasks: OnboardingTaskDefinition[] = [
   { id: "company", title: "确认企业信息", description: "确认企业空间、管理员和基础身份信息。", actionLabel: "确认信息" },
   { id: "departments", title: "创建部门结构", description: "使用推荐模板快速建立部门，后续可继续调整。", actionLabel: "使用推荐部门" },
   { id: "members", title: "添加成员", description: "先添加核心成员或自己测试账号，系统会进入真实协作状态。", actionLabel: "添加成员" },
-  { id: "rules", title: "设置填报规则", description: "确认日报时间、提醒和周报周期。", actionLabel: "使用推荐设置" },
-  { id: "project", title: "创建第一个项目", description: "让日报可以沉淀到项目进展、风险和汇报中。", actionLabel: "创建项目" },
-  { id: "firstLog", title: "提交首条工作日志", description: "用自然语言生成草稿，确认后进入工作日历。", actionLabel: "生成草稿" }
+  { id: "rules", title: "设置填报规则", description: "确认日报时间、提醒和周期汇报规则。", actionLabel: "使用推荐设置" },
+  { id: "project", title: "创建第一个项目", description: "让工作记录沉淀到项目进展、风险和汇报中。", actionLabel: "创建项目" },
+  { id: "firstLog", title: "提交首条工作记录", description: "用自然语言生成草稿，确认后进入工作日历。", actionLabel: "生成草稿" }
 ];
 
 const managerTasks: OnboardingTaskDefinition[] = [
   { id: "profile", title: "确认我的工作范围", description: "确认当前部门和日报要求，之后只看权限范围内的数据。", actionLabel: "确认范围" },
-  { id: "firstLog", title: "提交首条工作日志", description: "先用一条真实记录体验项目、日历和汇报如何联动。", actionLabel: "生成草稿" },
+  { id: "firstLog", title: "提交首条工作记录", description: "先用一条真实记录体验项目、日历和汇报如何联动。", actionLabel: "生成草稿" },
   { id: "departmentCalendar", title: "查看部门日历", description: "打开工作日历，查看团队填报率、缺填和风险/阻塞。", actionLabel: "查看日历" },
-  { id: "departmentReport", title: "生成部门汇报", description: "进入汇报页，基于真实日报整理部门周期汇报。", actionLabel: "查看汇报" }
+  { id: "departmentReport", title: "生成部门汇报", description: "进入汇报页，基于真实工作记录整理部门周期汇报。", actionLabel: "查看汇报" }
 ];
 
 const employeeTasks: OnboardingTaskDefinition[] = [
   { id: "profile", title: "确认我的账号", description: "确认姓名、部门和是否需要日报。", actionLabel: "确认账号" },
-  { id: "firstLog", title: "提交首条工作日志", description: "像聊天一样描述今天做了什么，再确认草稿。", actionLabel: "生成草稿" },
+  { id: "firstLog", title: "提交首条工作记录", description: "像聊天一样描述今天做了什么，再确认草稿。", actionLabel: "生成草稿" },
   { id: "records", title: "查看填报记录", description: "查看自己的草稿、已提交记录和 AI 结构化结果。", actionLabel: "查看记录" }
 ];
 

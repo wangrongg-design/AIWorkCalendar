@@ -115,15 +115,15 @@ function requestParams(request: ReportRequest) {
 }
 
 function readinessSummary(readiness?: ReportReadiness | null) {
-  if (!readiness) return "正在读取日报、项目和风险/阻塞数据";
+  if (!readiness) return "正在读取工作记录、项目和风险/阻塞数据";
   const stats = readiness.stats;
-  if (!stats.workLogCount) return "当前周期暂无可用日报";
-  return `${stats.workLogCount} 条日报/计划，覆盖 ${stats.coveredMemberCount} 人，${stats.projectCount} 个项目`;
+  if (!stats.workLogCount) return "当前周期暂无可用工作记录";
+  return `${stats.workLogCount} 条工作记录，覆盖 ${stats.coveredMemberCount} 人，${stats.projectCount} 个项目`;
 }
 
 function readinessMetricItems(stats?: ReportReadinessStats | null) {
   return [
-    { label: "需看记录", value: stats?.workLogCount ?? 0, suffix: "条" },
+    { label: "来源记录", value: stats?.workLogCount ?? 0, suffix: "条" },
     { label: "覆盖成员", value: stats?.coveredMemberCount ?? 0, suffix: "人" },
     { label: "未填报", value: stats?.missingMemberCount ?? 0, suffix: "人" },
     { label: "风险/阻塞", value: (stats?.riskCount ?? 0) + (stats?.blockerCount ?? 0), suffix: "条" },
@@ -287,7 +287,7 @@ function downloadReportWord(report: Report) {
 <body>
   <h1>${escapeHtml(title)}</h1>
   <div class="meta">汇报周期：${escapeHtml(period)} · 生成时间：${dateTimeText(report.createdAt)}</div>
-  ${evidence ? `<div class="note">基于 ${evidence.stats.workLogCount} 条日报/计划、${evidence.stats.coveredMemberCount} 名成员、${evidence.stats.projectCount} 个项目生成。请结合实际业务确认。</div>` : ""}
+  ${evidence ? `<div class="note">基于 ${evidence.stats.workLogCount} 条工作记录、${evidence.stats.coveredMemberCount} 名成员、${evidence.stats.projectCount} 个项目生成。请结合实际业务确认。</div>` : ""}
   <h2>汇报摘要</h2>
   <p>${escapeHtml(content.summary)}</p>
   <h2>关键进展</h2>
@@ -302,7 +302,7 @@ function downloadReportWord(report: Report) {
     <thead><tr><th>成员</th><th>工时</th></tr></thead>
     <tbody>${hoursRows || '<tr><td colspan="2">暂无</td></tr>'}</tbody>
   </table>
-  <h2>来源日报/计划依据</h2>
+  <h2>来源记录依据</h2>
   <table>
     <thead><tr><th>日期</th><th>成员</th><th>项目</th><th>标题</th></tr></thead>
     <tbody>${sourceRows || '<tr><td colspan="4">暂无来源记录</td></tr>'}</tbody>
@@ -503,8 +503,8 @@ export default function ReportsPage() {
       : readiness.isError
         ? readiness.error instanceof Error ? readiness.error.message : "数据检查失败，请重试。"
       : readiness.data?.canGenerate
-        ? `${readiness.data.stats.workLogCount} 条日报/计划，覆盖 ${readiness.data.stats.coveredMemberCount} 人，${activeRiskCount} 条风险/阻塞。`
-        : "当前范围内没有足够日报/计划，无法生成有效汇报。";
+        ? `${readiness.data.stats.workLogCount} 条工作记录，覆盖 ${readiness.data.stats.coveredMemberCount} 人，${activeRiskCount} 条风险/阻塞。`
+        : "当前范围内没有足够工作记录，无法生成有效汇报。";
   const readinessTone = periodTooLong || readiness.isError
     ? "error"
     : activeExistingReport
@@ -538,7 +538,7 @@ export default function ReportsPage() {
       return;
     }
     if (readiness.data && !readiness.data.canGenerate) {
-      message.warning(readiness.data.emptyReason ?? "当前周期暂无可用日报");
+      message.warning(readiness.data.emptyReason ?? "当前周期暂无可用工作记录");
       return;
     }
     const request = { ...values, departmentId: isDepartmentReport(values.type) ? values.departmentId : undefined };
@@ -700,7 +700,7 @@ export default function ReportsPage() {
               <span>步骤 3</span>
               <div>
                 <strong>检查可用数据</strong>
-                <p>生成前先确认日报、成员、项目、风险/阻塞和工时覆盖。</p>
+                <p>生成前先确认工作记录、成员、项目、风险/阻塞和工时覆盖。</p>
               </div>
             </div>
 
@@ -860,7 +860,7 @@ export default function ReportsPage() {
                   <Space wrap>
                     <Button size="small" onClick={() => retryReport(selectedReport)}>重试</Button>
                     <Button size="small" onClick={() => form.setFieldsValue({ type: selectedReport.type, range: [dayjs(selectedReport.periodStart), dayjs(selectedReport.periodEnd)], departmentId: selectedReport.departmentId ?? COMPANY_SCOPE })}>调整时间范围</Button>
-                    <Button size="small" onClick={() => router.push("/work-logs")}>去补充日报</Button>
+                    <Button size="small" onClick={() => router.push("/work-logs")}>去补充记录</Button>
                     <Button size="small" onClick={() => reports.refetch()}>刷新列表</Button>
                   </Space>
                 }
@@ -874,8 +874,8 @@ export default function ReportsPage() {
                   message="生成内容请结合实际业务确认"
                   description={
                     selectedContent.evidence
-                      ? `基于 ${selectedContent.evidence.stats.workLogCount} 条日报/计划、${selectedContent.evidence.stats.coveredMemberCount} 名成员、${selectedContent.evidence.stats.projectCount} 个项目生成。`
-                      : "这份汇报基于已提交日报生成。"
+                      ? `基于 ${selectedContent.evidence.stats.workLogCount} 条工作记录、${selectedContent.evidence.stats.coveredMemberCount} 名成员、${selectedContent.evidence.stats.projectCount} 个项目生成。`
+                      : "这份汇报基于已提交工作记录生成。"
                   }
                 />
 
@@ -927,7 +927,7 @@ export default function ReportsPage() {
                 </section>
 
                 <section className="report-detail-section">
-                  <h3>来源日报/计划依据</h3>
+                  <h3>来源记录依据</h3>
                   {selectedContent.evidence?.sources.length ? (
                     <div className="report-source-list">
                       {selectedContent.evidence.sources.map((item) => (

@@ -129,7 +129,7 @@ const freeBillingPlan = {
   name: "免费试用",
   price: "¥0",
   description: "企业免费试用 1 个月，不限制人数，完整功能开放。",
-  features: ["企业免费试用 1 个月", "不限制成员人数", "完整 AI 工作日历功能", "AI 日报、周报、月报", "AI 风险分析", "AI 工作问答"]
+  features: ["企业免费试用 1 个月", "不限制成员人数", "完整 AI 工作日历功能", "周期汇报", "AI 风险分析", "AI 工作助手"]
 };
 
 const statusOptions: Array<{ value: SubscriptionStatus; label: string; color: string }> = [

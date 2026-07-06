@@ -2,7 +2,7 @@
   <view class="calendar-home-header">
     <view class="header-main">
       <view>
-        <view class="page-title">AI日历</view>
+        <view class="page-title">工作日历</view>
         <view class="page-subtitle">{{homeSubtitle}}</view>
         <view class="ai-generated-disclosure calendar-disclosure">人工智能生成提示</view>
       </view>

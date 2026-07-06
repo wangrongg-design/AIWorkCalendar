@@ -51,7 +51,7 @@ export function workLogDetailStatus(record: WorkLog) {
 }
 
 function workLogKindLabel(record: WorkLog) {
-  return (record.kind ?? "DAILY") === "PLAN" ? "工作计划" : "工作日报";
+  return (record.kind ?? "DAILY") === "PLAN" ? "计划" : "日报";
 }
 
 function compactDisplayText(value?: string | null) {
@@ -137,7 +137,7 @@ function fallbackAnalysisSummary(record: WorkLog, projectName: string) {
   const title = compactDisplayText(record.title);
   const projectText = projectName && projectName !== "未关联" ? `，关联项目「${projectName}」` : "";
   if (!title) return "该记录内容较短，暂未形成更多分析结论。";
-  return `本次${detailKind === "工作计划" ? "计划" : "记录"}围绕「${title}」展开${projectText}，耗时 ${formatDisplayHours(record.hours)}。`;
+  return `本次${(record.kind ?? "DAILY") === "PLAN" ? detailKind : "记录"}围绕「${title}」展开${projectText}，耗时 ${formatDisplayHours(record.hours)}。`;
 }
 
 function displayAnalysisSummary(record: WorkLog, projectName: string) {

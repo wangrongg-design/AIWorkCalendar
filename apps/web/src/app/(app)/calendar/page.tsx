@@ -25,15 +25,6 @@ import {
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import {
-  defaultOnboardingProgress,
-  dismissOnboarding,
-  firstOpenOnboardingTask,
-  loadOnboardingProgress,
-  onboardingCompletion,
-  saveOnboardingProgress,
-  type OnboardingProgressState
-} from "@/lib/onboarding";
 import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 
 type OrgResponse = {
@@ -93,7 +84,7 @@ const { RangePicker } = DatePicker;
 const quickQuestions = ["范围风险/阻塞", "跨月项目进度", "人员投入", "异常工时"];
 const copilotActions = [
   { label: "提醒缺填成员", prompt: "列出当前分析范围内需要补齐日报或计划的成员，并给出提醒话术。" },
-  { label: "生成范围总结", prompt: "基于当前分析范围内的日报和计划，生成管理总结，区分已完成、计划、风险和下一步。" },
+  { label: "生成范围总结", prompt: "基于当前分析范围内的工作记录，生成管理总结，区分已完成、计划、风险和下一步。" },
   { label: "查看风险/阻塞项目", prompt: "列出当前范围内存在风险或阻塞的项目，并说明原因。" }
 ];
 
@@ -356,7 +347,6 @@ export default function CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
-  const [onboardingProgressState, setOnboardingProgressState] = useState<OnboardingProgressState>(defaultOnboardingProgress);
   const today = dayjs().format("YYYY-MM-DD");
   const [quickFillDate, setQuickFillDate] = useState(dayjs());
   const [month, setMonth] = useState(dayjs());
@@ -390,7 +380,7 @@ export default function CalendarPage() {
     {
       id: "welcome",
       role: "assistant",
-      content: "可以直接问我：指定范围内的团队重点、跨月风险/阻塞、未来计划、某个部门工时投入。回答只基于你当前权限可见的日报和计划。"
+      content: "可以直接问我：指定范围内的团队重点、跨月风险/阻塞、未来计划、某个部门工时投入。回答只基于你当前权限可见的工作记录。"
     }
   ]);
 
@@ -402,18 +392,6 @@ export default function CalendarPage() {
     setMonth(nextDate);
     setSelectedDate(dateParam);
   }, [searchParams]);
-
-  useEffect(() => {
-    if (!user) return;
-    const syncOnboardingProgress = () => setOnboardingProgressState(loadOnboardingProgress(user));
-    syncOnboardingProgress();
-    window.addEventListener("storage", syncOnboardingProgress);
-    window.addEventListener("work-calendar-ai-onboarding-updated", syncOnboardingProgress);
-    return () => {
-      window.removeEventListener("storage", syncOnboardingProgress);
-      window.removeEventListener("work-calendar-ai-onboarding-updated", syncOnboardingProgress);
-    };
-  }, [user]);
 
   const org = useQuery({
     queryKey: ["org"],
@@ -525,7 +503,7 @@ export default function CalendarPage() {
     mutationFn: async ({ preview, submit }: { preview: DraftPreview; submit: boolean }) => {
       const selectedEntries = selectedDraftComposerEntries(preview);
       if (!selectedEntries.length) {
-        throw new Error("请至少选择一条日报项。");
+        throw new Error("请至少选择一条工作记录。");
       }
       const hasAttachments = pendingAttachments.length > 0;
       const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
@@ -542,10 +520,10 @@ export default function CalendarPage() {
       return { ...preview, persistedCount: selectedEntries.length, persistedItems, hasAttachments, uploadTargetIndex, submit, attachmentUpload };
     },
     onSuccess: (preview) => {
-      message.success(preview.submit ? `已提交 ${preview.persistedCount} 条日报。` : `已保存 ${preview.persistedCount} 条草稿。`);
+      message.success(preview.submit ? `已提交 ${preview.persistedCount} 条工作记录。` : `已保存 ${preview.persistedCount} 条草稿。`);
       if (preview.attachmentUpload?.failedCount) {
         message.warning(
-          `${preview.submit ? "日报已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
+          `${preview.submit ? "工作记录已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
         );
       } else if (preview.hasAttachments && preview.persistedCount > 1) {
         message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
@@ -577,7 +555,7 @@ export default function CalendarPage() {
         {
           role: "assistant",
           content: preview.submit
-            ? `已提交到 ${firstWorkLog?.date ?? quickFillDate.format("YYYY-MM-DD")} 工作日报，稍后会进入分析队列。`
+            ? `已提交到 ${firstWorkLog?.date ?? quickFillDate.format("YYYY-MM-DD")} 工作记录，稍后会进入分析队列。`
             : `已保存 ${preview.persistedCount} 条草稿，可以在填报记录中继续处理。`
         }
       ]);
@@ -594,13 +572,13 @@ export default function CalendarPage() {
               ...current,
               items: current.items.map((item) =>
                 item.selected && item.status !== "submitted" && item.status !== "ignored"
-                  ? { ...item, status: "failed" as const, errorMessage: error instanceof Error ? error.message : "保存日报项失败，请检查后重试。" }
+                  ? { ...item, status: "failed" as const, errorMessage: error instanceof Error ? error.message : "保存工作记录失败，请检查后重试。" }
                   : item
               )
             }
           : current
       );
-      message.error(error instanceof Error ? error.message : "保存日报项失败，请检查后重试。");
+      message.error(error instanceof Error ? error.message : "保存工作记录失败，请检查后重试。");
     }
   });
 
@@ -706,7 +684,7 @@ export default function CalendarPage() {
       return {
         tone: "neutral",
         title: "等待团队数据",
-        copy: "当前范围暂无可分析成员，先确认团队、部门和日报要求配置。"
+        copy: "当前范围暂无可分析成员，先确认团队、部门和填报要求配置。"
       };
     }
     const todayRiskBlockerCount = detailRiskBlockerCount(todayStats);
@@ -722,14 +700,14 @@ export default function CalendarPage() {
       return {
         tone: "warning",
         title: `${remindCount} 位成员未填报`,
-        copy: `当前填报率 ${todayStats.fillRate}%，先补齐团队状态，避免日报和复盘失真。`
+        copy: `当前填报率 ${todayStats.fillRate}%，先补齐团队状态，避免复盘失真。`
       };
     }
     if (todayStats.filledCount === 0) {
       return {
         tone: "warning",
         title: "今天还没有提交记录",
-        copy: "建议先提醒团队提交日报或计划，避免今日状态缺失。"
+        copy: "建议先提醒团队提交工作记录，避免今日状态缺失。"
       };
     }
     return {
@@ -822,7 +800,7 @@ export default function CalendarPage() {
       : detailReminderNames;
   const aiObservations = useMemo(() => {
     if (!selectedDate) return [];
-    if (dayDetail.isFetching) return ["正在分析团队日报…"];
+    if (dayDetail.isFetching) return ["正在分析团队工作记录…"];
     const stats = dayDetail.data?.stats;
     if (!stats) return ["等待团队数据同步后生成洞察。"];
     const planLogCount = stats.planLogCount ?? 0;
@@ -892,10 +870,10 @@ export default function CalendarPage() {
       return ["正在分析当前月历数据…"];
     }
     if (!summary.filled && !summary.missing) {
-      return ["当前月历暂无可分析日报或计划。"];
+      return ["当前月历暂无可分析工作记录。"];
     }
     return [
-      summary.remind > 0 ? `本月截至今天还有 ${summary.remind} 人次日报需要提醒补齐。` : `本月填报率为 ${summary.rate}%，团队提交节奏稳定。`,
+      summary.remind > 0 ? `本月截至今天还有 ${summary.remind} 人次填报需要提醒补齐。` : `本月填报率为 ${summary.rate}%，团队提交节奏稳定。`,
       summary.riskBlockers > 0 ? `本月累计出现 ${summary.riskBlockers} 条风险/阻塞信号，建议查看重点日期和项目。` : "本月暂未出现明显风险/阻塞信号。",
       summary.filled > 0 ? `当前范围累计 ${summary.filled} 条已提交记录，可继续追问项目进展和人员投入。` : "还没有足够记录支撑深入分析。"
     ];
@@ -918,8 +896,8 @@ export default function CalendarPage() {
       displayedCopilotRangeLabel,
       `${displayedCopilotRangeDays}天范围`,
       scope === "self" ? user?.name ?? "我" : scope === "department" ? "本部门" : "全公司",
-      "日历看板",
-      "日报数据",
+      "工作日历",
+      "工作记录",
       "工作计划"
     ],
     [displayedCopilotRangeDays, displayedCopilotRangeLabel, scope, user?.name]
@@ -1004,7 +982,7 @@ export default function CalendarPage() {
     setLastQuickFillAiInput("");
     setQuickFillAiMessages([]);
     setDraftPreview({
-      assistantMessage: "今日日报项",
+      assistantMessage: "今日工作记录",
       items: [],
       attachedToFirst: false,
       attachmentTargetIndex: 0
@@ -1103,7 +1081,7 @@ export default function CalendarPage() {
       const nextItem = createEmptyDraftComposerItem(quickFillDate);
       if (!current) {
         return {
-          assistantMessage: "手动新增项目日报项。",
+          assistantMessage: "手动新增工作记录。",
           items: [nextItem],
           attachedToFirst: false,
           attachmentTargetIndex: 0
@@ -1225,14 +1203,6 @@ export default function CalendarPage() {
     setMonth(value);
     setCopilotRange(normalizeCopilotRange([value.startOf("month"), value.endOf("month")]));
   };
-  const onboardingStatus = onboardingCompletion(user, onboardingProgressState);
-  const nextOnboardingTask = firstOpenOnboardingTask(user, onboardingProgressState);
-  const showOnboardingChecklist = Boolean(user && !onboardingProgressState.dismissed && !onboardingStatus.isComplete);
-  const hideOnboardingChecklist = () => {
-    const next = dismissOnboarding(onboardingProgressState);
-    setOnboardingProgressState(next);
-    saveOnboardingProgress(user, next);
-  };
   const quickFillKindTitle = quickFillDate.format("YYYY-MM-DD") > today ? "填写计划" : "填写日报";
 
   return (
@@ -1291,31 +1261,6 @@ export default function CalendarPage() {
         />
       ) : null}
 
-      {showOnboardingChecklist ? (
-        <section className="calendar-onboarding-banner" aria-label="启动助手进度">
-          <div className="calendar-onboarding-main">
-            <span className="calendar-onboarding-icon">
-              <Bot size={18} />
-            </span>
-            <div>
-              <strong>启动助手还差 {onboardingStatus.totalCount - onboardingStatus.doneCount} 步</strong>
-              <p>
-                已完成 {onboardingStatus.doneCount}/{onboardingStatus.totalCount} · 下一步：{nextOnboardingTask?.title ?? "继续完成企业启动"}
-              </p>
-            </div>
-          </div>
-          <Progress className="calendar-onboarding-progress" percent={Math.round((onboardingStatus.doneCount / onboardingStatus.totalCount) * 100)} size="small" strokeColor="var(--color-ai)" />
-          <div className="calendar-onboarding-actions">
-            <Button type="primary" onClick={() => router.push("/onboarding")}>
-              继续启动
-            </Button>
-            <Button type="text" onClick={hideOnboardingChecklist}>
-              收起
-            </Button>
-          </div>
-        </section>
-      ) : null}
-
       <section className="calendar-main-panel calendar-main-panel-full">
           <div className="workbench-hero">
             <div className={`workbench-ai workbench-decision is-${todayPriority.tone}`}>
@@ -1367,10 +1312,10 @@ export default function CalendarPage() {
                   className="mobile-next-action is-primary"
                   onClick={() => (scope === "self" ? openQuickFill(today) : setSelectedDate(today))}
                 >
-                  {scope === "self" ? "填写今日日报" : "查看今日详情"}
+                  {scope === "self" ? "填写今日记录" : "查看今日详情"}
                 </button>
                 <button type="button" className="mobile-next-action" onClick={() => setChatOpen(true)}>
-                  打开工作助手
+                  打开 AI 工作助手
                 </button>
               </div>
             </section>
@@ -1474,7 +1419,7 @@ export default function CalendarPage() {
         title={
           <div className="copilot-title">
             <Bot size={18} />
-            <span>工作助手</span>
+            <span>AI 工作助手</span>
           </div>
         }
         open={chatOpen}
@@ -1491,7 +1436,7 @@ export default function CalendarPage() {
             <div className="ai-copilot-context-title">{selectedDate ? "单日分析范围" : "跨月统计范围"}</div>
             <div className="ai-copilot-range-summary">
               <strong>{displayedCopilotRangeLabel}</strong>
-              <span>{selectedDate ? "当前按单日查看，可直接切换为日期范围统计。" : `共 ${copilotRangeDays} 天，可跨月统计日报、计划、风险和工时。`}</span>
+              <span>{selectedDate ? "当前按单日查看，可直接切换为日期范围统计。" : `共 ${copilotRangeDays} 天，可跨月统计工作记录、风险和工时。`}</span>
             </div>
             <div className="ai-copilot-context-list">
               {copilotContext.map((item) => (
@@ -1711,11 +1656,11 @@ export default function CalendarPage() {
                       ? "当前范围没有需要填报的成员"
                       : selectedDateKind === "future"
                         ? "这一天还没有团队成员提交计划"
-                        : "今天还没有团队成员提交日报"}
+                        : "这一天还没有团队成员提交日报"}
                   </div>
                   <div className="workday-empty-copy">
                     {(detailStats?.totalEmployees ?? 0) === 0
-                      ? "如需纳入日报统计，请到组织权限里为成员开启“需要填报”。"
+                      ? "如需纳入填报统计，请到团队页为成员开启“需要填报”。"
                       : selectedDateKind === "future"
                         ? `当前应提醒 ${detailReminderActionCount} 人提交计划。`
                         : `当前应提醒 ${detailRemindCount} 人补交日报。`}

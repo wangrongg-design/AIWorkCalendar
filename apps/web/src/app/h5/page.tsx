@@ -51,7 +51,7 @@ export default function H5PromoPage() {
               <ArrowRight size={16} />
             </a>
             <a className="h5-secondary-action" href="/login">
-              登录工作台
+              登录工作空间
             </a>
           </div>
           <div className="h5-proof">
@@ -125,7 +125,7 @@ export default function H5PromoPage() {
         <div className="h5-phone">
           <div className="h5-phone-header">
             <span>今日团队</span>
-            <strong>AI日历</strong>
+            <strong>工作日历</strong>
           </div>
           <div className="h5-phone-summary">
             <div>
@@ -179,7 +179,7 @@ export default function H5PromoPage() {
       <section className="h5-final-cta">
         <Sparkles size={34} />
         <h2>把团队工作沉淀成企业资产。</h2>
-        <p>现在创建企业，免费试用 1 个月。登录页仅用于已有账号进入工作台。</p>
+        <p>现在创建企业，免费试用 1 个月。登录页仅用于已有账号进入工作空间。</p>
         <a className="h5-primary-action" href="/#signup">
           免费创建企业
           <ArrowRight size={16} />
