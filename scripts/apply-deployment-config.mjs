@@ -25,6 +25,15 @@ function hostFromUrl(url) {
   return new URL(url).host;
 }
 
+function serverNameValue(valueOrValues, fallback) {
+  const values = Array.isArray(valueOrValues)
+    ? valueOrValues
+    : valueOrValues
+      ? [valueOrValues]
+      : [fallback];
+  return Array.from(new Set(values.filter(Boolean).map(String))).join(" ");
+}
+
 const env = [
   `DATABASE_URL=${value(config.database?.url)}`,
   "",
@@ -97,8 +106,8 @@ writeFileSync(
   `${JSON.stringify(privateProjectConfig, null, 2)}\n`
 );
 
-const webServerName = config.nginx?.webServerName ?? hostFromUrl(config.domains.webUrl);
-const apiServerName = config.nginx?.apiServerName ?? hostFromUrl(config.domains.apiUrl);
+const webServerName = serverNameValue(config.nginx?.webServerNames ?? config.nginx?.webServerName, hostFromUrl(config.domains.webUrl));
+const apiServerName = serverNameValue(config.nginx?.apiServerNames ?? config.nginx?.apiServerName, hostFromUrl(config.domains.apiUrl));
 const clientMaxBodySize = config.nginx?.clientMaxBodySize ?? "16m";
 const nginx = `server {
   listen 80;

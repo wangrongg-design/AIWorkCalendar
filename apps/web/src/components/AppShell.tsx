@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [authReady, router, token]);
 
   useEffect(() => {
-    if (!authReady || !token || !user || pathname === "/onboarding") return;
+    if (!authReady || !token || !user || pathname === "/onboarding" || user.isFirstLogin !== true) return;
     const progress = loadOnboardingProgress(user);
     const completion = onboardingCompletion(user, progress);
     if (!progress.updatedAt && !progress.dismissed && !completion.isComplete) {

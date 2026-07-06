@@ -44,6 +44,7 @@ export type AuthUser = {
   departmentName: string | null;
   roles: RoleCode[];
   requiresWorkReport?: boolean;
+  isFirstLogin?: boolean;
 };
 
 export type Department = {

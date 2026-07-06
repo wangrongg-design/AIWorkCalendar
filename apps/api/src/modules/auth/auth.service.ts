@@ -320,7 +320,8 @@ export class AuthService {
       departmentId: fullUser.departmentId,
       departmentName: fullUser.department?.name ?? null,
       roles: fullUser.roles.map((item) => item.role.code),
-      requiresWorkReport: fullUser.requiresWorkReport
+      requiresWorkReport: fullUser.requiresWorkReport,
+      isFirstLogin: !fullUser.lastLoginAt
     };
   }
 
@@ -476,6 +477,7 @@ export class AuthService {
       tenant: { name: string; code: string; logoUrl?: string | null };
       department?: { name: string } | null;
       requiresWorkReport?: boolean;
+      lastLoginAt?: Date | null;
     },
     roles: RoleCode[]
   ) {
@@ -499,7 +501,8 @@ export class AuthService {
         departmentId: user.departmentId,
         departmentName: user.department?.name ?? null,
         roles,
-        requiresWorkReport: user.requiresWorkReport ?? true
+        requiresWorkReport: user.requiresWorkReport ?? true,
+        isFirstLogin: !user.lastLoginAt
       }
     };
   }

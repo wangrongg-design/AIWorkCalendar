@@ -31,7 +31,8 @@ import {
   RoleCode,
   Subscription,
   SubscriptionPlan,
-  SubscriptionStatus
+  SubscriptionStatus,
+  WecomOverview
 } from "@/lib/types";
 
 type OrgResponse = {
@@ -328,6 +329,15 @@ export default function OrgPage() {
     queryKey: ["org"],
     queryFn: () => apiFetch<OrgResponse>("/org")
   });
+
+  const wecomOverview = useQuery({
+    queryKey: ["wecom-overview"],
+    queryFn: () => apiFetch<WecomOverview>("/wecom/overview"),
+    enabled: Boolean(user)
+  });
+
+  const hasActiveWecomIntegration = (wecomOverview.data?.integrations ?? []).some((integration) => integration.status === "ACTIVE");
+  const showWecomIntegrationTab = canManage || hasActiveWecomIntegration;
 
   const departmentById = useMemo(() => {
     return new Map((org.data?.departments ?? []).map((item) => [item.id, item]));
@@ -1385,18 +1395,22 @@ export default function OrgPage() {
                         }
                       ]
                     : []),
-                  {
-                    key: "wecom",
-                    label: "企业微信集成",
-                    children: (
-                      <WecomIntegrationWorkspace
-                        canManage={canManage}
-                        departments={org.data?.departments ?? []}
-                        users={org.data?.users ?? []}
-                        departmentFullPath={departmentFullPath}
-                      />
-                    )
-                  },
+                  ...(showWecomIntegrationTab
+                    ? [
+                        {
+                          key: "wecom",
+                          label: "企业微信集成",
+                          children: (
+                            <WecomIntegrationWorkspace
+                              canManage={canManage}
+                              departments={org.data?.departments ?? []}
+                              users={org.data?.users ?? []}
+                              departmentFullPath={departmentFullPath}
+                            />
+                          )
+                        }
+                      ]
+                    : []),
                   {
                     key: "privacy",
                     label: "备份与数据",

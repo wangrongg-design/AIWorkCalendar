@@ -6,20 +6,20 @@ const nextConfig = {
     return [
       {
         source: "/:path*",
-        has: [{ type: "host", value: "calendarseven.com" }],
-        destination: "https://www.calendarseven.com/:path*",
+        has: [{ type: "host", value: "www.calendarseven.com" }],
+        destination: "https://calendarseven.com/:path*",
         permanent: true
       },
       {
         source: "/:path*",
         has: [{ type: "host", value: "calendarsven.com" }],
-        destination: "https://www.calendarseven.com/:path*",
+        destination: "https://calendarseven.com/:path*",
         permanent: true
       },
       {
         source: "/:path*",
         has: [{ type: "host", value: "www.calendarsven.com" }],
-        destination: "https://www.calendarseven.com/:path*",
+        destination: "https://calendarseven.com/:path*",
         permanent: true
       }
     ];

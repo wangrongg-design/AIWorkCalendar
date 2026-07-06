@@ -121,6 +121,7 @@ export class WecomService {
   ) {}
 
   async overview(user: CurrentUser) {
+    const canManageWecom = this.access.isCompanyAdmin(user);
     const [integrations, sources, bindings, drafts, files, projectSuggestions, externalConsents] = await Promise.all([
       this.prisma.wecomIntegration.findMany({
         where: { tenantId: user.tenantId, deletedAt: null },
@@ -131,7 +132,7 @@ export class WecomService {
       this.findVisibleDrafts(user, 8),
       this.findVisibleFiles(user, 8),
       this.findVisibleProjectSuggestions(user, 8),
-      this.access.isCompanyAdmin(user)
+      canManageWecom
         ? this.prisma.wecomExternalContactConsent.findMany({
             where: { tenantId: user.tenantId },
             orderBy: [{ updatedAt: "desc" }],
@@ -157,9 +158,31 @@ export class WecomService {
       } as Record<WecomUserMappingStatus | "total", number>
     );
 
-    const activeIntegration = integrations.find((item) => item.status === WecomIntegrationStatus.ACTIVE) ?? integrations[0] ?? null;
+    const visibleIntegrations = canManageWecom
+      ? integrations
+      : integrations.map((integration) => ({
+          id: integration.id,
+          tenantId: integration.tenantId,
+          corpId: "",
+          rsaPublicKeyConfigured: integration.rsaPublicKeyConfigured,
+          mode: integration.mode,
+          status: integration.status,
+          syncDepartmentIds: [],
+          syncUserIds: [],
+          syncChatIds: [],
+          syncFiles: integration.syncFiles,
+          generateLogDrafts: integration.generateLogDrafts,
+          generateProjectRisks: integration.generateProjectRisks,
+          retentionDays: integration.retentionDays,
+          lastSyncAt: integration.lastSyncAt,
+          lastSyncStatus: integration.lastSyncStatus,
+          lastError: integration.status === WecomIntegrationStatus.ERROR ? integration.lastError : null,
+          createdAt: integration.createdAt,
+          updatedAt: integration.updatedAt
+        }));
+    const activeIntegration = visibleIntegrations.find((item) => item.status === WecomIntegrationStatus.ACTIVE) ?? visibleIntegrations[0] ?? null;
     return {
-      integrations,
+      integrations: visibleIntegrations,
       activeIntegration,
       workerRuntime: this.msgAuditWorker.getRuntimeStatus(),
       sources,

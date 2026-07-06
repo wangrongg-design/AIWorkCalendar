@@ -200,7 +200,7 @@ export default function HomePage() {
             <i />
             <i />
             <i />
-            <span>www.calendarseven.com</span>
+            <span>calendarseven.com</span>
             <strong>Team Board</strong>
           </div>
           <div className="calendarseven-window-body">

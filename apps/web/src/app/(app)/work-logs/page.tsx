@@ -23,7 +23,7 @@ import {
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
-import { CommunicationInsight, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
+import { CommunicationInsight, Project, WecomOverview, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type WorkLogForm = {
@@ -198,9 +198,19 @@ export default function WorkLogsPage() {
     queryFn: () => apiFetch<Project[]>("/projects")
   });
 
+  const wecomOverview = useQuery({
+    queryKey: ["wecom-overview"],
+    queryFn: () => apiFetch<WecomOverview>("/wecom/overview")
+  });
+
+  const showCommunicationDrafts = (wecomOverview.data?.integrations ?? []).some(
+    (integration) => integration.status === "ACTIVE" && integration.generateLogDrafts
+  );
+
   const communicationDrafts = useQuery({
     queryKey: ["wecom-log-drafts"],
-    queryFn: () => apiFetch<CommunicationInsight[]>("/wecom/log-drafts")
+    queryFn: () => apiFetch<CommunicationInsight[]>("/wecom/log-drafts"),
+    enabled: showCommunicationDrafts
   });
 
   const projectOptions = useMemo(
@@ -783,35 +793,37 @@ export default function WorkLogsPage() {
         </Button>
       </div>
 
-      <div className="surface-panel communication-draft-panel">
-        <div className="section-head">
-          <div>
-            <div className="section-title">沟通记录候选草稿</div>
-            <div className="section-subtitle">来自企业微信群的候选内容，确认后才会进入正式填报。</div>
+      {showCommunicationDrafts ? (
+        <div className="surface-panel communication-draft-panel">
+          <div className="section-head">
+            <div>
+              <div className="section-title">沟通记录候选草稿</div>
+              <div className="section-subtitle">来自企业微信群的候选内容，确认后才会进入正式填报。</div>
+            </div>
+            <Button icon={<RotateCw size={16} />} onClick={() => communicationDrafts.refetch()} loading={communicationDrafts.isFetching}>
+              刷新候选
+            </Button>
           </div>
-          <Button icon={<RotateCw size={16} />} onClick={() => communicationDrafts.refetch()} loading={communicationDrafts.isFetching}>
-            刷新候选
-          </Button>
+          {communicationDrafts.data?.length ? (
+            <div className="communication-draft-list">
+              {communicationDrafts.data.slice(0, 4).map((draft) => (
+                <button key={draft.id} type="button" className="communication-draft-item" onClick={() => openCommunicationDraft(draft)}>
+                  <span>
+                    <strong>{draft.title}</strong>
+                    <em>{draft.suggestedUser?.name ?? "未映射成员"} · {dayjs(draft.date).format("YYYY-MM-DD")} · {draft.source?.name ?? "未知来源"}</em>
+                  </span>
+                  <span className="communication-draft-tags">
+                    <Tag color={draft.confidence >= 0.8 ? "green" : "orange"}>{Math.round(draft.confidence * 100)}%</Tag>
+                    {draft.missingFields?.length ? <Tag color="orange">需确认</Tag> : null}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无沟通记录候选草稿" />
+          )}
         </div>
-        {communicationDrafts.data?.length ? (
-          <div className="communication-draft-list">
-            {communicationDrafts.data.slice(0, 4).map((draft) => (
-              <button key={draft.id} type="button" className="communication-draft-item" onClick={() => openCommunicationDraft(draft)}>
-                <span>
-                  <strong>{draft.title}</strong>
-                  <em>{draft.suggestedUser?.name ?? "未映射成员"} · {dayjs(draft.date).format("YYYY-MM-DD")} · {draft.source?.name ?? "未知来源"}</em>
-                </span>
-                <span className="communication-draft-tags">
-                  <Tag color={draft.confidence >= 0.8 ? "green" : "orange"}>{Math.round(draft.confidence * 100)}%</Tag>
-                  {draft.missingFields?.length ? <Tag color="orange">需确认</Tag> : null}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无沟通记录候选草稿" />
-        )}
-      </div>
+      ) : null}
 
       <section className="history-section">
         <div className="history-section-head">
@@ -987,7 +999,7 @@ export default function WorkLogsPage() {
                     <UploadCloud size={28} />
                   </p>
                   <p className="ant-upload-text">添加照片或文件</p>
-                  <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴微信或聊天截图。</p>
+                  <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴聊天截图。</p>
                 </Upload.Dragger>
               </div>
             </Form.Item>

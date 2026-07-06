@@ -155,19 +155,26 @@ systemctl reload nginx
 
 ```bash
 apt install -y certbot python3-certbot-nginx
-certbot --nginx -d app.example.com -d api.example.com
+certbot --nginx \
+  -d calendarseven.com \
+  -d www.calendarseven.com \
+  -d calendarsven.com \
+  -d www.calendarsven.com \
+  -d calendarapi.sevendata.cn
 ```
 
 ## 8. 验证
 
 ```bash
-curl https://api.example.com/health
+curl -I https://calendarseven.com
+curl -I https://www.calendarseven.com
+curl https://calendarapi.sevendata.cn/health
 ```
 
 浏览器打开：
 
 ```txt
-https://app.example.com
+https://calendarseven.com
 ```
 
 种子账号：

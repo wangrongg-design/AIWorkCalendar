@@ -87,7 +87,7 @@ export default function LoginPage() {
       setTenantSelectionOpen(false);
       setTenantOptions([]);
       setPendingLogin(null);
-      router.replace("/calendar");
+      router.replace(data.user.isFirstLogin ? "/onboarding?from=first-login" : "/calendar");
     }
   });
 

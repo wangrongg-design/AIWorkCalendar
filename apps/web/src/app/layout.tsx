@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.calendarseven.com"),
+  metadataBase: new URL("https://calendarseven.com"),
   title: {
     default: "七数AI Work Calendar AI｜让 AI 自动理解团队工作",
     template: "%s | 七数AI Work Calendar AI"
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     title: "七数AI Work Calendar AI｜让 AI 自动理解团队工作",
     description:
       "七数AI Work Calendar AI 是面向企业团队的 AI 工作日历系统，支持工作记录、工作日历、项目管理、风险分析和周期汇报。",
-    url: "https://www.calendarseven.com",
+    url: "https://calendarseven.com",
     siteName: "Work Calendar AI",
     locale: "zh_CN",
     type: "website"
