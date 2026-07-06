@@ -346,6 +346,7 @@ model User {
   requiresWorkReport      Boolean                  @default(true) @map("requires_work_report")
   emailVerifiedAt         DateTime?                @map("email_verified_at")
   lastLoginAt             DateTime?                @map("last_login_at")
+  firstLoginGuideShownAt  DateTime?                @map("first_login_guide_shown_at")
   lastPasswordChangedAt   DateTime?                @map("last_password_changed_at")
   failedLoginCount        Int                      @default(0) @map("failed_login_count")
   lockedUntil             DateTime?                @map("locked_until")

@@ -256,10 +256,17 @@ export class AuthService {
 
     const user = businessUsers[0];
     const roleCodes = this.roleCodesForLogin(user);
+    const shouldShowFirstLoginGuide = this.shouldShowFirstLoginGuide(user);
+    const loginAt = new Date();
 
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date(), failedLoginCount: 0, lockedUntil: null }
+      data: {
+        lastLoginAt: loginAt,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        firstLoginGuideShownAt: shouldShowFirstLoginGuide ? loginAt : undefined
+      }
     });
     await this.audit.log({
       tenantId: user.tenantId,
@@ -269,7 +276,7 @@ export class AuthService {
       targetId: user.id
     });
 
-    return this.buildAuthResponse(user, roleCodes);
+    return this.buildAuthResponse(user, roleCodes, shouldShowFirstLoginGuide);
   }
 
   async opsLogin(dto: OpsLoginDto) {
@@ -321,7 +328,7 @@ export class AuthService {
       departmentName: fullUser.department?.name ?? null,
       roles: fullUser.roles.map((item) => item.role.code),
       requiresWorkReport: fullUser.requiresWorkReport,
-      isFirstLogin: !fullUser.lastLoginAt
+      isFirstLogin: this.shouldShowFirstLoginGuide(fullUser)
     };
   }
 
@@ -478,8 +485,10 @@ export class AuthService {
       department?: { name: string } | null;
       requiresWorkReport?: boolean;
       lastLoginAt?: Date | null;
+      firstLoginGuideShownAt?: Date | null;
     },
-    roles: RoleCode[]
+    roles: RoleCode[],
+    isFirstLogin = this.shouldShowFirstLoginGuide(user)
   ) {
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
@@ -502,8 +511,12 @@ export class AuthService {
         departmentName: user.department?.name ?? null,
         roles,
         requiresWorkReport: user.requiresWorkReport ?? true,
-        isFirstLogin: !user.lastLoginAt
+        isFirstLogin
       }
     };
+  }
+
+  private shouldShowFirstLoginGuide(user: { lastLoginAt?: Date | null; firstLoginGuideShownAt?: Date | null }) {
+    return !user.lastLoginAt && !user.firstLoginGuideShownAt;
   }
 }

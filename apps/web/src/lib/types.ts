@@ -644,6 +644,11 @@ export type WecomOverview = {
     officialReady: boolean;
     mockAllowed: boolean;
   };
+  features?: {
+    configured: boolean;
+    logDraftsEnabled: boolean;
+    projectRisksEnabled: boolean;
+  };
   sources: CommunicationSource[];
   bindings: WecomUserBinding[];
   files: CommunicationFile[];

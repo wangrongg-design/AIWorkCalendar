@@ -8,7 +8,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { loadOnboardingProgress, onboardingCompletion } from "@/lib/onboarding";
 import { Notification } from "@/lib/types";
 
 const { Sider, Content } = Layout;
@@ -58,15 +57,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
   }, [authReady, router, token]);
-
-  useEffect(() => {
-    if (!authReady || !token || !user || pathname === "/onboarding" || user.isFirstLogin !== true) return;
-    const progress = loadOnboardingProgress(user);
-    const completion = onboardingCompletion(user, progress);
-    if (!progress.updatedAt && !progress.dismissed && !completion.isComplete) {
-      router.replace("/onboarding?from=first-login");
-    }
-  }, [authReady, pathname, router, token, user]);
 
   const notifications = useQuery({
     queryKey: ["notifications"],

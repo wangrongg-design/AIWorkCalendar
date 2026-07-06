@@ -203,15 +203,16 @@ export default function WorkLogsPage() {
     queryFn: () => apiFetch<WecomOverview>("/wecom/overview")
   });
 
-  const showCommunicationDrafts = (wecomOverview.data?.integrations ?? []).some(
-    (integration) => integration.status === "ACTIVE" && integration.generateLogDrafts
-  );
+  const wecomLogDraftsEnabled = Boolean(wecomOverview.data?.features?.logDraftsEnabled);
 
   const communicationDrafts = useQuery({
     queryKey: ["wecom-log-drafts"],
     queryFn: () => apiFetch<CommunicationInsight[]>("/wecom/log-drafts"),
-    enabled: showCommunicationDrafts
+    enabled: wecomLogDraftsEnabled
   });
+
+  const visibleCommunicationDrafts = communicationDrafts.data ?? wecomOverview.data?.drafts ?? [];
+  const showCommunicationDrafts = wecomLogDraftsEnabled && visibleCommunicationDrafts.length > 0;
 
   const projectOptions = useMemo(
     () =>
@@ -804,24 +805,20 @@ export default function WorkLogsPage() {
               刷新候选
             </Button>
           </div>
-          {communicationDrafts.data?.length ? (
-            <div className="communication-draft-list">
-              {communicationDrafts.data.slice(0, 4).map((draft) => (
-                <button key={draft.id} type="button" className="communication-draft-item" onClick={() => openCommunicationDraft(draft)}>
-                  <span>
-                    <strong>{draft.title}</strong>
-                    <em>{draft.suggestedUser?.name ?? "未映射成员"} · {dayjs(draft.date).format("YYYY-MM-DD")} · {draft.source?.name ?? "未知来源"}</em>
-                  </span>
-                  <span className="communication-draft-tags">
-                    <Tag color={draft.confidence >= 0.8 ? "green" : "orange"}>{Math.round(draft.confidence * 100)}%</Tag>
-                    {draft.missingFields?.length ? <Tag color="orange">需确认</Tag> : null}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无沟通记录候选草稿" />
-          )}
+          <div className="communication-draft-list">
+            {visibleCommunicationDrafts.slice(0, 4).map((draft) => (
+              <button key={draft.id} type="button" className="communication-draft-item" onClick={() => openCommunicationDraft(draft)}>
+                <span>
+                  <strong>{draft.title}</strong>
+                  <em>{draft.suggestedUser?.name ?? "未映射成员"} · {dayjs(draft.date).format("YYYY-MM-DD")} · {draft.source?.name ?? "未知来源"}</em>
+                </span>
+                <span className="communication-draft-tags">
+                  <Tag color={draft.confidence >= 0.8 ? "green" : "orange"}>{Math.round(draft.confidence * 100)}%</Tag>
+                  {draft.missingFields?.length ? <Tag color="orange">需确认</Tag> : null}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 

@@ -336,8 +336,7 @@ export default function OrgPage() {
     enabled: Boolean(user)
   });
 
-  const hasActiveWecomIntegration = (wecomOverview.data?.integrations ?? []).some((integration) => integration.status === "ACTIVE");
-  const showWecomIntegrationTab = canManage || hasActiveWecomIntegration;
+  const showWecomIntegrationTab = canManage || Boolean(wecomOverview.data?.features?.configured);
 
   const departmentById = useMemo(() => {
     return new Map((org.data?.departments ?? []).map((item) => [item.id, item]));

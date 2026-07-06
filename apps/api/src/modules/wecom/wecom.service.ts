@@ -122,6 +122,7 @@ export class WecomService {
 
   async overview(user: CurrentUser) {
     const canManageWecom = this.access.isCompanyAdmin(user);
+    const workerRuntime = this.msgAuditWorker.getRuntimeStatus();
     const [integrations, sources, bindings, drafts, files, projectSuggestions, externalConsents] = await Promise.all([
       this.prisma.wecomIntegration.findMany({
         where: { tenantId: user.tenantId, deletedAt: null },
@@ -141,6 +142,19 @@ export class WecomService {
         : Promise.resolve([])
     ]);
     await this.writeAudit(user, "WECOM_OVERVIEW_VIEWED", "WecomIntegration", integrations[0]?.id);
+    const configuredIntegrations = integrations.filter((integration) => this.isTenantWecomConfigured(integration, workerRuntime));
+    const configuredIntegrationIds = configuredIntegrations.map((integration) => integration.id);
+    const logDraftSourceCount = configuredIntegrationIds.length
+      ? await this.prisma.communicationSource.count({
+          where: {
+            tenantId: user.tenantId,
+            integrationId: { in: configuredIntegrationIds },
+            deletedAt: null,
+            generateLogDrafts: true,
+            chatId: { not: "demo-general-chat" }
+          }
+        })
+      : 0;
 
     const mappingSummary = bindings.reduce(
       (summary, item) => {
@@ -184,7 +198,12 @@ export class WecomService {
     return {
       integrations: visibleIntegrations,
       activeIntegration,
-      workerRuntime: this.msgAuditWorker.getRuntimeStatus(),
+      workerRuntime,
+      features: {
+        configured: configuredIntegrations.length > 0,
+        logDraftsEnabled: configuredIntegrations.some((item) => item.generateLogDrafts) && logDraftSourceCount > 0,
+        projectRisksEnabled: configuredIntegrations.some((item) => item.generateProjectRisks)
+      },
       sources,
       bindings,
       files,
@@ -207,6 +226,27 @@ export class WecomService {
         syncStatus: activeIntegration?.lastSyncStatus ?? CommunicationSyncStatus.PENDING
       }
     };
+  }
+
+  private isTenantWecomConfigured(
+    integration: {
+      status: WecomIntegrationStatus;
+      corpId: string;
+      msgAuditSecretRef: string;
+      rsaPrivateKeyRef: string;
+      rsaPublicKeyConfigured: boolean;
+    },
+    workerRuntime: { officialReady: boolean }
+  ) {
+    const allowMockFeature = process.env.WECOM_ALLOW_MOCK_TENANT_FEATURES === "true";
+    return (
+      integration.status === WecomIntegrationStatus.ACTIVE &&
+      Boolean(integration.corpId.trim()) &&
+      Boolean(integration.msgAuditSecretRef.trim()) &&
+      Boolean(integration.rsaPrivateKeyRef.trim()) &&
+      integration.rsaPublicKeyConfigured &&
+      (workerRuntime.officialReady || allowMockFeature)
+    );
   }
 
   async saveIntegration(user: CurrentUser, dto: SaveWecomIntegrationDto) {
