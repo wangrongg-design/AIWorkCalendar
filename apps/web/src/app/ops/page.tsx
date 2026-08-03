@@ -1,17 +1,19 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Avatar, Button, Form, Input, Layout, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
+import { Alert, Avatar, Button, DatePicker, Form, Input, Layout, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
-import dayjs from "dayjs";
-import { ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import dayjs, { Dayjs } from "dayjs";
+import { AlertTriangle, Download, ImagePlus, KeyRound, LogOut, RefreshCw, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiDownload, apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { tenantLogoSpec, validateTenantLogoFile } from "@/lib/tenant-logo";
 import { RoleCode, SubscriptionPlan, SubscriptionStatus } from "@/lib/types";
+
+const { RangePicker } = DatePicker;
 
 type OpsTenant = {
   id: string;
@@ -79,6 +81,37 @@ type OpsOverview = {
   accounts: OpsAccount[];
 };
 
+type RuntimeLogLevel = "INFO" | "WARN" | "ERROR";
+type RuntimeLogLevelFilter = RuntimeLogLevel | "ALL";
+
+type OpsRuntimeLog = {
+  id: string;
+  level: RuntimeLogLevel;
+  source: string;
+  tenantId?: string | null;
+  userId?: string | null;
+  method?: string | null;
+  path?: string | null;
+  statusCode?: number | null;
+  requestId?: string | null;
+  message: string;
+  stack?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  metadata?: unknown;
+  createdAt: string;
+};
+
+type OpsRuntimeLogResponse = {
+  logs: OpsRuntimeLog[];
+  total: number;
+  limit: number;
+  range: {
+    startAt: string;
+    endAt: string;
+  };
+};
+
 function dateText(value?: string | null) {
   return value ? dayjs(value).format("YYYY-MM-DD") : "-";
 }
@@ -117,6 +150,42 @@ function roleLabel(role: RoleCode) {
   return labels[role];
 }
 
+function runtimeLogLevelColor(level: RuntimeLogLevel) {
+  if (level === "ERROR") return "red";
+  if (level === "WARN") return "orange";
+  return "blue";
+}
+
+function runtimeLogLevelText(level: RuntimeLogLevelFilter) {
+  const labels: Record<RuntimeLogLevelFilter, string> = {
+    ERROR: "错误",
+    WARN: "警告",
+    INFO: "信息",
+    ALL: "全部"
+  };
+  return labels[level];
+}
+
+function runtimeLogQuery(range: [Dayjs, Dayjs], level: RuntimeLogLevelFilter, limit?: number) {
+  const params = new URLSearchParams();
+  params.set("startAt", range[0].toISOString());
+  params.set("endAt", range[1].toISOString());
+  params.set("level", level);
+  if (limit) params.set("limit", String(limit));
+  return params.toString();
+}
+
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function OpsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -130,6 +199,8 @@ export default function OpsPage() {
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
   const [companyAdminModalOpen, setCompanyAdminModalOpen] = useState(false);
   const [selectedAccountTenantId, setSelectedAccountTenantId] = useState<string>();
+  const [runtimeLogLevel, setRuntimeLogLevel] = useState<RuntimeLogLevelFilter>("ERROR");
+  const [runtimeLogRange, setRuntimeLogRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().subtract(24, "hour"), dayjs()]);
 
   useEffect(() => {
     if (!token) {
@@ -140,6 +211,12 @@ export default function OpsPage() {
   const overview = useQuery({
     queryKey: ["ops-overview"],
     queryFn: () => apiFetch<OpsOverview>("/ops/overview"),
+    enabled: Boolean(token && isOps)
+  });
+
+  const runtimeLogs = useQuery({
+    queryKey: ["ops-runtime-logs", runtimeLogLevel, runtimeLogRange[0].toISOString(), runtimeLogRange[1].toISOString()],
+    queryFn: () => apiFetch<OpsRuntimeLogResponse>(`/ops/runtime-logs?${runtimeLogQuery(runtimeLogRange, runtimeLogLevel)}`),
     enabled: Boolean(token && isOps)
   });
 
@@ -255,6 +332,17 @@ export default function OpsPage() {
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "账号删除失败，请刷新账号列表后重试。");
+    }
+  });
+
+  const downloadRuntimeLogs = useMutation({
+    mutationFn: () => apiDownload(`/ops/runtime-logs/download?${runtimeLogQuery(runtimeLogRange, runtimeLogLevel, 5000)}`),
+    onSuccess: ({ blob, filename }) => {
+      downloadBlob(filename, blob);
+      message.success("运行日志已开始下载");
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "运行日志下载失败，请缩小时间范围后重试。");
     }
   });
 
@@ -456,6 +544,66 @@ export default function OpsPage() {
     }
   ];
 
+  const runtimeLogColumns: ColumnsType<OpsRuntimeLog> = [
+    {
+      title: "时间",
+      width: 160,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text className="text-sm text-ink">{dayjs(record.createdAt).format("MM-DD HH:mm:ss")}</Typography.Text>
+          <Typography.Text className="text-xs text-muted">{record.source}</Typography.Text>
+        </Space>
+      )
+    },
+    {
+      title: "级别",
+      width: 90,
+      render: (_, record) => <Tag color={runtimeLogLevelColor(record.level)}>{runtimeLogLevelText(record.level)}</Tag>
+    },
+    {
+      title: "请求",
+      width: 280,
+      render: (_, record) => (
+        <Space direction="vertical" size={2} className="max-w-[260px]">
+          <Typography.Text className="text-sm text-ink" ellipsis={{ tooltip: `${record.method ?? "-"} ${record.path ?? "-"}` }}>
+            {[record.method, record.path].filter(Boolean).join(" ") || "-"}
+          </Typography.Text>
+          <Typography.Text className="text-xs text-muted">
+            {record.statusCode ? `HTTP ${record.statusCode}` : "无状态码"}
+          </Typography.Text>
+        </Space>
+      )
+    },
+    {
+      title: "错误信息",
+      render: (_, record) => (
+        <Space direction="vertical" size={2} className="max-w-[520px]">
+          <Typography.Text className="text-sm text-ink" ellipsis={{ tooltip: record.message }}>
+            {record.message}
+          </Typography.Text>
+          {record.stack ? (
+            <Typography.Text className="text-xs text-muted" ellipsis={{ tooltip: record.stack }}>
+              {record.stack.split("\n")[0]}
+            </Typography.Text>
+          ) : null}
+        </Space>
+      )
+    },
+    {
+      title: "定位信息",
+      width: 260,
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <Typography.Text className="text-xs text-muted">租户 {record.tenantId ?? "-"}</Typography.Text>
+          <Typography.Text className="text-xs text-muted">用户 {record.userId ?? "-"}</Typography.Text>
+          <Typography.Text className="text-xs text-muted" copyable={Boolean(record.requestId)}>
+            请求 {record.requestId ?? "-"}
+          </Typography.Text>
+        </Space>
+      )
+    }
+  ];
+
   if (!token || !user) {
     return null;
   }
@@ -530,6 +678,82 @@ export default function OpsPage() {
         </div>
 
         {overview.error ? <Alert type="error" showIcon message={(overview.error as Error).message} /> : null}
+        {runtimeLogs.error ? <Alert type="error" showIcon message={(runtimeLogs.error as Error).message} /> : null}
+
+        <section className="surface-panel bg-white p-5">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                <AlertTriangle size={18} className="text-danger" />
+                <Typography.Title level={4} className="!m-0 !font-medium">
+                  运行日志
+                </Typography.Title>
+              </div>
+              <Typography.Text className="text-muted">
+                仅记录结构化 API 报错信息。默认显示最近 24 小时错误日志，可按时间段下载 CSV。
+              </Typography.Text>
+            </div>
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+              <RangePicker
+                showTime
+                allowClear={false}
+                value={runtimeLogRange}
+                className="w-full xl:w-[420px]"
+                onChange={(dates) => {
+                  if (dates?.[0] && dates?.[1]) {
+                    setRuntimeLogRange([dates[0], dates[1]]);
+                  }
+                }}
+              />
+              <Select<RuntimeLogLevelFilter>
+                value={runtimeLogLevel}
+                className="w-full xl:w-[132px]"
+                options={[
+                  { value: "ERROR", label: "错误" },
+                  { value: "WARN", label: "警告" },
+                  { value: "INFO", label: "信息" },
+                  { value: "ALL", label: "全部" }
+                ]}
+                onChange={setRuntimeLogLevel}
+              />
+              <Space.Compact className="w-full xl:w-auto">
+                <Button icon={<RefreshCw size={16} />} onClick={() => runtimeLogs.refetch()} loading={runtimeLogs.isFetching}>
+                  刷新
+                </Button>
+                <Button icon={<Download size={16} />} onClick={() => downloadRuntimeLogs.mutate()} loading={downloadRuntimeLogs.isPending}>
+                  下载
+                </Button>
+              </Space.Compact>
+            </div>
+          </div>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-[12px] border border-line bg-surface-container-low p-3">
+              <div className="text-xs text-muted">匹配日志</div>
+              <div className="mt-1 text-xl font-semibold text-ink">{runtimeLogs.data?.total ?? 0}</div>
+            </div>
+            <div className="rounded-[12px] border border-line bg-surface-container-low p-3">
+              <div className="text-xs text-muted">当前级别</div>
+              <div className="mt-1 text-xl font-semibold text-ink">{runtimeLogLevelText(runtimeLogLevel)}</div>
+            </div>
+            <div className="rounded-[12px] border border-line bg-surface-container-low p-3">
+              <div className="text-xs text-muted">查询范围</div>
+              <div className="mt-1 text-sm font-medium text-ink">
+                {runtimeLogs.data
+                  ? `${dayjs(runtimeLogs.data.range.startAt).format("MM-DD HH:mm")} 至 ${dayjs(runtimeLogs.data.range.endAt).format("MM-DD HH:mm")}`
+                  : "最近 24 小时"}
+              </div>
+            </div>
+          </div>
+          <Table
+            rowKey="id"
+            size="middle"
+            loading={runtimeLogs.isFetching}
+            dataSource={runtimeLogs.data?.logs ?? []}
+            columns={runtimeLogColumns}
+            pagination={{ pageSize: 6 }}
+            scroll={{ x: 1200 }}
+          />
+        </section>
 
         <section className="surface-panel bg-white p-5">
           <div className="mb-4 flex items-center justify-between">

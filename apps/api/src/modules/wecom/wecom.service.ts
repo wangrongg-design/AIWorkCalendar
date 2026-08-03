@@ -819,7 +819,7 @@ export class WecomService {
       where: { id: insight.suggestedUserId, tenantId: user.tenantId, deletedAt: null },
       select: { id: true, departmentId: true }
     });
-    this.access.assertCanAccessUser(user, owner);
+    this.access.assertCanAccessUserByRole(user, owner);
     const status = dto.submit === false ? WorkLogStatus.DRAFT : WorkLogStatus.SUBMITTED;
     const workDate = parseDateOnly(dto.date);
     const workLog = await this.prisma.workLog.create({
@@ -1186,7 +1186,7 @@ export class WecomService {
       });
     }
     const visibleUsers = await this.prisma.user.findMany({
-      where: this.access.userWhere(user),
+      where: this.access.roleUserWhere(user),
       select: { id: true }
     });
     const visibleUserIds = visibleUsers.map((item) => item.id);

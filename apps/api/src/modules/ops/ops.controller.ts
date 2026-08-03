@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, StreamableFile } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { RoleCode } from "@prisma/client";
 import { CurrentUserParam } from "../../common/decorators/current-user.decorator";
+import { attachmentDisposition } from "../../common/http/content-disposition";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/types/current-user";
 import { CreateOpsCompanyAdminDto } from "./dto/create-company-admin.dto";
+import { RuntimeLogQueryDto } from "./dto/runtime-log-query.dto";
 import { UpdateOpsAccountDto } from "./dto/update-account.dto";
 import { UpdateOpsTenantLogoDto } from "./dto/update-tenant-logo.dto";
 import { OpsService } from "./ops.service";
@@ -19,6 +21,23 @@ export class OpsController {
   @Get("overview")
   overview() {
     return this.opsService.overview();
+  }
+
+  @Get("runtime-logs")
+  runtimeLogs(@Query() query: RuntimeLogQueryDto) {
+    return this.opsService.runtimeLogs(query);
+  }
+
+  @Get("runtime-logs/download")
+  async downloadRuntimeLogs(
+    @Query() query: RuntimeLogQueryDto,
+    @Res({ passthrough: true }) response: { setHeader(name: string, value: string | number): void }
+  ) {
+    const download = await this.opsService.downloadRuntimeLogs(query);
+    response.setHeader("Content-Type", download.contentType);
+    response.setHeader("Content-Length", download.buffer.byteLength);
+    response.setHeader("Content-Disposition", attachmentDisposition(download.fileName));
+    return new StreamableFile(download.buffer);
   }
 
   @Patch("accounts/:id")

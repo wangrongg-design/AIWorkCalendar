@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, RoleCode } from "@prisma/client";
+import { Prisma, RoleCode, RuntimeLogLevel } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { AuditService } from "../../common/audit/audit.service";
@@ -7,10 +7,13 @@ import { PrismaService } from "../../common/prisma.service";
 import { normalizeTenantLogoUrl } from "../../common/tenant-logo";
 import { CurrentUser } from "../../common/types/current-user";
 import { CreateOpsCompanyAdminDto } from "./dto/create-company-admin.dto";
+import { RuntimeLogQueryDto } from "./dto/runtime-log-query.dto";
 import { UpdateOpsAccountDto } from "./dto/update-account.dto";
 import { UpdateOpsTenantLogoDto } from "./dto/update-tenant-logo.dto";
 
 const activeMemberMonthlyPriceCents = 1900;
+const runtimeLogDefaultRangeMs = 24 * 60 * 60 * 1000;
+const runtimeLogMaxRangeMs = 31 * 24 * 60 * 60 * 1000;
 const businessAccountWhere: Prisma.UserWhereInput = {
   deletedAt: null,
   roles: {
@@ -40,6 +43,11 @@ function contactWhere(email?: string | null, phone?: string | null): Prisma.User
   if (email) OR.push({ email });
   if (phone) OR.push({ phone });
   return OR.length ? { OR } : null;
+}
+
+function csvCell(value: unknown) {
+  const text = value === null || value === undefined ? "" : typeof value === "string" ? value : JSON.stringify(value);
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 @Injectable()
@@ -153,6 +161,81 @@ export class OpsService {
         createdAt: account.createdAt
       }))
     };
+  }
+
+  async runtimeLogs(query: RuntimeLogQueryDto) {
+    const { where, startAt, endAt } = this.runtimeLogWhere(query);
+    const limit = Math.min(query.limit ?? 200, 300);
+    const [logs, total] = await Promise.all([
+      this.prisma.runtimeLog.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }],
+        take: limit
+      }),
+      this.prisma.runtimeLog.count({ where })
+    ]);
+    return {
+      logs,
+      total,
+      limit,
+      range: {
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString()
+      }
+    };
+  }
+
+  async downloadRuntimeLogs(query: RuntimeLogQueryDto) {
+    const { where, startAt, endAt } = this.runtimeLogWhere({ ...query, limit: undefined });
+    const logs = await this.prisma.runtimeLog.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }],
+      take: Math.min(query.limit ?? 5000, 5000)
+    });
+    const headers = ["时间", "级别", "状态码", "方法", "路径", "消息", "租户ID", "用户ID", "请求ID", "IP", "User-Agent", "堆栈", "元数据"];
+    const rows = logs.map((log) =>
+      [
+        log.createdAt.toISOString(),
+        log.level,
+        log.statusCode,
+        log.method,
+        log.path,
+        log.message,
+        log.tenantId,
+        log.userId,
+        log.requestId,
+        log.ip,
+        log.userAgent,
+        log.stack,
+        log.metadata
+      ].map(csvCell).join(",")
+    );
+    const csv = `\uFEFF${[headers.map(csvCell).join(","), ...rows].join("\r\n")}`;
+    return {
+      fileName: `runtime-logs-${startAt.toISOString().slice(0, 10)}_${endAt.toISOString().slice(0, 10)}.csv`,
+      contentType: "text/csv; charset=utf-8",
+      buffer: Buffer.from(csv, "utf8")
+    };
+  }
+
+  private runtimeLogWhere(query: RuntimeLogQueryDto) {
+    const endAt = query.endAt ? new Date(query.endAt) : new Date();
+    const startAt = query.startAt ? new Date(query.startAt) : new Date(endAt.getTime() - runtimeLogDefaultRangeMs);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      throw new BadRequestException("日志时间范围格式不正确");
+    }
+    if (endAt.getTime() < startAt.getTime()) {
+      throw new BadRequestException("日志结束时间不能早于开始时间");
+    }
+    if (endAt.getTime() - startAt.getTime() > runtimeLogMaxRangeMs) {
+      throw new BadRequestException("运行日志单次查询最多支持 31 天");
+    }
+    const level = query.level ?? "ERROR";
+    const where: Prisma.RuntimeLogWhereInput = {
+      createdAt: { gte: startAt, lte: endAt },
+      ...(level === "ALL" ? {} : { level: level as RuntimeLogLevel })
+    };
+    return { where, startAt, endAt };
   }
 
   async updateAccount(actor: CurrentUser, accountId: string, dto: UpdateOpsAccountDto) {

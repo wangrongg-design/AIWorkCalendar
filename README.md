@@ -84,9 +84,12 @@ OPENAI_MODEL=gpt-4.1-mini
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
+AI_DRAFT_TIMEOUT_MS=30000
+AI_DRAFT_MAX_RETRIES=0
 ```
 
 OpenAI 模式使用 Responses API 和 JSON Schema structured output。DeepSeek 模式使用 OpenAI-compatible Chat Completions 和 `response_format: { "type": "json_object" }`。如果指定了 `openai` 或 `deepseek` 但没有配置对应 API Key，系统会自动回退到 mock，避免填报提交流程被 AI 阻塞。
+智能生成日报草稿默认 30 秒超时且不自动重试，避免正式环境网关等待过久。草稿生成在 AI 超时或返回异常时会自动使用本地规则生成待确认草稿。
 
 日报附件会在提交后进入同一条 AI 分析链路。OpenAI 模式会把图片附件以内联图片输入参与分析；DeepSeek/mock 模式会使用附件元数据、摘要和可解析文本摘录。
 
@@ -158,6 +161,7 @@ pnpm build
 - `AI_PROVIDER` 已设为目标 Provider
 - `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY` 已按 Provider 配置
 - Web 的 `NEXT_PUBLIC_API_URL` 指向公开 API 域名
+- API 的 `CORS_ORIGIN` 覆盖所有正式访问入口，多个域名用英文逗号分隔
 - PostgreSQL、Redis、API、Web 都有健康检查和日志采集
 
 ## 核心接口

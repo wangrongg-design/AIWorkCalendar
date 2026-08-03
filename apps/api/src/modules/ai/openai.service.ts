@@ -114,6 +114,8 @@ type OpenAiWorkLogContent =
       | { type: "input_image"; image_url: string; detail: "low" | "high" | "auto" }
     >;
 
+const defaultAiDraftTimeoutMs = 30000;
+
 @Injectable()
 export class OpenAiService {
   private readonly logger = new Logger(OpenAiService.name);
@@ -194,18 +196,49 @@ export class OpenAiService {
     const safe = this.redaction.buildSafeAiPayload(input);
     const activeProvider = this.activeProvider();
     let result: WorkLogDraftResult;
-    if (this.provider === "deepseek" && this.deepSeekClient) {
-      result = this.normalizeDraft(await this.draftWorkLogWithDeepSeek(safe.payload), input);
-    } else if (this.provider === "openai" && this.openAiClient) {
-      result = this.normalizeDraft(await this.draftWorkLogWithOpenAi(safe.payload), input);
-    } else {
-      if (this.provider !== "mock") {
-        this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+    let providerForLog = activeProvider;
+    try {
+      if (this.provider === "deepseek" && this.deepSeekClient) {
+        result = this.normalizeDraft(await this.draftWorkLogWithDeepSeek(safe.payload), input);
+      } else if (this.provider === "openai" && this.openAiClient) {
+        result = this.normalizeDraft(await this.draftWorkLogWithOpenAi(safe.payload), input);
+      } else {
+        if (this.provider !== "mock") {
+          this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+        }
+        providerForLog = "mock";
+        result = this.localWorkLogDraft(input);
       }
+    } catch (error) {
+      providerForLog = "mock";
+      this.logger.warn(`AI work log draft failed; falling back to local draft: ${this.errorMessage(error)}`);
       result = this.localWorkLogDraft(input);
     }
-    await this.logAiCall(context, activeProvider, safe.stats);
+    await this.logAiCall(context, providerForLog, safe.stats);
     return safe.restore(result);
+  }
+
+  private aiDraftRequestOptions() {
+    return {
+      timeout: this.aiDraftTimeoutMs(),
+      maxRetries: this.aiDraftMaxRetries()
+    };
+  }
+
+  private aiDraftTimeoutMs() {
+    const value = Number(process.env.AI_DRAFT_TIMEOUT_MS ?? process.env.AI_REQUEST_TIMEOUT_MS);
+    if (Number.isFinite(value) && value >= 5000) return value;
+    return defaultAiDraftTimeoutMs;
+  }
+
+  private aiDraftMaxRetries() {
+    const value = Number(process.env.AI_DRAFT_MAX_RETRIES ?? process.env.AI_MAX_RETRIES);
+    if (Number.isInteger(value) && value >= 0 && value <= 3) return value;
+    return 0;
+  }
+
+  private errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "unknown error";
   }
 
   private resolveProvider(): AiProvider {
@@ -363,27 +396,30 @@ export class OpenAiService {
     if (!this.openAiClient) {
       return this.localWorkLogDraft(input);
     }
-    const response = await this.openAiClient.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content: WORK_LOG_DRAFT_SYSTEM_PROMPT
-        },
-        {
-          role: "user",
-          content: JSON.stringify(input)
+    const response = await this.openAiClient.responses.create(
+      {
+        model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+        input: [
+          {
+            role: "system",
+            content: WORK_LOG_DRAFT_SYSTEM_PROMPT
+          },
+          {
+            role: "user",
+            content: JSON.stringify(input)
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "work_log_draft",
+            strict: true,
+            schema: workLogDraftJsonSchema as Record<string, unknown>
+          }
         }
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "work_log_draft",
-          strict: true,
-          schema: workLogDraftJsonSchema as Record<string, unknown>
-        }
-      }
-    });
+      },
+      this.aiDraftRequestOptions()
+    );
     return this.parseStructuredOutput<WorkLogDraftResult>(response);
   }
 
@@ -456,21 +492,24 @@ export class OpenAiService {
     if (!this.deepSeekClient) {
       return this.localWorkLogDraft(input);
     }
-    const completion = await this.deepSeekClient.chat.completions.create({
-      model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-      messages: [
-        {
-          role: "system",
-          content: this.deepSeekJsonPrompt("work_log_draft", WORK_LOG_DRAFT_SYSTEM_PROMPT, workLogDraftJsonSchema)
-        },
-        {
-          role: "user",
-          content: JSON.stringify(input)
-        }
-      ],
-      response_format: { type: "json_object" },
-      stream: false
-    });
+    const completion = await this.deepSeekClient.chat.completions.create(
+      {
+        model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+        messages: [
+          {
+            role: "system",
+            content: this.deepSeekJsonPrompt("work_log_draft", WORK_LOG_DRAFT_SYSTEM_PROMPT, workLogDraftJsonSchema)
+          },
+          {
+            role: "user",
+            content: JSON.stringify(input)
+          }
+        ],
+        response_format: { type: "json_object" },
+        stream: false
+      },
+      this.aiDraftRequestOptions()
+    );
     return this.parseJsonText<WorkLogDraftResult>(completion.choices[0]?.message?.content);
   }
 

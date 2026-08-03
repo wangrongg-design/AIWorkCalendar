@@ -5,7 +5,7 @@
   },
   "api": {
     "port": 3001,
-    "corsOrigin": "https://app.example.com"
+    "corsOrigin": "https://app.example.com,https://www.app.example.com"
   },
   "database": {
     "url": "postgresql://workcalendar:change-me@your-rds-postgresql-internal-host:5432/workcalendar?schema=public"

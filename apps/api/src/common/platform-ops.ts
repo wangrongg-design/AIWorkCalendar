@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { LogViewScope, RoleCode } from "@prisma/client";
 import type { CurrentUser } from "./types/current-user";
 
 export const PLATFORM_OPS_USER_ID = "platform-ops";
@@ -15,6 +15,7 @@ export function buildPlatformOpsCurrentUser(): CurrentUser {
     name: "平台超级管理员",
     departmentId: null,
     roles: [RoleCode.SUPER_ADMIN],
+    logViewScope: LogViewScope.COMPANY,
     isPlatformOps: true
   };
 }
@@ -26,7 +27,8 @@ export function buildPlatformOpsAuthUser() {
     tenantCode: PLATFORM_OPS_TENANT_CODE,
     tenantLogoUrl: null,
     departmentName: null,
-    requiresWorkReport: false
+    requiresWorkReport: false,
+    logViewScope: LogViewScope.COMPANY
   };
 }
 

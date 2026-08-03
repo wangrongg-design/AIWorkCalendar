@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { RoleCode, SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
+import { LogViewScope, RoleCode, SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { AccessService } from "../../common/access/access.service";
 import { AuditService } from "../../common/audit/audit.service";
@@ -55,7 +55,7 @@ export class OrgService {
       orderBy: [{ name: "asc" }]
     });
     const users = await this.prisma.user.findMany({
-      where: this.access.userWhere(user, this.access.isCompanyAdmin(user) ? "company" : undefined),
+      where: this.access.roleUserWhere(user, this.access.isCompanyAdmin(user) ? "company" : undefined),
       include: {
         department: true,
         roles: { where: { deletedAt: null }, include: { role: true } }
@@ -76,6 +76,7 @@ export class OrgService {
         departmentName: item.department?.name ?? null,
         isActive: item.isActive,
         requiresWorkReport: item.requiresWorkReport,
+        logViewScope: item.logViewScope,
         roles: item.roles.map((role) => role.role.code),
         createdAt: item.createdAt
       }))
@@ -295,6 +296,7 @@ export class OrgService {
       passwordHash,
       isActive: true,
       requiresWorkReport: dto.requiresWorkReport ?? true,
+      logViewScope: dto.logViewScope ?? LogViewScope.DEFAULT,
       deletedAt: null
     };
     const created = deletedMatches[0]
@@ -315,7 +317,14 @@ export class OrgService {
       action: "USER_CREATED",
       targetType: "User",
       targetId: created.id,
-      metadata: { email: created.email, phone: created.phone, roles: assignedRoles, departmentId: dto.departmentId ?? null, requiresWorkReport: created.requiresWorkReport }
+      metadata: {
+        email: created.email,
+        phone: created.phone,
+        roles: assignedRoles,
+        departmentId: dto.departmentId ?? null,
+        requiresWorkReport: created.requiresWorkReport,
+        logViewScope: created.logViewScope
+      }
     });
     return this.getUser(user.tenantId, created.id);
   }
@@ -358,7 +367,8 @@ export class OrgService {
         departmentId: dto.departmentId === undefined ? undefined : dto.departmentId,
         passwordHash,
         isActive: dto.isActive,
-        requiresWorkReport: dto.requiresWorkReport
+        requiresWorkReport: dto.requiresWorkReport,
+        logViewScope: dto.logViewScope
       }
     });
     const assignedRoles = nextRoles ? await this.replaceRoles(user.tenantId, id, nextRoles) : null;
@@ -374,6 +384,7 @@ export class OrgService {
         roles: assignedRoles,
         isActive: dto.isActive ?? null,
         requiresWorkReport: dto.requiresWorkReport ?? null,
+        logViewScope: dto.logViewScope ?? null,
         passwordChanged: Boolean(dto.password)
       }
     });
@@ -504,6 +515,7 @@ export class OrgService {
       departmentName: item.department?.name ?? null,
       isActive: item.isActive,
       requiresWorkReport: item.requiresWorkReport,
+      logViewScope: item.logViewScope,
       roles: item.roles.map((role) => role.role.code),
       createdAt: item.createdAt
     };

@@ -26,6 +26,7 @@ import {
   FeedbackPriority,
   FeedbackRequest,
   FeedbackStatus,
+  LogViewScope,
   OrgUser,
   PaymentProvider,
   RoleCode,
@@ -106,12 +107,20 @@ type OrgUserForm = {
   role: TenantRoleCode;
   isActive?: boolean;
   requiresWorkReport?: boolean;
+  logViewScope?: LogViewScope;
 };
 
 const roleOptions: Array<{ value: TenantRoleCode; label: string; description: string }> = [
   { value: "COMPANY_ADMIN", label: "企业管理员", description: "管理组织、成员、项目、订阅和企业级数据。通常不需要日报填报。" },
   { value: "DEPARTMENT_MANAGER", label: "部门经理", description: "查看和管理本部门范围的日报、日历、风险和汇报。通常需要日报填报。" },
   { value: "EMPLOYEE", label: "普通员工", description: "维护自己的日报、计划和相关项目记录。默认需要日报填报。" }
+];
+
+const logViewScopeOptions: Array<{ value: LogViewScope; label: string; description: string }> = [
+  { value: "DEFAULT", label: "按角色默认", description: "员工仅本人，部门经理本部门，企业管理员全公司。" },
+  { value: "SELF", label: "仅本人", description: "只能查看自己的日志和日历数据。" },
+  { value: "DEPARTMENT", label: "本部门", description: "可查看当前所属部门成员的日志和日历数据。" },
+  { value: "COMPANY", label: "全公司", description: "可查看全公司日志，不授予编辑、删除或组织管理权限。" }
 ];
 
 const planOptions: Array<{ value: SubscriptionPlan; label: string }> = [
@@ -165,6 +174,10 @@ function contactText(record: { email?: string | null; phone?: string | null }) {
 
 function roleLabel(value?: RoleCode) {
   return roleOptions.find((item) => item.value === value)?.label ?? value ?? "-";
+}
+
+function logViewScopeLabel(value?: LogViewScope) {
+  return logViewScopeOptions.find((item) => item.value === (value ?? "DEFAULT"))?.label ?? "按角色默认";
 }
 
 function primaryTenantRole(roles?: RoleCode[]): TenantRoleCode {
@@ -919,6 +932,12 @@ export default function OrgPage() {
       render: (value: boolean) => <Tag color={value ? "blue" : "default"}>{value ? "需要" : "不需要"}</Tag>
     },
     {
+      title: "日志权限",
+      dataIndex: "logViewScope",
+      width: 130,
+      render: (value: LogViewScope) => <Tag color={value && value !== "DEFAULT" ? "geekblue" : "default"}>{logViewScopeLabel(value)}</Tag>
+    },
+    {
       title: "操作",
       width: 110,
       render: (_, record) =>
@@ -931,6 +950,7 @@ export default function OrgPage() {
                 ...record,
                 role: primaryTenantRole(record.roles),
                 departmentId: record.departmentId ?? null,
+                logViewScope: record.logViewScope ?? "DEFAULT",
                 password: undefined
               });
               setUserModalOpen(true);
@@ -1218,7 +1238,7 @@ export default function OrgPage() {
                         onClick={() => {
                           setEditingUser(null);
                           userForm.resetFields();
-                          userForm.setFieldsValue({ role: "EMPLOYEE", isActive: true, requiresWorkReport: true });
+                          userForm.setFieldsValue({ role: "EMPLOYEE", isActive: true, requiresWorkReport: true, logViewScope: "DEFAULT" });
                           setUserModalOpen(true);
                         }}
                       >
@@ -1233,7 +1253,7 @@ export default function OrgPage() {
                     columns={userColumns}
                     locale={{ emptyText: <Empty description="暂无员工" /> }}
                     pagination={{ pageSize: 8 }}
-                    scroll={{ x: 920 }}
+                    scroll={{ x: 1050 }}
                   />
                 </section>
               </div>
@@ -1723,6 +1743,21 @@ export default function OrgPage() {
               <div key={role.value} className="role-help-item">
                 <strong>{role.label}</strong>
                 <span>{role.description}</span>
+              </div>
+            ))}
+          </div>
+          <Form.Item
+            name="logViewScope"
+            label="日志查看权限"
+            extra="只影响工作日志、工作日历和 AI 助手可见范围；不授予编辑、删除或组织管理权限。"
+          >
+            <Select options={logViewScopeOptions.map(({ value, label }) => ({ value, label }))} />
+          </Form.Item>
+          <div className="role-help-list">
+            {logViewScopeOptions.map((option) => (
+              <div key={option.value} className="role-help-item">
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
               </div>
             ))}
           </div>

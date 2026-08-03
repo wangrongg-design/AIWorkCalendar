@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { LogViewScope, RoleCode } from "@prisma/client";
 
 export type CurrentUser = {
   id: string;
@@ -8,5 +8,6 @@ export type CurrentUser = {
   name: string;
   departmentId: string | null;
   roles: RoleCode[];
+  logViewScope?: LogViewScope;
   isPlatformOps?: boolean;
 };

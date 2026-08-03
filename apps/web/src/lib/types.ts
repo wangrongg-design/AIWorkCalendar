@@ -1,4 +1,5 @@
 export type RoleCode = "SUPER_ADMIN" | "COMPANY_ADMIN" | "DEPARTMENT_MANAGER" | "EMPLOYEE";
+export type LogViewScope = "DEFAULT" | "SELF" | "DEPARTMENT" | "COMPANY";
 export type WorkLogStatus = "DRAFT" | "SUBMITTED";
 export type WorkLogKind = "DAILY" | "PLAN";
 export type WorkLogAttachmentKind = "IMAGE" | "FILE";
@@ -44,6 +45,7 @@ export type AuthUser = {
   departmentName: string | null;
   roles: RoleCode[];
   requiresWorkReport?: boolean;
+  logViewScope?: LogViewScope;
   isFirstLogin?: boolean;
 };
 
@@ -62,6 +64,7 @@ export type OrgUser = {
   departmentName: string | null;
   isActive: boolean;
   requiresWorkReport: boolean;
+  logViewScope: LogViewScope;
   roles: RoleCode[];
   createdAt: string;
 };

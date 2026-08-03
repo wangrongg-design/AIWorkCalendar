@@ -74,7 +74,8 @@ export class JwtAuthGuard implements CanActivate {
       phone: user.phone,
       name: user.name,
       departmentId: user.departmentId,
-      roles: user.roles.map((item) => item.role.code as RoleCode)
+      roles: user.roles.map((item) => item.role.code as RoleCode),
+      logViewScope: user.logViewScope
     };
     return true;
   }

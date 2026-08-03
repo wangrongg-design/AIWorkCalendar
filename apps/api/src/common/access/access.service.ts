@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
-import { Prisma, RoleCode } from "@prisma/client";
+import { LogViewScope, Prisma, RoleCode } from "@prisma/client";
 import { CurrentUser } from "../types/current-user";
 
 export type Scope = "self" | "department" | "company";
@@ -19,7 +19,7 @@ export class AccessService {
     return user.roles.includes(RoleCode.DEPARTMENT_MANAGER);
   }
 
-  resolveScope(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): { scope: Scope; departmentId?: string } {
+  resolveRoleScope(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): { scope: Scope; departmentId?: string } {
     if (this.isCompanyAdmin(user)) {
       return {
         scope: requestedScope ?? "company",
@@ -38,8 +38,38 @@ export class AccessService {
     return { scope: "self" };
   }
 
-  userWhere(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): Prisma.UserWhereInput {
-    const resolved = this.resolveScope(user, requestedScope, departmentId);
+  resolveScope(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): { scope: Scope; departmentId?: string } {
+    if (user.logViewScope === LogViewScope.COMPANY) {
+      if (requestedScope === "self") {
+        return { scope: "self" };
+      }
+      if (requestedScope === "department") {
+        return {
+          scope: "department",
+          departmentId: departmentId ?? user.departmentId ?? undefined
+        };
+      }
+      return {
+        scope: "company",
+        departmentId: departmentId ?? undefined
+      };
+    }
+    if (user.logViewScope === LogViewScope.DEPARTMENT) {
+      if (requestedScope === "company") {
+        throw new ForbiddenException("This user cannot access company scope");
+      }
+      return {
+        scope: requestedScope === "self" ? "self" : "department",
+        departmentId: user.departmentId ?? undefined
+      };
+    }
+    if (user.logViewScope === LogViewScope.SELF) {
+      return { scope: "self" };
+    }
+    return this.resolveRoleScope(user, requestedScope, departmentId);
+  }
+
+  private buildUserWhere(user: CurrentUser, resolved: { scope: Scope; departmentId?: string }): Prisma.UserWhereInput {
     const base: Prisma.UserWhereInput = {
       tenantId: user.tenantId,
       isActive: true,
@@ -58,6 +88,14 @@ export class AccessService {
       return { ...base, departmentId: resolved.departmentId };
     }
     return base;
+  }
+
+  userWhere(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): Prisma.UserWhereInput {
+    return this.buildUserWhere(user, this.resolveScope(user, requestedScope, departmentId));
+  }
+
+  roleUserWhere(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): Prisma.UserWhereInput {
+    return this.buildUserWhere(user, this.resolveRoleScope(user, requestedScope, departmentId));
   }
 
   workLogWhere(user: CurrentUser, requestedScope?: Scope, departmentId?: string | null): Prisma.WorkLogWhereInput {
@@ -91,7 +129,22 @@ export class AccessService {
     if (this.isCompanyAdmin(user) || target.id === user.id) {
       return;
     }
-    if (this.isDepartmentManager(user) && target.departmentId && target.departmentId === user.departmentId) {
+    const resolved = this.resolveScope(user);
+    if (resolved.scope === "company") {
+      return;
+    }
+    if (resolved.scope === "department" && target.departmentId && target.departmentId === resolved.departmentId) {
+      return;
+    }
+    throw new ForbiddenException("Cannot access this user");
+  }
+
+  assertCanAccessUserByRole(user: CurrentUser, target: { id: string; departmentId: string | null }) {
+    if (this.isCompanyAdmin(user) || target.id === user.id) {
+      return;
+    }
+    const resolved = this.resolveRoleScope(user);
+    if (resolved.scope === "department" && target.departmentId && target.departmentId === resolved.departmentId) {
       return;
     }
     throw new ForbiddenException("Cannot access this user");

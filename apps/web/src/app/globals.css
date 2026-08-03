@@ -17241,8 +17241,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 28px;
-  height: 96px;
-  padding: 0 48px;
+  height: 72px;
+  padding: 0 clamp(24px, 4vw, 56px);
   border-bottom: 1px solid rgba(210, 210, 215, 0.72);
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(18px);
@@ -17265,8 +17265,8 @@ body {
 }
 
 .calendarseven-brand img {
-  width: 84px;
-  height: 84px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
 }
 
@@ -17332,19 +17332,20 @@ body {
 
 .calendarseven-hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(500px, 1.22fr);
+  grid-template-columns: minmax(420px, 0.9fr) minmax(520px, 1.1fr);
   align-items: center;
-  gap: 64px;
-  width: min(1320px, calc(100% - 96px));
-  min-height: calc(100vh - 60px);
+  gap: clamp(40px, 5vw, 76px);
+  width: min(1280px, calc(100% - clamp(48px, 7vw, 104px)));
+  min-height: 0;
   margin: 0 auto;
-  padding: 72px 0 84px;
+  padding: clamp(42px, 7vh, 76px) 0 clamp(48px, 8vh, 88px);
 }
 
 .calendarseven-hero-copy {
   display: grid;
   align-content: center;
   justify-items: start;
+  min-width: 0;
 }
 
 .calendarseven-chip {
@@ -17367,20 +17368,22 @@ body {
 
 .calendarseven-hero h1 {
   margin: 24px 0 0;
+  max-width: 760px;
   color: #1d1d1f;
-  font-size: 56px;
+  font-size: clamp(44px, 4.4vw, 64px);
   font-weight: 760;
   line-height: 1.08;
   letter-spacing: 0;
-  white-space: nowrap;
+  text-wrap: balance;
 }
 
 .calendarseven-lede {
   margin: 22px 0 0;
+  max-width: 760px;
   color: #515154;
-  font-size: 21px;
+  font-size: clamp(17px, 1.45vw, 22px);
   line-height: 1.5;
-  white-space: nowrap;
+  text-wrap: pretty;
 }
 
 .calendarseven-price-line,
@@ -17432,6 +17435,9 @@ body {
 }
 
 .calendarseven-product-window {
+  width: 100%;
+  max-width: 650px;
+  justify-self: end;
   overflow: hidden;
   border: 1px solid rgba(210, 210, 215, 0.64);
   border-radius: 18px;

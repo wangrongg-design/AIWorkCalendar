@@ -211,7 +211,7 @@ export class WorkLogsService {
     const target = await this.prisma.user.findFirstOrThrow({
       where: { id: targetUserId, tenantId: user.tenantId, deletedAt: null }
     });
-    this.access.assertCanAccessUser(user, target);
+    this.access.assertCanAccessUserByRole(user, target);
     await this.assertProjectInTenant(user.tenantId, dto.projectId);
     const workDate = parseDateOnly(dto.date);
     const timing = normalizeTiming(parseOptionalDate(dto.startTime), parseOptionalDate(dto.endTime), dto.hours ?? null);
@@ -247,33 +247,13 @@ export class WorkLogsService {
   }
 
   async get(user: CurrentUser, id: string) {
-    const item = await this.prisma.workLog.findFirst({
-      where: { id, tenantId: user.tenantId, deletedAt: null },
-      include: {
-        user: { include: { department: true } },
-        project: true,
-        aiAnalysis: true,
-        attachments: {
-          where: { deletedAt: null },
-          select: attachmentPublicSelect,
-          orderBy: [{ createdAt: "asc" }]
-        },
-        sourceLinks: {
-          include: sourceLinksPublicInclude,
-          orderBy: [{ createdAt: "asc" }]
-        }
-      }
-    });
-    if (!item) {
-      throw new NotFoundException("Work log not found");
-    }
+    const item = await this.findWorkLogInTenant(user, id);
     this.access.assertCanAccessUser(user, item.user);
     return item;
   }
 
   async update(user: CurrentUser, id: string, dto: UpdateWorkLogDto) {
-    const existing = await this.get(user, id);
-    this.assertCanModifyWorkLog(user, existing.userId);
+    const existing = await this.getForMutation(user, id);
     await this.assertProjectInTenant(user.tenantId, dto.projectId);
     const timing = normalizeTiming(
       Object.prototype.hasOwnProperty.call(dto, "startTime") ? parseOptionalDate(dto.startTime) : existing.startTime,
@@ -311,8 +291,7 @@ export class WorkLogsService {
   }
 
   async remove(user: CurrentUser, id: string) {
-    const existing = await this.get(user, id);
-    this.assertCanModifyWorkLog(user, existing.userId);
+    const existing = await this.getForMutation(user, id);
     const deletedAt = new Date();
     await this.prisma.$transaction([
       this.prisma.workLog.update({
@@ -328,8 +307,7 @@ export class WorkLogsService {
   }
 
   async submit(user: CurrentUser, id: string) {
-    const existing = await this.get(user, id);
-    this.assertCanModifyWorkLog(user, existing.userId);
+    const existing = await this.getForMutation(user, id);
     const submitted = await this.prisma.workLog.update({
       where: { id },
       data: {
@@ -356,8 +334,7 @@ export class WorkLogsService {
   }
 
   async createAttachment(user: CurrentUser, id: string, dto: CreateWorkLogAttachmentDto) {
-    const existing = await this.get(user, id);
-    this.assertCanModifyWorkLog(user, existing.userId);
+    const existing = await this.getForMutation(user, id);
 
     const buffer = Buffer.from(dto.contentBase64, "base64");
     if (!buffer.length || buffer.length !== dto.fileSize || buffer.length > ATTACHMENT_MAX_BYTES) {
@@ -398,8 +375,7 @@ export class WorkLogsService {
   }
 
   async removeAttachment(user: CurrentUser, id: string, attachmentId: string) {
-    const existing = await this.get(user, id);
-    this.assertCanModifyWorkLog(user, existing.userId);
+    const existing = await this.getForMutation(user, id);
     const attachment = await this.prisma.workLogAttachment.findFirst({
       where: { id: attachmentId, tenantId: user.tenantId, workLogId: id, deletedAt: null },
       select: { id: true }
@@ -480,6 +456,36 @@ export class WorkLogsService {
       return;
     }
     throw new ForbiddenException("Only owner or company admin can modify this work log");
+  }
+
+  private async getForMutation(user: CurrentUser, id: string) {
+    const item = await this.findWorkLogInTenant(user, id);
+    this.assertCanModifyWorkLog(user, item.userId);
+    return item;
+  }
+
+  private async findWorkLogInTenant(user: CurrentUser, id: string) {
+    const item = await this.prisma.workLog.findFirst({
+      where: { id, tenantId: user.tenantId, deletedAt: null },
+      include: {
+        user: { include: { department: true } },
+        project: true,
+        aiAnalysis: true,
+        attachments: {
+          where: { deletedAt: null },
+          select: attachmentPublicSelect,
+          orderBy: [{ createdAt: "asc" }]
+        },
+        sourceLinks: {
+          include: sourceLinksPublicInclude,
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
+    });
+    if (!item) {
+      throw new NotFoundException("Work log not found");
+    }
+    return item;
   }
 
   private async assertProjectInTenant(tenantId: string, projectId?: string | null) {

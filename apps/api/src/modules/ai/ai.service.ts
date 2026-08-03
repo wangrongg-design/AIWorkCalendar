@@ -100,7 +100,7 @@ export class AiService {
     if (!workLog) {
       throw new NotFoundException("Work log not found");
     }
-    this.access.assertCanAccessUser(user, workLog.user);
+    this.access.assertCanAccessUserByRole(user, workLog.user);
     return this.aiQueue.enqueueWorkLogAnalysis(user.tenantId, workLogId, user.id);
   }
 

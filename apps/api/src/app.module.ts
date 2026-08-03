@@ -1,10 +1,11 @@
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { JwtModule } from "@nestjs/jwt";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { CommonModule } from "./common/common.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
+import { RuntimeExceptionFilter } from "./common/runtime-log/runtime-exception.filter";
 import { AuthModule } from "./modules/auth/auth.module";
 import { OrgModule } from "./modules/org/org.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
@@ -55,6 +56,7 @@ import { WecomModule } from "./modules/wecom/wecom.module";
   ],
   controllers: [AppController],
   providers: [
+    { provide: APP_FILTER, useClass: RuntimeExceptionFilter },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard }
   ]

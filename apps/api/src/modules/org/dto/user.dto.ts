@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { LogViewScope, RoleCode } from "@prisma/client";
 import { IsArray, IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
 
 export class CreateUserDto {
@@ -29,6 +29,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   requiresWorkReport?: boolean;
+
+  @IsOptional()
+  @IsEnum(LogViewScope)
+  logViewScope?: LogViewScope;
 }
 
 export class UpdateUserDto {
@@ -66,4 +70,8 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   requiresWorkReport?: boolean;
+
+  @IsOptional()
+  @IsEnum(LogViewScope)
+  logViewScope?: LogViewScope;
 }

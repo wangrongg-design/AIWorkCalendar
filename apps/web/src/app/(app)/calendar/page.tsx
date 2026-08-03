@@ -25,7 +25,7 @@ import {
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import { CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
+import { AuthUser, CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
 
 type OrgResponse = {
   departments: Department[];
@@ -78,6 +78,7 @@ type DetailEmployee = CalendarDayDetail["filledEmployees"][number];
 
 type DraftPreviewItem = WorkLogDraftComposerItem;
 type DraftPreview = WorkLogDraftComposerState;
+type CalendarScope = "self" | "department" | "company";
 
 const attachmentMaxBytes = 8 * 1024 * 1024;
 const { RangePicker } = DatePicker;
@@ -174,6 +175,24 @@ function dateKind(date: string) {
   const today = dayjs().format("YYYY-MM-DD");
   if (date === today) return "today";
   return date > today ? "future" : "past";
+}
+
+function canViewCompanyCalendar(user?: Pick<AuthUser, "roles" | "logViewScope"> | null) {
+  if (user?.logViewScope === "COMPANY") return true;
+  if (user?.logViewScope === "SELF" || user?.logViewScope === "DEPARTMENT") return false;
+  return Boolean(user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN"));
+}
+
+function canViewDepartmentCalendar(user?: Pick<AuthUser, "roles" | "logViewScope"> | null) {
+  if (user?.logViewScope === "COMPANY" || user?.logViewScope === "DEPARTMENT") return true;
+  if (user?.logViewScope === "SELF") return false;
+  return Boolean(canViewCompanyCalendar(user) || user?.roles.includes("DEPARTMENT_MANAGER"));
+}
+
+function defaultCalendarScope(user?: Pick<AuthUser, "roles" | "logViewScope"> | null): CalendarScope {
+  if (canViewCompanyCalendar(user)) return "company";
+  if (canViewDepartmentCalendar(user)) return "department";
+  return "self";
 }
 
 function chineseDateLabel(date: string) {
@@ -351,13 +370,7 @@ export default function CalendarPage() {
   const [quickFillDate, setQuickFillDate] = useState(dayjs());
   const [month, setMonth] = useState(dayjs());
   const [copilotRange, setCopilotRange] = useState<[Dayjs, Dayjs]>(() => normalizeCopilotRange([dayjs().startOf("month"), dayjs().endOf("month")]));
-  const [scope, setScope] = useState<"self" | "department" | "company">(
-    user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN")
-      ? "company"
-      : user?.roles.includes("DEPARTMENT_MANAGER")
-        ? "department"
-        : "self"
-  );
+  const [scope, setScope] = useState<CalendarScope>(() => defaultCalendarScope(user));
   const [departmentId, setDepartmentId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -623,7 +636,9 @@ export default function CalendarPage() {
   }, [calendar.data?.days]);
 
   const cells = useMemo(() => monthCells(month), [month]);
-  const canChooseDepartment = user?.roles.includes("COMPANY_ADMIN") || user?.roles.includes("SUPER_ADMIN");
+  const defaultScope = useMemo(() => defaultCalendarScope(user), [user?.logViewScope, user?.roles]);
+  const canChooseDepartment = canViewCompanyCalendar(user);
+  const canChooseDepartmentScope = canViewDepartmentCalendar(user);
   const summary = useMemo(() => monthSummary(calendar.data?.days ?? []), [calendar.data?.days]);
   const currentWeekDays = useMemo(() => {
     const weekStart = dayjs().startOf("day").subtract((dayjs().day() + 6) % 7, "day");
@@ -634,6 +649,17 @@ export default function CalendarPage() {
     });
   }, [calendar.data?.days]);
   const weekBrief = useMemo(() => monthSummary(currentWeekDays), [currentWeekDays]);
+
+  useEffect(() => {
+    if (!user) return;
+    setScope((current) => {
+      if (current === "company" && !canViewCompanyCalendar(user)) return defaultScope;
+      if (current === "department" && !canViewDepartmentCalendar(user)) return defaultScope;
+      if (current === "self" && defaultScope !== "self") return defaultScope;
+      return current;
+    });
+  }, [defaultScope, user]);
+
   const focusDays = useMemo(() => {
     const visibleDays = calendar.data?.days ?? [];
     return visibleDays
@@ -1226,7 +1252,7 @@ export default function CalendarPage() {
             }}
             options={[
               { value: "self", label: "只看自己" },
-              { value: "department", label: "本部门" },
+              ...(canChooseDepartmentScope ? [{ value: "department", label: "本部门" }] : []),
               ...(canChooseDepartment ? [{ value: "company", label: "全公司" }] : [])
             ]}
           />

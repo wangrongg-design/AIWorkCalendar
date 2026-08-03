@@ -14,6 +14,13 @@ enum RoleCode {
   EMPLOYEE
 }
 
+enum LogViewScope {
+  DEFAULT
+  SELF
+  DEPARTMENT
+  COMPANY
+}
+
 enum WorkLogStatus {
   DRAFT
   SUBMITTED
@@ -149,6 +156,12 @@ enum FeedbackStatus {
   PROCESSING
   RESOLVED
   CLOSED
+}
+
+enum RuntimeLogLevel {
+  INFO
+  WARN
+  ERROR
 }
 
 enum WorkLogAttachmentKind {
@@ -344,6 +357,7 @@ model User {
   passwordHash            String                   @map("password_hash")
   isActive                Boolean                  @default(true) @map("is_active")
   requiresWorkReport      Boolean                  @default(true) @map("requires_work_report")
+  logViewScope            LogViewScope             @default(DEFAULT) @map("log_view_scope")
   emailVerifiedAt         DateTime?                @map("email_verified_at")
   lastLoginAt             DateTime?                @map("last_login_at")
   firstLoginGuideShownAt  DateTime?                @map("first_login_guide_shown_at")
@@ -991,6 +1005,29 @@ model AiUsageLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, operation, createdAt])
   @@map("ai_usage_logs")
+}
+
+model RuntimeLog {
+  id         String          @id @default(cuid())
+  level      RuntimeLogLevel
+  source     String          @default("api")
+  tenantId   String?         @map("tenant_id")
+  userId     String?         @map("user_id")
+  method     String?
+  path       String?
+  statusCode Int?            @map("status_code")
+  requestId  String?         @map("request_id")
+  message    String
+  stack      String?
+  ip         String?
+  userAgent  String?         @map("user_agent")
+  metadata   Json?
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@index([level, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([path, createdAt])
+  @@map("runtime_logs")
 }
 
 model DataDeletionRequest {

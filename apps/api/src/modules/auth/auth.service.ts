@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { Prisma, RoleCode, SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
+import { LogViewScope, Prisma, RoleCode, SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { AuditService } from "../../common/audit/audit.service";
@@ -328,6 +328,7 @@ export class AuthService {
       departmentName: fullUser.department?.name ?? null,
       roles: fullUser.roles.map((item) => item.role.code),
       requiresWorkReport: fullUser.requiresWorkReport,
+      logViewScope: fullUser.logViewScope,
       isFirstLogin: this.shouldShowFirstLoginGuide(fullUser)
     };
   }
@@ -484,6 +485,7 @@ export class AuthService {
       tenant: { name: string; code: string; logoUrl?: string | null };
       department?: { name: string } | null;
       requiresWorkReport?: boolean;
+      logViewScope?: LogViewScope;
       lastLoginAt?: Date | null;
       firstLoginGuideShownAt?: Date | null;
     },
@@ -511,6 +513,7 @@ export class AuthService {
         departmentName: user.department?.name ?? null,
         roles,
         requiresWorkReport: user.requiresWorkReport ?? true,
+        logViewScope: user.logViewScope ?? LogViewScope.DEFAULT,
         isFirstLogin
       }
     };

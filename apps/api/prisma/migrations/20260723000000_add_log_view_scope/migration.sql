@@ -1,0 +1,4 @@
+CREATE TYPE "LogViewScope" AS ENUM ('DEFAULT', 'SELF', 'DEPARTMENT', 'COMPANY');
+
+ALTER TABLE "users"
+  ADD COLUMN "log_view_scope" "LogViewScope" NOT NULL DEFAULT 'DEFAULT';

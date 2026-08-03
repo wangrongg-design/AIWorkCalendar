@@ -4,6 +4,38 @@ import { useAuthStore } from "./auth-store";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+function isLocalApiUrl() {
+  try {
+    const base = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+    const hostname = new URL(API_URL, base).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname.endsWith(".local");
+  } catch {
+    return API_URL.startsWith("http://localhost") || API_URL.startsWith("http://127.0.0.1");
+  }
+}
+
+function isNetworkFailure(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized === "failed to fetch" ||
+    normalized.includes("networkerror") ||
+    normalized.includes("network request failed") ||
+    normalized.includes("load failed") ||
+    normalized.includes("fetch failed")
+  );
+}
+
+function connectionErrorMessage(path: string, method: string) {
+  const upperMethod = method.toUpperCase();
+  if (path.includes("/attachments") && upperMethod === "POST") {
+    return "附件上传失败，可能是网络中断或服务器上传大小限制。日报正文会优先保存，请稍后在填报记录中重新上传附件。";
+  }
+  if (isLocalApiUrl()) {
+    return "暂时无法连接本地 API，请确认本机 API 服务已启动后重试。";
+  }
+  return "暂时无法连接服务器，请检查网络后重试；如果反复出现，请联系运维人员检查 API 域名和跨域配置。";
+}
+
 function messageFromBody(message: string | string[] | undefined, fallback: string) {
   if (Array.isArray(message)) return message.join("; ");
   return message || fallback;
@@ -136,11 +168,8 @@ export function humanizeApiError(message: string, status?: number, path = "", me
   if (status && status >= 500) {
     return "服务暂时不可用，请稍后重试；如果反复出现，请联系运维人员。";
   }
-  if (normalized === "failed to fetch" || normalized.includes("networkerror")) {
-    if (isAttachmentEndpoint && upperMethod === "POST") {
-      return "附件上传失败，可能是网络中断或服务器上传大小限制。日报正文会优先保存，请稍后在填报记录中重新上传附件。";
-    }
-    return "暂时无法连接服务，请确认本地 API 已启动，或稍后重试。";
+  if (isNetworkFailure(message)) {
+    return connectionErrorMessage(path, upperMethod);
   }
   return message;
 }
