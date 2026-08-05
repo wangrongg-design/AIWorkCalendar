@@ -1,10 +1,10 @@
 "use client";
 
-import { Alert, Button, Checkbox, DatePicker, Input, InputNumber, Select, TimePicker, Tooltip, Upload } from "antd";
+import { Alert, Button, DatePicker, Input, InputNumber, Select, TimePicker, Tooltip, Upload } from "antd";
 import type { UploadProps } from "antd";
 import type { UploadFile } from "antd/es/upload/interface";
 import dayjs, { Dayjs } from "dayjs";
-import { ChevronDown, ChevronUp, Send, Trash2, UploadCloud } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import type { ClipboardEvent } from "react";
 import { useState } from "react";
 import type { Project, WorkLogDraftItem } from "@/lib/types";
@@ -47,7 +47,7 @@ type WorkLogDraftComposerProps = {
   aiPending: boolean;
   aiError?: Error | null;
   onAiInputChange: (value: string) => void;
-  onGenerateDraft: () => void;
+  onGenerateDraft: (textOverride?: string, intent?: WorkLogDraftComposerIntent, projectId?: string | null) => void;
   onContinuePrompt: () => void;
   draftPreview: WorkLogDraftComposerState | null;
   onUpdateItem: (index: number, patch: Partial<WorkLogDraftComposerItem>) => void;
@@ -73,6 +73,8 @@ type WorkLogDraftComposerProps = {
   onRemoveAttachment: NonNullable<UploadProps["onRemove"]>;
   onPasteImages: (event: ClipboardEvent<HTMLElement>) => void;
 };
+
+export type WorkLogDraftComposerIntent = "analyze" | "split" | "force_single";
 
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const draftInputMaxLength = 4000;
@@ -152,6 +154,29 @@ function projectMatchScore(project: Project, source: string) {
   }, 0);
 }
 
+function projectOptionMatchScore(label: string, source: string) {
+  const normalizedLabel = normalizeProjectMatchValue(label);
+  const normalizedSource = normalizeProjectMatchValue(source);
+  if (normalizedLabel.length < 2 || normalizedSource.length < 2) return 0;
+  if (normalizedSource.includes(normalizedLabel)) return 100 + Math.min(normalizedLabel.length, 24);
+  const labelCore = normalizedLabel.replace(/项目|信息化|系统|平台|建设|中心|管理|工程|服务/g, "");
+  const sourceCore = normalizedSource.replace(/项目|信息化|系统|平台|建设|中心|管理|工程|服务/g, "");
+  if (labelCore.length >= 2 && sourceCore.includes(labelCore)) return 92 + Math.min(labelCore.length, 18);
+  const sourceChars = new Set(Array.from(sourceCore));
+  const labelChars = Array.from(new Set(Array.from(labelCore)));
+  const overlap = labelChars.filter((char) => sourceChars.has(char)).length;
+  if (overlap < 2) return 0;
+  return Math.round((overlap / Math.max(2, Math.min(labelChars.length, 8))) * 86);
+}
+
+function projectSuggestionsFromOptions(options: Array<{ value: string; label: string }>, text: string) {
+  return options
+    .map((option) => ({ ...option, score: projectOptionMatchScore(option.label, text) }))
+    .filter((option) => option.score >= 45)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
 export function projectIdFromText(projects: Project[] | undefined, text?: string | null) {
   const source = normalizeProjectMatchValue(text);
   if (source.length < 4) return undefined;
@@ -208,6 +233,73 @@ export function draftComposerItemFromAi(item: WorkLogDraftItem, index: number, p
   };
 }
 
+export function quickFillTitleFromText(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const firstClause = normalized.split(/[。；;，,\n]/)[0]?.trim() || normalized;
+  const source = firstClause.length >= 2 ? firstClause : normalized;
+  if (!source) return "今日工作记录";
+  return source.length > 28 ? `${source.slice(0, 28)}...` : source;
+}
+
+function extractDraftHours(text: string) {
+  const match = /(\d+(?:\.\d+)?)\s*(?:小时|工时|h|H)/u.exec(text);
+  if (!match) return 0;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 && value <= 24 ? value : 0;
+}
+
+export function createDraftComposerPreviewFromText({
+  text,
+  date,
+  projects,
+  projectId
+}: {
+  text: string;
+  date: Dayjs | string | Date;
+  projects?: Project[];
+  projectId?: string | null;
+}): WorkLogDraftComposerState {
+  const safeDate = dayjs(date).isValid() ? dayjs(date) : dayjs();
+  const dateKey = safeDate.format("YYYY-MM-DD");
+  const kind = dateKey > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY";
+  const content = text.trim();
+  const matchedProjectId = projectId === null ? undefined : projectId || projectIdFromText(projects, content);
+  const matchedProject = matchedProjectId ? projects?.find((project) => project.id === matchedProjectId) : undefined;
+  const hours = extractDraftHours(content);
+  return {
+    assistantMessage: "内容足够，已整理成提交摘要。",
+    items: [
+      {
+        localId: nextDraftLocalId(),
+        date: dateKey,
+        kind,
+        title: quickFillTitleFromText(content),
+        content,
+        hours,
+        startTime: null,
+        endTime: null,
+        projectHint: matchedProject ? matchedProject.name : null,
+        confidence: matchedProject ? 0.86 : 0.78,
+        missingFields: [],
+        achievements: [],
+        risks: /风险|阻塞|卡住|延期|无法推进|等反馈|待反馈/u.test(content) ? [content] : [],
+        blockers: /阻塞|卡住|无法推进/u.test(content) ? [content] : [],
+        nextActions: /待|需要|继续|下一步|计划/u.test(content) ? [content] : [],
+        sourceNote: "由对话内容整理",
+        status: "generated",
+        projectId: matchedProjectId,
+        projectName: matchedProject?.name,
+        projectConfirmed: Boolean(matchedProjectId || projectId === null),
+        selected: true,
+        expanded: false,
+        source: "AI"
+      }
+    ],
+    attachedToFirst: false,
+    attachmentTargetIndex: 0
+  };
+}
+
 export function selectedDraftComposerEntries(preview: WorkLogDraftComposerState | null) {
   return (preview?.items ?? []).map((item, index) => ({ item, index })).filter((entry) => entry.item.selected);
 }
@@ -218,6 +310,8 @@ export function validateDraftComposerState(preview: WorkLogDraftComposerState | 
     return { ok: false as const, message: "请至少选择一条工作记录。", index: -1 };
   }
   for (const { item, index } of entries) {
+    const hours = Number(item.hours);
+    const quality = workLogQualityCheck(`${item.title}\n${item.content}`);
     if (!dayjs(item.date).isValid()) {
       return { ok: false as const, message: `第 ${index + 1} 条日期无效，请重新选择。`, index };
     }
@@ -227,11 +321,11 @@ export function validateDraftComposerState(preview: WorkLogDraftComposerState | 
     if (!item.content.trim() || item.content.trim().length < 2) {
       return { ok: false as const, message: `第 ${index + 1} 条缺少工作内容。`, index };
     }
-    if (!Number.isFinite(Number(item.hours)) || Number(item.hours) <= 0 || Number(item.hours) > 24) {
-      return { ok: false as const, message: `第 ${index + 1} 条缺少工时。选择开始和结束时间可自动计算，也可以直接填写工时。`, index };
+    if (!quality.ok) {
+      return { ok: false as const, message: `第 ${index + 1} 条${quality.message}`, index };
     }
-    if (!item.projectId && !item.projectConfirmed) {
-      return { ok: false as const, message: `第 ${index + 1} 条项目待确认，请选择项目或确认未关联项目。`, index };
+    if (Number.isFinite(hours) && (hours < 0 || hours > 24)) {
+      return { ok: false as const, message: `第 ${index + 1} 条工时需在 0 到 24 小时之间。`, index };
     }
     if (item.status === "submitted" || item.status === "ignored") {
       return { ok: false as const, message: `第 ${index + 1} 条已经${item.status === "submitted" ? "提交" : "忽略"}，不能重复提交。`, index };
@@ -261,11 +355,15 @@ const fieldLabels: Record<string, string> = {
   title: "标题",
   content: "内容",
   hours: "工时",
+  startTime: "开始时间",
+  endTime: "结束时间",
   date: "日期",
   project: "项目",
   projectId: "项目",
   projectHint: "项目"
 };
+
+const optionalDraftFieldNames = new Set(["hours", "startTime", "endTime", "project", "projectId", "projectHint"]);
 
 const draftStatusMeta: Record<WorkLogDraftComposerItem["status"], { label: string; color: string }> = {
   generated: { label: "待确认", color: "processing" },
@@ -283,11 +381,15 @@ function selectedItems(preview: WorkLogDraftComposerState | null) {
 }
 
 function selectedHours(preview: WorkLogDraftComposerState | null) {
-  return selectedItems(preview).reduce((sum, item) => sum + (Number.isFinite(Number(item.hours)) ? Number(item.hours) : 0), 0);
+  return selectedItems(preview).reduce((sum, item) => {
+    const hours = Number(item.hours);
+    return sum + (Number.isFinite(hours) && hours > 0 ? hours : 0);
+  }, 0);
 }
 
 function selectedKindSummary(preview: WorkLogDraftComposerState | null) {
   const selected = selectedItems(preview);
+  if (!selected.length) return "0 条记录";
   const dailyCount = selected.filter((item) => item.kind !== "PLAN").length;
   const planCount = selected.filter((item) => item.kind === "PLAN").length;
   if (dailyCount && planCount) return `${dailyCount} 条日报、${planCount} 条计划`;
@@ -323,6 +425,44 @@ function missingFieldText(fields: string[]) {
   return fields.map((field) => fieldLabels[field] ?? field).join("、");
 }
 
+export function workLogQualityCheck(text: string) {
+  const source = text.trim();
+  const compact = source.replace(/\s+/g, "");
+  const meaningfulLength = compact.replace(/[^\p{L}\p{N}]/gu, "").length;
+  const vagueOnly = /^(开会|会议|沟通|对接|跟进|处理|处理问题|写代码|开发|测试|学习|整理资料|日常工作|工作|优化|修复|排查)[。.!！?？]*$/u.test(compact);
+  const hasAction = /(完成|推进|沟通|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(source);
+  const hasObject =
+    /(项目|客户|需求|方案|接口|页面|数据|报告|合同|会议|文档|工单|订单|版本|模块|流程|问题|风险|阻塞|排期|进度|功能|系统|平台|后台|前端|后端|测试|上线|交付|物料|资料|清单|记录|日报|计划|范围|错误|缺陷|证书|登录|权限)/u.test(source) ||
+    /[A-Za-z0-9_-]{3,}/.test(source);
+  const hasResultOrContext = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|上午|下午|今天|明天|本周|下周|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(source);
+
+  if (meaningfulLength < 8 || vagueOnly) {
+    return { ok: false as const, message: "内容太简略，请写清做了什么和对象/结果" };
+  }
+  if (!hasAction) {
+    return { ok: false as const, message: "请补充具体动作，例如沟通、修复、输出、确认" };
+  }
+  if (!hasObject) {
+    return { ok: false as const, message: "请补充工作对象，例如项目、客户、需求或问题" };
+  }
+  if (!hasResultOrContext) {
+    return { ok: false as const, message: "请补充这项工作的结果、进展或风险" };
+  }
+  return { ok: true as const };
+}
+
+export function workLogShouldDraftForMultipleItems(text: string) {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (countLikelyDraftSections(normalized) >= 2) return true;
+  if (/上午[\s\S]{4,}下午|下午[\s\S]{4,}晚上|一是[\s\S]{4,}二是|第一[\s\S]{4,}第二/u.test(normalized)) return true;
+  const chunks = normalized
+    .split(/[\n；;]/)
+    .map((item) => item.trim())
+    .filter((item) => item.replace(/\s+/g, "").length >= 8);
+  return chunks.length >= 2;
+}
+
 function updateListValue(value: string) {
   return value
     .split("\n")
@@ -348,7 +488,43 @@ function countLikelyDraftSections(text: string) {
   return lineItems.length >= 2 ? lineItems.length : 0;
 }
 
+export function estimateDraftItemCount(text: string) {
+  const explicitCount = countLikelyDraftSections(text);
+  if (explicitCount >= 2) return explicitCount;
+  const normalized = text.trim();
+  const dayPartCount = [/(上午)/u, /(下午)/u, /(晚上|晚间)/u].filter((pattern) => pattern.test(normalized)).length;
+  if (dayPartCount >= 2) return dayPartCount;
+  const chunks = normalized
+    .split(/[\n；;]/)
+    .map((item) => item.trim())
+    .filter((item) => item.replace(/\s+/g, "").length >= 8);
+  return Math.max(1, chunks.length);
+}
+
+export function clarificationQuestionForWorkLog(text: string) {
+  const compact = text.replace(/\s+/g, "");
+  if (/^(开会|会议)$/u.test(compact)) {
+    return "这次会议围绕什么工作？最后确认了什么？";
+  }
+  if (/^(沟通|对接|跟进|处理|写代码|开发|测试|日常工作|工作)$/u.test(compact)) {
+    return "这项工作对应哪个项目或客户？最后有什么进展、结果或阻塞？";
+  }
+  if (/沟通|对接|跟进/u.test(text)) {
+    return "这次沟通确认了什么，或还有什么阻塞？";
+  }
+  return "请补充工作对象和结果，例如项目、客户、需求、进展或风险。";
+}
+
+function composeSuggestedText(base: string, suggestion: string) {
+  const normalized = base.trim();
+  if (!normalized) return suggestion;
+  if (/补充说明|我补充一句/u.test(suggestion)) return normalized;
+  return `${normalized}，${suggestion}`;
+}
+
 function draftReady(item: WorkLogDraftComposerItem) {
+  const hours = Number(item.hours);
+  const quality = workLogQualityCheck(`${item.title}\n${item.content}`);
   return (
     item.selected &&
     item.status !== "submitted" &&
@@ -356,10 +532,8 @@ function draftReady(item: WorkLogDraftComposerItem) {
     dayjs(item.date).isValid() &&
     item.title.trim().length >= 2 &&
     item.content.trim().length >= 2 &&
-    Number.isFinite(Number(item.hours)) &&
-    Number(item.hours) > 0 &&
-    Number(item.hours) <= 24 &&
-    Boolean(item.projectId || item.projectConfirmed)
+    quality.ok &&
+    (!Number.isFinite(hours) || (hours >= 0 && hours <= 24))
   );
 }
 
@@ -374,6 +548,7 @@ export function WorkLogDraftComposer({
   aiError,
   onAiInputChange,
   onGenerateDraft,
+  onContinuePrompt,
   draftPreview,
   onUpdateItem,
   onDeleteItem,
@@ -397,6 +572,11 @@ export function WorkLogDraftComposer({
   const selectedCount = selected.length;
   const selectedSummary = selectedKindSummary(draftPreview);
   const totalHours = selectedHours(draftPreview);
+  const selectedHasEmptyHours = selected.some((item) => !(Number(item.hours) > 0));
+  const selectedHoursSummary =
+    totalHours > 0
+      ? `${selectedHasEmptyHours ? "已填工时" : "合计"} ${Number(totalHours.toFixed(1))}h${selectedHasEmptyHours ? "，其余可补" : ""}`
+      : "工时可稍后补充";
   const selectedIndexes = new Set((draftPreview?.items ?? []).map((item, index) => (item.selected ? index : -1)).filter((index) => index >= 0));
   const items = draftPreview?.items ?? [];
   const itemCount = items.length;
@@ -404,12 +584,67 @@ export function WorkLogDraftComposer({
   const hasItems = itemCount > 0;
   const inputLength = aiInput.length;
   const inputLimitExceeded = inputLength > draftInputMaxLength;
-  const detectedInputItemCount = countLikelyDraftSections(aiInput);
-  const canGenerate = aiInput.trim().length > 0 && !aiPending && !inputLimitExceeded;
+  const latestUserText = [...aiMessages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
+  const workingText = aiInput.trim() || latestUserText;
+  const detectedInputItemCount = estimateDraftItemCount(workingText);
+  const inputBusy = aiPending;
+  const canGenerate = aiInput.trim().length > 0 && !inputBusy && !inputLimitExceeded;
+  const workingTextQuality = workLogQualityCheck(workingText);
+  const shouldDraftForMultipleItems = workLogShouldDraftForMultipleItems(workingText);
+  const directSubmitHint = shouldDraftForMultipleItems ? `识别到 ${detectedInputItemCount} 项工作` : workingTextQuality.message;
+  const showQualityHint = !hasItems && workingText.length > 0 && (shouldDraftForMultipleItems || !workingTextQuality.ok);
   const hasConversation = aiMessages.some((item) => item.role === "user");
   const canAttach = hasItems && !aiPending;
   const showAttachments = canAttach && (attachmentsOpen || pendingAttachmentCount > 0);
   const canSubmitAny = hasSubmittableDraft(draftPreview);
+  const selectedEntries = selectedDraftComposerEntries(draftPreview);
+  const persistedItems = items.filter((item) => item.status === "submitted" || item.status === "saved");
+  const summaryItems = selected.length ? selected : persistedItems.length ? persistedItems : items;
+  const expandedIndexes = new Set(items.map((item, index) => (item.expanded ? index : -1)).filter((index) => index >= 0));
+  const hasExpandedItems = expandedIndexes.size > 0;
+  const firstEditableEntry = selectedEntries.find((entry) => entry.item.status !== "submitted" && entry.item.status !== "ignored") ?? selectedEntries[0];
+  const firstEditableText = firstEditableEntry ? [firstEditableEntry.item.title, firstEditableEntry.item.content, firstEditableEntry.item.projectHint].filter(Boolean).join(" ") : workingText;
+  const projectSuggestions = projectSuggestionsFromOptions(projectOptions, firstEditableText).filter((option) => !firstEditableEntry?.item.projectId || firstEditableEntry.item.projectId !== option.value);
+  const resultSuggestions = (() => {
+    if (!workingText || hasItems) return [];
+    if (shouldDraftForMultipleItems) return [];
+    if (/风险|阻塞|卡住|延期|无法推进|等反馈|待反馈/u.test(workingText)) {
+      return ["发现阻塞", "待客户反馈", "需要负责人确认"];
+    }
+    if (/沟通|对接|会议|确认/u.test(workingText)) {
+      return ["已确认范围", "已确认下一步", "待客户反馈", "补充说明"];
+    }
+    return workingTextQuality.ok ? [] : ["确认项目范围", "待对方反馈", "发现阻塞", "我补充一句"];
+  })();
+  const hasSmartSuggestions = Boolean((!hasItems && workingText && (shouldDraftForMultipleItems || resultSuggestions.length || projectSuggestions.length)) || (hasItems && firstEditableEntry && projectSuggestions.length));
+  const expandSelectedItems = () => {
+    const targetEntries = selectedEntries.length ? selectedEntries : items.map((item, index) => ({ item, index }));
+    targetEntries.forEach(({ index, item }) => {
+      if (item.status !== "submitted" && item.status !== "ignored") {
+        onUpdateItem(index, { expanded: true, status: item.status === "generated" ? "editing" : item.status });
+      }
+    });
+  };
+  const applyProjectSuggestion = (projectId: string | null) => {
+    if (firstEditableEntry) {
+      onUpdateItem(firstEditableEntry.index, {
+        projectId: projectId ?? undefined,
+        projectConfirmed: true,
+        status: firstEditableEntry.item.status === "generated" ? "editing" : firstEditableEntry.item.status
+      });
+      return;
+    }
+    if (workingText) {
+      onGenerateDraft(workingText, "force_single", projectId);
+    }
+  };
+  const requestDraftFromConversation = (intent: WorkLogDraftComposerIntent) => {
+    if (workingText) {
+      onGenerateDraft(workingText, intent);
+      return;
+    }
+    onRegenerateDraft?.();
+  };
   const handleAttachmentPaste = (event: ClipboardEvent<HTMLElement>) => {
     if (!canAttach) {
       return;
@@ -422,7 +657,7 @@ export function WorkLogDraftComposer({
       <section className="worklog-chat-thread" aria-label="智能填报对话">
         {!hasConversation && !hasItems ? (
           <div className="today-log-ai-message is-assistant">
-            直接描述工作，我会整理成可编辑草稿。
+            直接写今天做了什么，我会判断是否需要补充；内容足够后，先给你提交摘要。
           </div>
         ) : null}
         {aiMessages.map((message, index) => (
@@ -434,8 +669,8 @@ export function WorkLogDraftComposer({
           <div className="quickfill-draft-waiting" role="status" aria-live="polite">
             <span className="quickfill-draft-spinner" />
             <div>
-              <strong>正在生成草稿</strong>
-              <p>正在识别日期、项目、工时、风险和下一步，正式环境可能需要几秒。</p>
+              <strong>正在整理内容</strong>
+              <p>正在判断是否需要补充、是否需要拆分，以及可能关联的项目。</p>
             </div>
           </div>
         ) : null}
@@ -446,7 +681,7 @@ export function WorkLogDraftComposer({
               showIcon
               message={aiError.message}
               action={
-                <Button size="small" onClick={onRegenerateDraft ?? onGenerateDraft} disabled={!onRegenerateDraft && !canGenerate}>
+                <Button size="small" onClick={() => (onRegenerateDraft ? onRegenerateDraft() : onGenerateDraft())} disabled={!onRegenerateDraft && !canGenerate}>
                   重试
                 </Button>
               }
@@ -478,14 +713,51 @@ export function WorkLogDraftComposer({
               </div>
             ) : null}
 
+            <div className="worklog-final-summary" aria-live="polite">
+              <div className="worklog-final-summary-head">
+                <div>
+                  <strong>
+                    {selectedCount ? `将提交 ${selectedSummary}` : persistedItems.length ? `已处理 ${persistedItems.length} 条记录` : `已整理 ${itemCount} 条记录`}
+                  </strong>
+                  <span>提交前请确认摘要，项目和工时不确定也可以稍后补充。</span>
+                </div>
+                <CheckCircle2 size={20} />
+              </div>
+              <ol className="worklog-final-list">
+                {summaryItems.map((item, index) => {
+                  const projectName = item.projectId ? projectNameById.get(item.projectId) ?? item.projectName ?? "已选择项目" : null;
+                  const hours = Number(item.hours);
+                  return (
+                    <li key={`${item.localId}-summary`}>
+                      <strong>{summaryItems.length > 1 ? `${index + 1}. ` : ""}{item.title || "今日工作记录"}</strong>
+                      <p>{item.content || "补充内容后才能提交。"}</p>
+                      <div>
+                        <span>项目：{projectName ?? (item.projectHint?.trim() ? `疑似 ${item.projectHint.trim()}` : "不关联项目")}</span>
+                        <span>工时：{Number.isFinite(hours) && hours > 0 ? `${Number(hours.toFixed(1))}h` : "未填写，可稍后补充"}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              <div className="worklog-final-actions">
+                <Button onClick={onContinuePrompt}>继续补充</Button>
+                <Button onClick={expandSelectedItems}>展开编辑</Button>
+                <Button type="primary" loading={submitting} disabled={!canSubmitAny || saving || aiPending} onClick={onSubmitDrafts}>
+                  提交 {selectedSummary}
+                </Button>
+              </div>
+            </div>
+
+            {hasExpandedItems ? (
             <div className="today-log-item-list">
               {items.map((item, index) => {
-                const hasMissing = item.missingFields.length > 0;
+                if (!item.expanded) return null;
+                const requiredMissingFields = item.missingFields.filter((field) => !optionalDraftFieldNames.has(field));
                 const projectName = item.projectId ? projectNameById.get(item.projectId) ?? item.projectName ?? "已选择项目" : null;
                 const statusMeta = draftStatusMeta[item.status] ?? draftStatusMeta.generated;
                 const locked = item.status === "submitted" || item.status === "ignored" || item.status === "saving" || item.status === "submitting";
-                const isProjectReady = Boolean(projectName || item.projectConfirmed);
                 const isHoursReady = Number(item.hours) > 0;
+                const projectSummary = projectName ?? (item.projectHint?.trim() ? `疑似项目：${item.projectHint.trim()}` : "未关联项目");
                 const detailLists = [
                   { key: "achievements", label: "成果", items: item.achievements, tone: "success" },
                   { key: "risks", label: "风险", items: item.risks, tone: "risk" },
@@ -511,21 +783,9 @@ export function WorkLogDraftComposer({
                     <div className="today-log-item-fields">
                       <div className="today-log-item-summary">
                         <span>{dayjs(item.date).isValid() ? dayjs(item.date).format("MM月DD日") : "日期待确认"}</span>
-                        <span className={isProjectReady ? "" : "is-warning"}>{projectName ?? (item.projectConfirmed ? "未关联项目" : "项目待确认")}</span>
-                        <span className={isHoursReady ? "" : "is-warning"}>{isHoursReady ? `${Number(item.hours).toFixed(1)}h` : "工时待补充"}</span>
-                        {hasMissing ? <span className="is-warning">待补充：{missingFieldText(item.missingFields)}</span> : null}
-                      </div>
-                      <div className="today-log-item-state">
-                        {!projectName ? (
-                          <Checkbox
-                            className="today-log-project-confirm"
-                            checked={item.projectConfirmed}
-                            disabled={locked}
-                            onChange={(event) => onUpdateItem(index, { projectConfirmed: event.target.checked })}
-                          >
-                            确认未关联项目
-                          </Checkbox>
-                        ) : null}
+                        <span className={projectName ? "" : "is-optional"}>{projectSummary}</span>
+                        <span className={isHoursReady ? "" : "is-optional"}>{isHoursReady ? `${Number(item.hours).toFixed(1)}h` : "未填工时"}</span>
+                        {requiredMissingFields.length ? <span className="is-warning">需补：{missingFieldText(requiredMissingFields)}</span> : null}
                       </div>
                       <Button
                         type="text"
@@ -570,7 +830,7 @@ export function WorkLogDraftComposer({
                               showSearch
                               optionFilterProp="label"
                               value={item.projectId}
-                              placeholder="项目待确认"
+                              placeholder="可选择项目"
                               loading={projectsLoading}
                               disabled={locked}
                               listHeight={280}
@@ -581,18 +841,18 @@ export function WorkLogDraftComposer({
                             />
                           </label>
                           <label>
-                            <span>工时（可修改）</span>
+                            <span>工时（可选）</span>
                             <InputNumber
                               className="w-full"
                               min={0}
                               max={24}
                               step={0.5}
-                              value={item.hours}
+                              value={Number(item.hours) > 0 ? item.hours : null}
                               disabled={locked}
-                              placeholder="选择时间后自动计算"
+                              placeholder="可不填"
                               onChange={(value) => onUpdateItem(index, { hours: Number(value ?? 0), status: item.status === "generated" ? "editing" : item.status })}
                             />
-                            <small className="today-log-field-note">开始和结束时间会自动带出工时，午休等情况可直接改。</small>
+                            <small className="today-log-field-note">开始和结束时间会自动带出工时，也可以稍后补。</small>
                           </label>
                           <label>
                             <span>开始时间</span>
@@ -682,6 +942,7 @@ export function WorkLogDraftComposer({
                 );
               })}
             </div>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -711,11 +972,11 @@ export function WorkLogDraftComposer({
         </section>
       ) : null}
 
-      {hasItems ? (
+      {hasItems && hasExpandedItems ? (
       <div className="today-log-footer">
         <div>
-          <strong>共 {draftPreview?.items.length ?? 0} 条记录，已选 {selectedSummary}</strong>
-          <span>合计 {Number(totalHours.toFixed(1))}h</span>
+          <strong>共 {draftPreview?.items.length ?? 0} 条记录</strong>
+          <span>{selectedHoursSummary}</span>
         </div>
         <div className="today-log-footer-actions">
           <Button loading={saving} disabled={!selectedCount || submitting || aiPending} onClick={onSaveDrafts}>
@@ -728,13 +989,53 @@ export function WorkLogDraftComposer({
       </div>
       ) : null}
 
+      {hasSmartSuggestions ? (
+        <section className="today-log-smart-suggestions" aria-label="智能建议">
+          <div className="today-log-smart-suggestions-head">
+            <WandSparkles size={15} />
+            <strong>智能建议</strong>
+          </div>
+          <div className="today-log-smart-suggestion-list">
+            {!hasItems && shouldDraftForMultipleItems ? (
+              <>
+                <Button disabled={aiPending} onClick={() => requestDraftFromConversation("split")}>
+                  拆成 {detectedInputItemCount} 条
+                </Button>
+                <Button disabled={aiPending} onClick={() => requestDraftFromConversation("force_single")}>
+                  合并为 1 条
+                </Button>
+                <Button disabled={aiPending} onClick={() => requestDraftFromConversation("split")}>
+                  重新整理
+                </Button>
+              </>
+            ) : null}
+            {projectSuggestions.map((project) => (
+              <Button key={project.value} disabled={aiPending} onClick={() => applyProjectSuggestion(project.value)}>
+                关联到 {project.label}
+              </Button>
+            ))}
+            {projectSuggestions.length ? (
+              <Button disabled={aiPending} onClick={() => applyProjectSuggestion(null)}>
+                不关联项目
+              </Button>
+            ) : null}
+            {!hasItems && resultSuggestions.map((suggestion) => (
+              <Button key={suggestion} disabled={aiPending} onClick={() => onGenerateDraft(composeSuggestedText(workingText, suggestion), "analyze")}>
+                {suggestion}
+              </Button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="today-log-quick-entry worklog-chat-inputbar">
         <Input.TextArea
           className="today-log-quick-input"
           value={aiInput}
+          autoFocus
           autoSize={{ minRows: 2, maxRows: 8 }}
-          placeholder="描述今天完成了什么、花了多久、明天计划或风险。"
-          disabled={aiPending}
+          placeholder="自然描述今天做了什么，例如：和供销社确认校园餐项目接口范围，已同步研发评估。"
+          disabled={inputBusy}
           onPaste={handleAttachmentPaste}
           onChange={(event) => onAiInputChange(event.target.value)}
           onPressEnter={(event) => {
@@ -744,9 +1045,9 @@ export function WorkLogDraftComposer({
             }
           }}
         />
-        <div className="today-log-quick-actions">
-          <span className={inputLimitExceeded ? "today-log-input-meter is-error" : "today-log-input-meter"}>
-            {detectedInputItemCount >= 2 ? `疑似 ${detectedInputItemCount} 项 · ` : ""}
+        <div className={`today-log-quick-actions ${hasItems ? "has-drafts" : "is-empty"}`}>
+          <span className={`today-log-input-meter${inputLimitExceeded ? " is-error" : ""}${showQualityHint ? " is-warning" : ""}`}>
+            {showQualityHint ? `${directSubmitHint} · ` : detectedInputItemCount >= 2 ? `疑似 ${detectedInputItemCount} 项 · ` : ""}
             {inputLength}/{draftInputMaxLength}
           </span>
           {canAttach ? (
@@ -761,8 +1062,10 @@ export function WorkLogDraftComposer({
               </Button>
             </Tooltip>
           ) : null}
-          <Button className="today-log-send-button" type="primary" aria-label="发送" icon={<Send size={17} />} loading={aiPending} disabled={!canGenerate} onClick={onGenerateDraft} />
-          <span className="today-log-shortcut-hint">Enter 生成，Shift + Enter 换行</span>
+          <Button className="today-log-generate-button" type="primary" icon={<WandSparkles size={16} />} loading={aiPending} disabled={!canGenerate} onClick={() => onGenerateDraft()}>
+            继续
+          </Button>
+          <span className="today-log-shortcut-hint">Enter 继续，Shift + Enter 换行</span>
         </div>
       </section>
     </div>

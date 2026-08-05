@@ -2840,6 +2840,11 @@ body {
   min-width: 150px;
 }
 
+.workbench-actions.has-quick-fill {
+  grid-template-rows: repeat(2, minmax(54px, 1fr));
+  min-width: 180px;
+}
+
 .workbench-action {
   display: flex;
   align-items: center;
@@ -2853,6 +2858,11 @@ body {
   cursor: pointer;
   font-weight: 650;
   transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.workbench-actions.has-quick-fill .workbench-action,
+.workbench-action.quickfill-entry-button {
+  justify-content: center;
 }
 
 .workbench-action:hover {
@@ -15714,6 +15724,8 @@ body {
 .today-log-modal .ant-modal-close {
   top: 16px;
   right: 18px;
+  width: 44px;
+  height: 44px;
   color: #86868b;
 }
 
@@ -15882,7 +15894,7 @@ body {
 
 .today-log-modal .today-log-item-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
 }
@@ -15911,6 +15923,11 @@ body {
   background: #fff7e6;
   color: #d46b08;
   font-weight: 700;
+}
+
+.today-log-modal .today-log-item-summary span.is-optional {
+  background: #f5f5f7;
+  color: #86868b;
 }
 
 .today-log-modal .today-log-item-state {
@@ -16024,20 +16041,31 @@ body {
   padding: 0;
 }
 
+.today-log-modal .today-log-generate-button,
+.today-log-modal .today-log-direct-submit-button {
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .today-log-modal .today-log-icon-button {
   border-color: #e5e5ea;
   background: #ffffff;
   color: #1d1d1f;
 }
 
-.today-log-modal .today-log-send-button {
+.today-log-modal .today-log-send-button,
+.today-log-modal .today-log-direct-submit-button {
   border-color: #0b57d0;
   background: #0b57d0;
   color: #ffffff;
 }
 
 .today-log-modal .today-log-send-button[disabled],
-.today-log-modal .today-log-send-button.ant-btn-disabled {
+.today-log-modal .today-log-send-button.ant-btn-disabled,
+.today-log-modal .today-log-direct-submit-button[disabled],
+.today-log-modal .today-log-direct-submit-button.ant-btn-disabled {
   border-color: transparent;
   background: #f5f5f7;
   color: #86868b;
@@ -16188,7 +16216,7 @@ body {
 }
 
 .today-log-modal .today-log-item-fields {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .today-log-modal .today-log-item-state {
@@ -16343,8 +16371,12 @@ body {
 }
 
 .today-log-modal .today-log-quick-actions {
-  width: 140px;
+  width: 236px;
   flex-wrap: wrap;
+}
+
+.today-log-modal .today-log-quick-actions.has-drafts {
+  width: 164px;
 }
 
 .today-log-modal .today-log-input-meter {
@@ -16361,6 +16393,11 @@ body {
   font-weight: 700;
 }
 
+.today-log-modal .today-log-input-meter.is-warning {
+  color: #b45309;
+  white-space: normal;
+}
+
 .today-log-modal .today-log-icon-button:hover,
 .today-log-modal .today-log-icon-button:focus {
   border-color: #d2d2d7;
@@ -16369,7 +16406,9 @@ body {
 }
 
 .today-log-modal .today-log-send-button:not(:disabled):hover,
-.today-log-modal .today-log-send-button:not(:disabled):focus {
+.today-log-modal .today-log-send-button:not(:disabled):focus,
+.today-log-modal .today-log-direct-submit-button:not(:disabled):hover,
+.today-log-modal .today-log-direct-submit-button:not(:disabled):focus {
   border-color: #1a73e8;
   background: #1a73e8;
   color: #ffffff;
@@ -16419,11 +16458,209 @@ body {
   }
 
   .today-log-modal .today-log-quick-actions {
-    width: 48px;
+    width: 100%;
+  }
+
+  .today-log-modal .today-log-quick-actions.has-drafts {
+    width: 100%;
   }
 
   .today-log-modal .today-log-input-meter {
-    display: none;
+    display: block;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .today-log-modal .today-log-generate-button,
+  .today-log-modal .today-log-direct-submit-button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+/* Conversational work log composer */
+.today-log-modal .worklog-chat-composer {
+  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+}
+
+.today-log-modal .worklog-final-summary {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+}
+
+.today-log-modal .worklog-final-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.today-log-modal .worklog-final-summary-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.today-log-modal .worklog-final-summary-head strong {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 22px;
+}
+
+.today-log-modal .worklog-final-summary-head span {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-final-summary-head svg {
+  flex: 0 0 auto;
+  color: #16a34a;
+}
+
+.today-log-modal .worklog-final-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-log-modal .worklog-final-list li {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.today-log-modal .worklog-final-list strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .worklog-final-list p {
+  margin: 0;
+  color: #374151;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .worklog-final-list li > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.today-log-modal .worklog-final-list li > div span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 4px 9px;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .worklog-final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.today-log-modal .worklog-final-actions .ant-btn {
+  min-height: 40px;
+  border-radius: 12px;
+  font-weight: 650;
+}
+
+.today-log-modal .today-log-smart-suggestions {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #ccfbf1;
+  border-radius: 16px;
+  background: #f0fdfa;
+  padding: 10px 12px;
+}
+
+.today-log-modal .today-log-smart-suggestions-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 740;
+  line-height: 20px;
+}
+
+.today-log-modal .today-log-smart-suggestion-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.today-log-modal .today-log-smart-suggestion-list .ant-btn {
+  min-height: 36px;
+  border-color: #99f6e4;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f766e;
+  font-weight: 650;
+  white-space: normal;
+}
+
+.today-log-modal .today-log-smart-suggestion-list .ant-btn:not(:disabled):hover,
+.today-log-modal .today-log-smart-suggestion-list .ant-btn:not(:disabled):focus {
+  border-color: #14b8a6;
+  background: #ecfeff;
+  color: #0f766e;
+}
+
+.today-log-modal .today-log-quick-actions {
+  width: 188px;
+}
+
+.today-log-modal .today-log-generate-button {
+  min-width: 84px;
+}
+
+@media (max-width: 760px) {
+  .today-log-modal .worklog-final-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .today-log-modal .worklog-final-actions .ant-btn,
+  .today-log-modal .today-log-smart-suggestion-list .ant-btn {
+    min-height: 44px;
+  }
+
+  .today-log-modal .today-log-smart-suggestion-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .today-log-modal .today-log-quick-actions {
+    width: 100%;
   }
 }
 

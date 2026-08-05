@@ -10,13 +10,19 @@ import type { ClipboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   WorkLogDraftComposer,
+  clarificationQuestionForWorkLog,
   composeDraftComposerContent,
+  createDraftComposerPreviewFromText,
   createEmptyDraftComposerItem,
   draftComposerItemFromAi,
+  estimateDraftItemCount,
   projectIdFromDraftHint,
   selectedDraftComposerEntries,
   validateDraftComposerState,
+  workLogQualityCheck,
+  workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
+  type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
   type WorkLogDraftComposerState
 } from "@/components/WorkLogDraftComposer";
@@ -116,7 +122,7 @@ function fileToBase64(file: File) {
 
 function toPayload(values: WorkLogForm) {
   const date = values.date;
-  const hours = typeof values.hours === "number" && Number.isFinite(values.hours) ? values.hours : null;
+  const hours = typeof values.hours === "number" && Number.isFinite(values.hours) && values.hours > 0 ? values.hours : null;
   return {
     date: date.format("YYYY-MM-DD"),
     title: values.title,
@@ -145,7 +151,7 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
     date: safeDate,
     title: item.title || "工作记录",
     content: item.content || item.title || "工作记录",
-    hours: Number.isFinite(hours) ? hours : null,
+    hours: Number.isFinite(hours) && hours > 0 ? hours : null,
     kind: item.kind,
     startTime: parseWorkLogTime(item.startTime, safeDate),
     endTime: parseWorkLogTime(item.endTime, safeDate)
@@ -158,6 +164,10 @@ function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
     content: composeDraftComposerContent(item),
     projectId: item.projectId
   };
+}
+
+function workLogKindForDate(date: dayjs.Dayjs) {
+  return date.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY";
 }
 
 export default function WorkLogsPage() {
@@ -180,7 +190,7 @@ export default function WorkLogsPage() {
   const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
     {
       role: "assistant",
-      content: "直接告诉我今天完成了什么、花了多久，或明天计划做什么；一句话里有多条日程也可以，我会先识别整理，等待完成后再写入填报。"
+      content: "直接写今天做了什么，我会判断是否需要补充；内容足够后，会先给你提交摘要。"
     }
   ]);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
@@ -482,7 +492,7 @@ export default function WorkLogsPage() {
         message.success("已整理到表单，请确认后保存修改。");
       } else {
         setDraftPreview(preview);
-        message.success(preview?.items.length ? `已生成 ${preview.items.length} 条草稿，请逐条确认。` : "已生成草稿，请确认后提交。");
+        message.success(preview?.items.length ? `已整理 ${preview.items.length} 条提交摘要。` : "已整理提交摘要，请确认后提交。");
       }
     },
     onError: (error) => {
@@ -530,14 +540,48 @@ export default function WorkLogsPage() {
     }
   });
 
-  const sendAiMessage = () => {
-    const text = aiInput.trim();
+  const sendAiMessage = (textOverride?: string, intent: WorkLogDraftComposerIntent = "analyze", projectId?: string | null) => {
+    const text = (textOverride ?? aiInput).trim();
+    if (!text && intent === "split" && aiMessages.some((item) => item.role === "user")) {
+      draftLog.mutate(aiMessages);
+      return;
+    }
     if (!text) return;
-    const nextMessages = [...aiMessages, { role: "user" as const, content: text }];
+    const lastUserMessage = [...aiMessages].reverse().find((item) => item.role === "user");
+    const nextMessages = lastUserMessage?.content.trim() === text ? aiMessages : [...aiMessages, { role: "user" as const, content: text }];
     setLastAiInput(text);
-    setAiMessages(nextMessages);
     setAiInput("");
-    draftLog.mutate(nextMessages);
+    if (intent === "split") {
+      setAiMessages(nextMessages);
+      draftLog.mutate(nextMessages);
+      return;
+    }
+    if (intent !== "force_single" && workLogShouldDraftForMultipleItems(text)) {
+      const count = estimateDraftItemCount(text);
+      setAiMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: `我识别到 ${count} 条工作，建议拆成 ${count} 条日报。`
+        }
+      ]);
+      setDraftPreview(null);
+      return;
+    }
+    const quality = workLogQualityCheck(text);
+    if (intent !== "force_single" && !quality.ok) {
+      setAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+      setDraftPreview(null);
+      return;
+    }
+    setDraftPreview(createDraftComposerPreviewFromText({ text, date: entryDate, projects: projects.data, projectId }));
+    setAiMessages([
+      ...nextMessages,
+      {
+        role: "assistant",
+        content: intent === "force_single" ? "已按 1 条记录整理，请确认摘要后提交。" : "内容足够，我整理成最终摘要，请确认后提交。"
+      }
+    ]);
   };
 
   const continueEditingDraftPrompt = () => {
@@ -681,7 +725,7 @@ export default function WorkLogsPage() {
     }
     persistDraftLog.mutate({ preview: draftPreview as DraftPreview, submit });
   };
-  const entryKindTitle = entryDate.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD") ? "填写计划" : "填写日报";
+  const entryKindTitle = workLogKindForDate(entryDate) === "PLAN" ? "填写计划" : "填写日报";
 
   const columns: ColumnsType<WorkLog> = [
     { title: "日期", dataIndex: "date", width: 110, render: (value: string) => dayjs(value).format("YYYY-MM-DD") },
@@ -787,7 +831,7 @@ export default function WorkLogsPage() {
       <div className="surface-panel worklog-entry-panel">
         <div className="worklog-entry-copy">
           <div className="section-title">填写今日记录</div>
-          <div className="section-subtitle">把今天的多个项目工作整理成独立记录，项目、工时和附件逐条确认。</div>
+          <div className="section-subtitle">先自然描述工作，系统会追问缺失信息，并在提交前展示摘要。</div>
         </div>
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
           填写今日记录
@@ -884,7 +928,7 @@ export default function WorkLogsPage() {
           ) : (
             <div className="today-log-modal-title">
               <strong>{entryKindTitle}</strong>
-              <span>{workLogDraftDateLabel(entryDate)}，可一次提交多条日报或计划</span>
+              <span>{workLogDraftDateLabel(entryDate)}，先自然描述工作，确认摘要后再提交。</span>
             </div>
           )
         }

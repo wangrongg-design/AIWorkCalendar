@@ -11,14 +11,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import {
   WorkLogDraftComposer,
+  clarificationQuestionForWorkLog,
   composeDraftComposerContent,
+  createDraftComposerPreviewFromText,
   createEmptyDraftComposerItem,
   draftComposerItemFromAi,
+  estimateDraftItemCount,
   projectIdFromDraftItem,
   projectIdFromText,
   selectedDraftComposerEntries,
   validateDraftComposerState,
+  workLogQualityCheck,
+  workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
+  type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
   type WorkLogDraftComposerState
 } from "@/components/WorkLogDraftComposer";
@@ -336,7 +342,7 @@ function draftItemToForm(item: WorkLogDraftItem): WorkLogForm {
     date: safeDate,
     title: item.title || "工作填报",
     content: item.content || item.title || "工作填报",
-    hours: Number.isFinite(hours) ? hours : null,
+    hours: Number.isFinite(hours) && hours > 0 ? hours : null,
     kind: item.kind,
     startTime: draftTimeToDayjs(item.startTime, safeDate),
     endTime: draftTimeToDayjs(item.endTime, safeDate)
@@ -349,6 +355,10 @@ function draftPreviewItemToForm(item: DraftPreviewItem): WorkLogForm {
     content: composeDraftComposerContent(item),
     projectId: item.projectId
   };
+}
+
+function workLogKindForDate(date: Dayjs) {
+  return date.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY";
 }
 
 function draftTimeToDayjs(value: string | null | undefined, date: Dayjs) {
@@ -381,7 +391,7 @@ export default function CalendarPage() {
   const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([
     {
       role: "assistant",
-      content: "告诉我今天完成了什么、花了多久，或明天计划做什么；我会先生成草稿，确认后再提交。"
+      content: "直接写今天做了什么，我会判断是否需要补充；内容足够后，会先给你提交摘要。"
     }
   ]);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
@@ -505,7 +515,10 @@ export default function CalendarPage() {
     },
     onSuccess: (preview) => {
       setDraftPreview(preview);
-      setQuickFillAiMessages((messages) => [...messages, { role: "assistant", content: `${preview.assistantMessage} 请确认草稿内容后提交。` }]);
+      setQuickFillAiMessages((messages) => [
+        ...messages,
+        { role: "assistant", content: `${preview.assistantMessage} 请确认摘要后提交，项目和工时也可以展开编辑再补。` }
+      ]);
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : "草稿生成失败，请调整描述后重试。");
@@ -1052,14 +1065,48 @@ export default function CalendarPage() {
     addPendingFiles(files, "paste");
   };
 
-  const sendQuickFillAiMessage = () => {
-    const text = quickFillAiInput.trim();
+  const sendQuickFillAiMessage = (textOverride?: string, intent: WorkLogDraftComposerIntent = "analyze", projectId?: string | null) => {
+    const text = (textOverride ?? quickFillAiInput).trim();
+    if (!text && intent === "split" && quickFillAiMessages.some((item) => item.role === "user")) {
+      draftWorkLog.mutate(quickFillAiMessages);
+      return;
+    }
     if (!text) return;
-    const nextMessages = [...quickFillAiMessages, { role: "user" as const, content: text }];
+    const lastUserMessage = [...quickFillAiMessages].reverse().find((item) => item.role === "user");
+    const nextMessages = lastUserMessage?.content.trim() === text ? quickFillAiMessages : [...quickFillAiMessages, { role: "user" as const, content: text }];
     setLastQuickFillAiInput(text);
-    setQuickFillAiMessages(nextMessages);
     setQuickFillAiInput("");
-    draftWorkLog.mutate(nextMessages);
+    if (intent === "split") {
+      setQuickFillAiMessages(nextMessages);
+      draftWorkLog.mutate(nextMessages);
+      return;
+    }
+    if (intent !== "force_single" && workLogShouldDraftForMultipleItems(text)) {
+      const count = estimateDraftItemCount(text);
+      setQuickFillAiMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: `我识别到 ${count} 条工作，建议拆成 ${count} 条日报。`
+        }
+      ]);
+      setDraftPreview(null);
+      return;
+    }
+    const quality = workLogQualityCheck(text);
+    if (intent !== "force_single" && !quality.ok) {
+      setQuickFillAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+      setDraftPreview(null);
+      return;
+    }
+    setDraftPreview(createDraftComposerPreviewFromText({ text, date: quickFillDate, projects: projects.data, projectId }));
+    setQuickFillAiMessages([
+      ...nextMessages,
+      {
+        role: "assistant",
+        content: intent === "force_single" ? "已按 1 条记录整理，请确认摘要后提交。" : "内容足够，我整理成最终摘要，请确认后提交。"
+      }
+    ]);
   };
 
   const regenerateQuickFillDraft = () => {
@@ -1229,7 +1276,7 @@ export default function CalendarPage() {
     setMonth(value);
     setCopilotRange(normalizeCopilotRange([value.startOf("month"), value.endOf("month")]));
   };
-  const quickFillKindTitle = quickFillDate.format("YYYY-MM-DD") > today ? "填写计划" : "填写日报";
+  const quickFillKindTitle = workLogKindForDate(quickFillDate) === "PLAN" ? "填写计划" : "填写日报";
 
   return (
     <div className="page-stack dashboard-calendar-page">
@@ -1302,7 +1349,11 @@ export default function CalendarPage() {
                 <span>参考：{todayReferenceCount} 条记录</span>
               </div>
             </div>
-            <div className="workbench-actions is-single-action">
+            <div className="workbench-actions has-quick-fill">
+              <button type="button" onClick={() => openQuickFill(today)} className="workbench-action primary-action-button quickfill-entry-button">
+                <CalendarPlus size={18} />
+                <span>填写今日日报</span>
+              </button>
               <button type="button" onClick={() => setChatOpen(true)} className="workbench-action ai-action-button ai-assistant-entry-button">
                 <Bot size={18} />
                 <span>AI 工作助手</span>
@@ -1575,7 +1626,7 @@ export default function CalendarPage() {
         title={
           <div className="today-log-modal-title">
             <strong>{quickFillKindTitle}</strong>
-            <span>{workLogDraftDateLabel(quickFillDate)}，像聊天一样描述工作，AI 只生成草稿，确认后才提交。</span>
+            <span>{workLogDraftDateLabel(quickFillDate)}，先自然描述工作，确认摘要后再提交。</span>
           </div>
         }
         open={quickFillOpen}
