@@ -33,6 +33,7 @@ import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetai
 import { apiDownload, apiFetch } from "@/lib/api";
 import { hasAnyRole, useAuthStore } from "@/lib/auth-store";
 import { CommunicationInsight, Project, WecomOverview, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
+import { clearWorkLogFillAutosave, readWorkLogFillAutosave, workLogFillAutosaveKey, writeWorkLogFillAutosave } from "@/lib/work-log-fill-autosave";
 import { applyWorkLogTimingAutoFill, parseWorkLogTime } from "@/lib/work-log-time";
 
 type WorkLogForm = {
@@ -225,9 +226,13 @@ export default function WorkLogsPage() {
   const [attachmentRetryTargetId, setAttachmentRetryTargetId] = useState<string | null>(null);
   const [suggestionAnalysis, setSuggestionAnalysis] = useState<WorkLogSuggestionAnalysis | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsSlow, setSuggestionsSlow] = useState(false);
   const [suggestionSubmitting, setSuggestionSubmitting] = useState(false);
   const [suggestionsUnavailable, setSuggestionsUnavailable] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState("");
+  const [restoredFillDraft, setRestoredFillDraft] = useState(false);
   const suggestionRequestSeq = useRef(0);
+  const suggestionAbortRef = useRef<AbortController | null>(null);
   const canManageWorkLogs = hasAnyRole(user, ["SUPER_ADMIN", "COMPANY_ADMIN"]);
   const canModifyWorkLog = (record: WorkLog) => Boolean(record.userId === user?.id || canManageWorkLogs);
 
@@ -282,6 +287,39 @@ export default function WorkLogsPage() {
       return dateMatched && statusMatched && kindMatched && projectMatched;
     });
   }, [dateFilter, kindFilter, logs.data, projectFilter, statusFilter]);
+
+  const entryDateKey = entryDate.format("YYYY-MM-DD");
+  const currentAutosaveKey = workLogFillAutosaveKey(user?.id, user?.tenantId, entryDateKey);
+  const hasSubmittedLogForDate = (dateKey: string) =>
+    Boolean(
+      (logs.data ?? []).some(
+        (item) => item.userId === user?.id && item.status === "SUBMITTED" && dayjs(item.date).format("YYYY-MM-DD") === dateKey
+      )
+    );
+  const clearCurrentAutosave = (dateKey = entryDateKey) => {
+    clearWorkLogFillAutosave(workLogFillAutosaveKey(user?.id, user?.tenantId, dateKey));
+    setAutoSaveStatus("");
+    setRestoredFillDraft(false);
+  };
+  const resetFillDraftState = (dateValue = entryDate) => {
+    setAiInput("");
+    setLastAiInput("");
+    setAiMessages([]);
+    setSuggestionAnalysis(null);
+    setSuggestionsUnavailable(false);
+    setSuggestionsSlow(false);
+    setDraftPreview({
+      assistantMessage: "今日工作记录",
+      items: [],
+      attachedToFirst: false,
+      attachmentTargetIndex: 0
+    });
+    setPendingAttachments([]);
+    setAttachmentRetryTargetId(null);
+    clearWorkLogFillAutosave(workLogFillAutosaveKey(user?.id, user?.tenantId, dateValue.format("YYYY-MM-DD")));
+    setAutoSaveStatus("");
+    setRestoredFillDraft(false);
+  };
 
   const pendingUploadFiles: UploadFile[] = useMemo(
     () =>
@@ -400,14 +438,29 @@ export default function WorkLogsPage() {
       mode?: "silent" | "submit";
     }) => {
       const requestId = ++suggestionRequestSeq.current;
+      suggestionAbortRef.current?.abort();
+      const controller = new AbortController();
+      suggestionAbortRef.current = controller;
+      const slowTimer = window.setTimeout(() => {
+        if (requestId === suggestionRequestSeq.current) {
+          setSuggestionsSlow(true);
+        }
+      }, 1500);
+      const timeoutTimer = window.setTimeout(() => {
+        if (requestId === suggestionRequestSeq.current) {
+          controller.abort();
+        }
+      }, 4000);
       if (mode === "submit") {
         setSuggestionSubmitting(true);
       } else {
         setSuggestionsLoading(true);
       }
+      setSuggestionsSlow(false);
       try {
         const result = await apiFetch<WorkLogSuggestionAnalysis>("/ai/work-log-suggestions", {
           method: "POST",
+          signal: controller.signal,
           body: JSON.stringify({
             userInput: text,
             currentDate: entryDate.format("YYYY-MM-DD"),
@@ -428,7 +481,10 @@ export default function WorkLogsPage() {
         }
         throw error;
       } finally {
+        window.clearTimeout(slowTimer);
+        window.clearTimeout(timeoutTimer);
         if (requestId === suggestionRequestSeq.current) {
+          setSuggestionsSlow(false);
           if (mode === "submit") {
             setSuggestionSubmitting(false);
           } else {
@@ -650,6 +706,9 @@ export default function WorkLogsPage() {
     },
     onSuccess: (preview) => {
       message.success(preview.submit ? `已提交 ${preview.persistedCount} 条工作记录。` : `已保存 ${preview.persistedCount} 条草稿。`);
+      if (preview.submit) {
+        clearCurrentAutosave(entryDateKey);
+      }
       if (preview.attachmentUpload?.failedCount) {
         message.warning(
           `${preview.submit ? "工作记录已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
@@ -736,13 +795,15 @@ export default function WorkLogsPage() {
     if (!text) return;
     const lastUserMessage = [...aiMessages].reverse().find((item) => item.role === "user");
     const nextMessages = lastUserMessage?.content.trim() === text ? aiMessages : [...aiMessages, { role: "user" as const, content: text }];
+    const workingMessages = [...nextMessages, { role: "assistant" as const, content: "已收到，正在整理，可继续补充。" }];
     setLastAiInput(text);
     setAiInput("");
     if (intent === "split") {
-      setAiMessages(nextMessages);
+      setAiMessages(workingMessages);
       draftLog.mutate(nextMessages);
       return;
     }
+    setAiMessages(workingMessages);
     try {
       const analysis = await requestWorkLogSuggestion({
         text,
@@ -753,7 +814,7 @@ export default function WorkLogsPage() {
       const nextPreview = analysis.canSubmit ? previewFromSuggestionAnalysis(analysis, projectId) : null;
       setDraftPreview(nextPreview);
       setAiMessages([
-        ...nextMessages,
+        ...workingMessages,
         {
           role: "assistant",
           content: analysis.assistantMessage || (nextPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。")
@@ -763,13 +824,13 @@ export default function WorkLogsPage() {
     } catch {
       const quality = workLogQualityCheck(text);
       if (intent !== "force_single" && !quality.ok) {
-        setAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+        setAiMessages([...workingMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
         setDraftPreview(null);
         return;
       }
       setDraftPreview(createDraftComposerPreviewFromText({ text, date: entryDate, projects: projects.data, projectId }));
       setAiMessages([
-        ...nextMessages,
+        ...workingMessages,
         {
           role: "assistant",
           content: "智能建议暂时不可用，已根据当前内容整理提交摘要，请确认后提交。"
@@ -825,6 +886,10 @@ export default function WorkLogsPage() {
   const openCreate = (dateValue = dayjs()) => {
     const dateKey = dateValue.format("YYYY-MM-DD");
     const isFuture = dateKey > dayjs().format("YYYY-MM-DD");
+    const autosaveKey = workLogFillAutosaveKey(user?.id, user?.tenantId, dateKey);
+    const saved = hasSubmittedLogForDate(dateKey)
+      ? (clearWorkLogFillAutosave(autosaveKey), null)
+      : readWorkLogFillAutosave<AiChatMessage, DraftPreview, WorkLogSuggestionAnalysis>(autosaveKey);
     setEditing(null);
     setEntryDate(dateValue);
     setPendingAttachments([]);
@@ -839,15 +904,20 @@ export default function WorkLogsPage() {
       hours: null,
       kind: isFuture ? "PLAN" : "DAILY"
     });
-    setAiInput("");
-    setLastAiInput("");
-    setAiMessages([]);
-    setDraftPreview({
-      assistantMessage: "今日工作记录",
-      items: [],
-      attachedToFirst: false,
-      attachmentTargetIndex: 0
-    });
+    setAiInput(saved?.aiInput ?? "");
+    setLastAiInput(saved?.lastInput ?? "");
+    setAiMessages(saved?.messages ?? []);
+    setSuggestionAnalysis(saved?.suggestionAnalysis ?? null);
+    setDraftPreview(
+      saved?.draftPreview ?? {
+        assistantMessage: "今日工作记录",
+        items: [],
+        attachedToFirst: false,
+        attachmentTargetIndex: 0
+      }
+    );
+    setRestoredFillDraft(Boolean(saved));
+    setAutoSaveStatus(saved ? "已恢复上次未提交的内容" : "");
     setModalOpen(true);
   };
 
@@ -875,6 +945,49 @@ export default function WorkLogsPage() {
     }, 1000);
     return () => window.clearTimeout(timer);
   }, [aiInput, aiMessages, editing, modalOpen, requestWorkLogSuggestion]);
+
+  useEffect(() => {
+    if (!modalOpen || editing) return;
+    if (hasSubmittedLogForDate(entryDateKey)) {
+      clearCurrentAutosave(entryDateKey);
+      return;
+    }
+    const hasContent = Boolean(
+      aiInput.trim() ||
+        lastAiInput.trim() ||
+        aiMessages.some((item) => item.role === "user") ||
+        draftPreview?.items.length ||
+        suggestionAnalysis ||
+        pendingAttachments.length
+    );
+    if (!hasContent) return;
+    setAutoSaveStatus("正在自动暂存");
+    const timer = window.setTimeout(() => {
+      writeWorkLogFillAutosave<AiChatMessage, DraftPreview, WorkLogSuggestionAnalysis>(currentAutosaveKey, {
+        date: entryDateKey,
+        aiInput,
+        lastInput: lastAiInput,
+        messages: aiMessages,
+        draftPreview,
+        suggestionAnalysis,
+        attachmentMetadata: suggestionAttachmentMetadata
+      });
+      setAutoSaveStatus("已自动暂存，防止内容丢失");
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [
+    aiInput,
+    aiMessages,
+    currentAutosaveKey,
+    draftPreview,
+    editing,
+    entryDateKey,
+    lastAiInput,
+    modalOpen,
+    pendingAttachments.length,
+    suggestionAnalysis,
+    suggestionAttachmentMetadata
+  ]);
 
   const openEdit = (record: WorkLog) => {
     setEditing(record);
@@ -978,6 +1091,11 @@ export default function WorkLogsPage() {
       return;
     }
     persistDraftLog.mutate({ preview: draftPreview as DraftPreview, submit });
+  };
+  const abandonFillDraft = () => {
+    clearCurrentAutosave(entryDateKey);
+    resetFillDraftState(entryDate);
+    setModalOpen(false);
   };
   const entryKindTitle = workLogKindForDate(entryDate) === "PLAN" ? "填写计划" : "填写日报";
 
@@ -1320,8 +1438,14 @@ export default function WorkLogsPage() {
             onContinuePrompt={continueEditingDraftPrompt}
             smartSuggestions={suggestionAnalysis?.suggestions ?? []}
             suggestionsLoading={suggestionsLoading}
+            suggestionsSlow={suggestionsSlow}
             suggestionsUnavailable={suggestionsUnavailable}
+            suggestionAnalysis={suggestionAnalysis}
             onSmartSuggestionClick={handleSmartSuggestionClick}
+            autoSaveStatus={autoSaveStatus}
+            restoredNotice={restoredFillDraft}
+            onResetRestoredDraft={() => resetFillDraftState(entryDate)}
+            onAbandonDraft={abandonFillDraft}
             draftPreview={draftPreview}
             onUpdateItem={updateDraftPreviewItem}
             onDeleteItem={deleteDraftPreviewItem}

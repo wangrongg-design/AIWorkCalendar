@@ -35,6 +35,7 @@ import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetai
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { AuthUser, CalendarDay, CalendarDayDetail, CalendarResponse, Department, Project, WorkLog, WorkLogAttachment, WorkLogDraft, WorkLogDraftItem, WorkLogKind } from "@/lib/types";
+import { clearWorkLogFillAutosave, readWorkLogFillAutosave, workLogFillAutosaveKey, writeWorkLogFillAutosave } from "@/lib/work-log-fill-autosave";
 
 type OrgResponse = {
   departments: Department[];
@@ -426,9 +427,13 @@ export default function CalendarPage() {
   const [attachmentRetryTargetId, setAttachmentRetryTargetId] = useState<string | null>(null);
   const [suggestionAnalysis, setSuggestionAnalysis] = useState<WorkLogSuggestionAnalysis | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsSlow, setSuggestionsSlow] = useState(false);
   const [suggestionSubmitting, setSuggestionSubmitting] = useState(false);
   const [suggestionsUnavailable, setSuggestionsUnavailable] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState("");
+  const [restoredFillDraft, setRestoredFillDraft] = useState(false);
   const suggestionRequestSeq = useRef(0);
+  const suggestionAbortRef = useRef<AbortController | null>(null);
   const [chatInput, setChatInput] = useState("");
   const chatThreadRef = useRef<HTMLDivElement | null>(null);
   const chatInputRef = useRef<TextAreaRef | null>(null);
@@ -556,14 +561,29 @@ export default function CalendarPage() {
       mode?: "silent" | "submit";
     }) => {
       const requestId = ++suggestionRequestSeq.current;
+      suggestionAbortRef.current?.abort();
+      const controller = new AbortController();
+      suggestionAbortRef.current = controller;
+      const slowTimer = window.setTimeout(() => {
+        if (requestId === suggestionRequestSeq.current) {
+          setSuggestionsSlow(true);
+        }
+      }, 1500);
+      const timeoutTimer = window.setTimeout(() => {
+        if (requestId === suggestionRequestSeq.current) {
+          controller.abort();
+        }
+      }, 4000);
       if (mode === "submit") {
         setSuggestionSubmitting(true);
       } else {
         setSuggestionsLoading(true);
       }
+      setSuggestionsSlow(false);
       try {
         const result = await apiFetch<WorkLogSuggestionAnalysis>("/ai/work-log-suggestions", {
           method: "POST",
+          signal: controller.signal,
           body: JSON.stringify({
             userInput: text,
             currentDate: quickFillDate.format("YYYY-MM-DD"),
@@ -584,7 +604,10 @@ export default function CalendarPage() {
         }
         throw error;
       } finally {
+        window.clearTimeout(slowTimer);
+        window.clearTimeout(timeoutTimer);
         if (requestId === suggestionRequestSeq.current) {
+          setSuggestionsSlow(false);
           if (mode === "submit") {
             setSuggestionSubmitting(false);
           } else {
@@ -684,6 +707,9 @@ export default function CalendarPage() {
     },
     onSuccess: (preview) => {
       message.success(preview.submit ? `已提交 ${preview.persistedCount} 条工作记录。` : `已保存 ${preview.persistedCount} 条草稿。`);
+      if (preview.submit) {
+        clearQuickFillAutosave(quickFillDateKey);
+      }
       if (preview.attachmentUpload?.failedCount) {
         message.warning(
           `${preview.submit ? "工作记录已提交" : "草稿已保存"}，但 ${preview.attachmentUpload.failedCount} 个附件上传失败。${preview.attachmentUpload.error?.message ?? "请稍后在填报记录中重新上传。"}`
@@ -820,6 +846,90 @@ export default function CalendarPage() {
     }
     return map;
   }, [calendar.data?.days]);
+  const quickFillDateKey = quickFillDate.format("YYYY-MM-DD");
+  const currentQuickFillAutosaveKey = workLogFillAutosaveKey(user?.id, user?.tenantId, quickFillDateKey);
+  const hasSubmittedLogForQuickFillDate = (dateKey: string) => {
+    const detail = dateKey === selectedDate ? dayDetail.data : dateKey === today ? todayDetail.data : null;
+    const detailHasSubmitted = detail?.filledEmployees.some((employee) =>
+      employee.id === user?.id &&
+      employee.logs.some((log) => log.status === "SUBMITTED" && dayjs(log.date).format("YYYY-MM-DD") === dateKey)
+    );
+    if (detailHasSubmitted) {
+      return true;
+    }
+    if (scope === "self") {
+      const day = dayMap.get(dateKey);
+      return Boolean(day && ((day.dailyLogCount ?? 0) + (day.planLogCount ?? 0) > 0 || day.filledCount > 0));
+    }
+    return false;
+  };
+  const clearQuickFillAutosave = (dateKey = quickFillDateKey) => {
+    clearWorkLogFillAutosave(workLogFillAutosaveKey(user?.id, user?.tenantId, dateKey));
+    setAutoSaveStatus("");
+    setRestoredFillDraft(false);
+  };
+  const resetQuickFillDraftState = (dateValue = quickFillDate) => {
+    setQuickFillAiInput("");
+    setLastQuickFillAiInput("");
+    setQuickFillAiMessages([]);
+    setSuggestionAnalysis(null);
+    setSuggestionsUnavailable(false);
+    setSuggestionsSlow(false);
+    setDraftPreview({
+      assistantMessage: "今日工作记录",
+      items: [],
+      attachedToFirst: false,
+      attachmentTargetIndex: 0
+    });
+    setPendingAttachments([]);
+    setAttachmentRetryTargetId(null);
+    clearWorkLogFillAutosave(workLogFillAutosaveKey(user?.id, user?.tenantId, dateValue.format("YYYY-MM-DD")));
+    setAutoSaveStatus("");
+    setRestoredFillDraft(false);
+  };
+
+  useEffect(() => {
+    if (!quickFillOpen) return;
+    if (hasSubmittedLogForQuickFillDate(quickFillDateKey)) {
+      clearWorkLogFillAutosave(currentQuickFillAutosaveKey);
+      return;
+    }
+    const hasContent =
+      Boolean(quickFillAiInput.trim()) ||
+      Boolean(lastQuickFillAiInput.trim()) ||
+      quickFillAiMessages.some((item) => item.role === "user" && item.content.trim()) ||
+      Boolean(draftPreview?.items.length) ||
+      Boolean(suggestionAnalysis) ||
+      pendingAttachments.length > 0;
+    if (!hasContent) {
+      return;
+    }
+    setAutoSaveStatus((current) => (current === "已恢复上次未提交的内容" ? current : "正在自动暂存"));
+    const timer = window.setTimeout(() => {
+      writeWorkLogFillAutosave<AiDraftMessage, DraftPreview, WorkLogSuggestionAnalysis>(currentQuickFillAutosaveKey, {
+        date: quickFillDateKey,
+        aiInput: quickFillAiInput,
+        lastInput: lastQuickFillAiInput,
+        messages: quickFillAiMessages,
+        draftPreview,
+        suggestionAnalysis,
+        attachmentMetadata: suggestionAttachmentMetadata
+      });
+      setAutoSaveStatus("已自动暂存，防止内容丢失");
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [
+    currentQuickFillAutosaveKey,
+    draftPreview,
+    lastQuickFillAiInput,
+    pendingAttachments.length,
+    quickFillAiInput,
+    quickFillAiMessages,
+    quickFillDateKey,
+    quickFillOpen,
+    suggestionAnalysis,
+    suggestionAttachmentMetadata
+  ]);
 
   const cells = useMemo(() => monthCells(month), [month]);
   const defaultScope = useMemo(() => defaultCalendarScope(user), [user?.logViewScope, user?.roles]);
@@ -1187,21 +1297,32 @@ export default function CalendarPage() {
 
   const openQuickFill = (date: string) => {
     const dateValue = dayjs(date);
+    const dateKey = dateValue.format("YYYY-MM-DD");
+    const autosaveKey = workLogFillAutosaveKey(user?.id, user?.tenantId, dateKey);
+    const saved = hasSubmittedLogForQuickFillDate(dateKey)
+      ? (clearWorkLogFillAutosave(autosaveKey), null)
+      : readWorkLogFillAutosave<AiDraftMessage, DraftPreview, WorkLogSuggestionAnalysis>(autosaveKey);
     setSelectedDate(null);
     setQuickFillDate(dateValue);
     setPendingAttachments([]);
     setAttachmentRetryTargetId(null);
     setSuggestionAnalysis(null);
     setSuggestionsUnavailable(false);
-    setQuickFillAiInput("");
-    setLastQuickFillAiInput("");
-    setQuickFillAiMessages([]);
+    setSuggestionsSlow(false);
+    setQuickFillAiInput(saved?.aiInput ?? "");
+    setLastQuickFillAiInput(saved?.lastInput ?? "");
+    setQuickFillAiMessages(saved?.messages ?? []);
+    setSuggestionAnalysis(saved?.suggestionAnalysis ?? null);
     setDraftPreview({
-      assistantMessage: "今日工作记录",
-      items: [],
-      attachedToFirst: false,
-      attachmentTargetIndex: 0
+      ...(saved?.draftPreview ?? {
+        assistantMessage: "今日工作记录",
+        items: [],
+        attachedToFirst: false,
+        attachmentTargetIndex: 0
+      })
     });
+    setRestoredFillDraft(Boolean(saved));
+    setAutoSaveStatus(saved ? "已恢复上次未提交的内容" : "");
     setQuickFillOpen(true);
   };
 
@@ -1251,13 +1372,15 @@ export default function CalendarPage() {
     if (!text) return;
     const lastUserMessage = [...quickFillAiMessages].reverse().find((item) => item.role === "user");
     const nextMessages = lastUserMessage?.content.trim() === text ? quickFillAiMessages : [...quickFillAiMessages, { role: "user" as const, content: text }];
+    const workingMessages: AiDraftMessage[] = [...nextMessages, { role: "assistant", content: "已收到，正在整理，可继续补充。" }];
     setLastQuickFillAiInput(text);
     setQuickFillAiInput("");
     if (intent === "split") {
-      setQuickFillAiMessages(nextMessages);
+      setQuickFillAiMessages(workingMessages);
       draftWorkLog.mutate(nextMessages);
       return;
     }
+    setQuickFillAiMessages(workingMessages);
     try {
       const analysis = await requestWorkLogSuggestion({
         text,
@@ -1268,7 +1391,7 @@ export default function CalendarPage() {
       const nextPreview = analysis.canSubmit ? previewFromSuggestionAnalysis(analysis, projectId) : null;
       setDraftPreview(nextPreview);
       setQuickFillAiMessages([
-        ...nextMessages,
+        ...workingMessages,
         {
           role: "assistant",
           content: analysis.assistantMessage || (nextPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。")
@@ -1278,13 +1401,13 @@ export default function CalendarPage() {
     } catch {
       const quality = workLogQualityCheck(text);
       if (intent !== "force_single" && !quality.ok) {
-        setQuickFillAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+        setQuickFillAiMessages([...workingMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
         setDraftPreview(null);
         return;
       }
       setDraftPreview(createDraftComposerPreviewFromText({ text, date: quickFillDate, projects: projects.data, projectId }));
       setQuickFillAiMessages([
-        ...nextMessages,
+        ...workingMessages,
         {
           role: "assistant",
           content: "智能建议暂时不可用，已根据当前内容整理提交摘要，请确认后提交。"
@@ -1308,6 +1431,12 @@ export default function CalendarPage() {
 
   const continueEditingQuickFillPrompt = () => {
     setQuickFillAiInput((current) => current || lastQuickFillAiInput);
+  };
+
+  const abandonQuickFillDraft = () => {
+    clearQuickFillAutosave(quickFillDateKey);
+    resetQuickFillDraftState(quickFillDate);
+    setQuickFillOpen(false);
   };
 
   const latestQuickFillUserInput = () =>
@@ -1660,60 +1789,64 @@ export default function CalendarPage() {
             <div className="mobile-calendar-nav-title">月历导航</div>
           </div>
 
-          <div className="surface-panel dashboard-calendar-grid calendar-board-scroll">
-            {weekLabels.map((label) => (
-              <div key={label} className="dashboard-week-label bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
-                周{label}
-              </div>
-            ))}
-            {cells.map((cell, index) => {
-              if (!cell) {
-                return <div key={`empty-${index}`} className="calendar-empty-cell" />;
-              }
-              const key = cell.format("YYYY-MM-DD");
-              const day = dayMap.get(key);
-              const kind = dateKind(key);
-              const isToday = kind === "today";
-              const isFuture = kind === "future";
-              const filledCount = day?.filledCount ?? 0;
-              const missingCount = day?.missingCount ?? 0;
-              const totalCount = filledCount + missingCount;
-              const riskBlockerCount = calendarRiskBlockerCount(day);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className={`calendar-cell text-left ${isToday ? "is-today" : ""} ${isFuture ? "is-future" : "is-past"}`}
-                  onClick={() => setSelectedDate(key)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{cell.date()}</span>
-                    </div>
-                    {riskBlockerCount ? <Tag className="calendar-risk-tag" color="red">风险/阻塞 {riskBlockerCount}</Tag> : null}
-                  </div>
-                  <div className="calendar-cell-body mt-4 text-xs">
-                    <div className="calendar-count flex items-center gap-1 text-ink">
-                      <CheckCircle2 size={14} /> {isFuture ? "计划" : "填报"} {filledCount}/{totalCount}
-                    </div>
-                    {!isFuture && (day?.planLogCount ?? 0) > 0 ? (
-                      <div className="calendar-count muted flex items-center gap-1 text-muted">
-                        <CalendarPlus size={14} /> 历史计划 {day?.planLogCount}
+          <div className="surface-panel calendar-board-shell calendar-board-scroll">
+            <div className="dashboard-calendar-week-row" aria-hidden="true">
+              {weekLabels.map((label) => (
+                <div key={label} className="dashboard-week-label bg-surface-container px-3 py-3 text-center text-sm font-medium text-muted">
+                  周{label}
+                </div>
+              ))}
+            </div>
+            <div className="dashboard-calendar-grid">
+              {cells.map((cell, index) => {
+                if (!cell) {
+                  return <div key={`empty-${index}`} className="calendar-empty-cell" />;
+                }
+                const key = cell.format("YYYY-MM-DD");
+                const day = dayMap.get(key);
+                const kind = dateKind(key);
+                const isToday = kind === "today";
+                const isFuture = kind === "future";
+                const filledCount = day?.filledCount ?? 0;
+                const missingCount = day?.missingCount ?? 0;
+                const totalCount = filledCount + missingCount;
+                const riskBlockerCount = calendarRiskBlockerCount(day);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`calendar-cell text-left ${isToday ? "is-today" : ""} ${isFuture ? "is-future" : "is-past"}`}
+                    onClick={() => setSelectedDate(key)}
+                  >
+                    <div className="calendar-cell-head flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{cell.date()}</span>
                       </div>
-                    ) : null}
-                    {missingCount > 0 ? (
-                      <div className="calendar-count muted flex items-center gap-1 text-muted">
-                        <UsersRound size={14} /> {isFuture ? "未计划" : "未填"} {missingCount}
-                      </div>
-                    ) : null}
-                    <div className="calendar-rate-track">
-                      <div className="calendar-rate-fill" style={{ transform: `scaleX(${(day?.fillRate ?? 0) / 100})` }} />
+                      {riskBlockerCount ? <Tag className="calendar-risk-tag" color="red">风险/阻塞 {riskBlockerCount}</Tag> : null}
                     </div>
-                    <div className="calendar-rate-label text-muted">{isFuture ? "计划率" : "填报率"} {day?.fillRate ?? 0}%</div>
-                  </div>
-                </button>
-              );
-            })}
+                    <div className="calendar-cell-body mt-4 text-xs">
+                      <div className="calendar-count flex items-center gap-1 text-ink">
+                        <CheckCircle2 size={14} /> {isFuture ? "计划" : "填报"} {filledCount}/{totalCount}
+                      </div>
+                      {!isFuture && (day?.planLogCount ?? 0) > 0 ? (
+                        <div className="calendar-count muted flex items-center gap-1 text-muted">
+                          <CalendarPlus size={14} /> 历史计划 {day?.planLogCount}
+                        </div>
+                      ) : null}
+                      {missingCount > 0 ? (
+                        <div className="calendar-count muted flex items-center gap-1 text-muted">
+                          <UsersRound size={14} /> {isFuture ? "未计划" : "未填"} {missingCount}
+                        </div>
+                      ) : null}
+                      <div className="calendar-rate-track">
+                        <div className="calendar-rate-fill" style={{ transform: `scaleX(${(day?.fillRate ?? 0) / 100})` }} />
+                      </div>
+                      <div className="calendar-rate-label text-muted">{isFuture ? "计划率" : "填报率"} {day?.fillRate ?? 0}%</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
       </section>
 
@@ -1879,7 +2012,13 @@ export default function CalendarPage() {
             onContinuePrompt={continueEditingQuickFillPrompt}
             smartSuggestions={suggestionAnalysis?.suggestions ?? []}
             suggestionsLoading={suggestionsLoading}
+            suggestionsSlow={suggestionsSlow}
             suggestionsUnavailable={suggestionsUnavailable}
+            suggestionAnalysis={suggestionAnalysis}
+            autoSaveStatus={autoSaveStatus}
+            restoredNotice={restoredFillDraft}
+            onResetRestoredDraft={() => resetQuickFillDraftState(quickFillDate)}
+            onAbandonDraft={abandonQuickFillDraft}
             onSmartSuggestionClick={handleQuickFillSmartSuggestionClick}
             draftPreview={draftPreview}
             onUpdateItem={updateDraftPreviewItem}

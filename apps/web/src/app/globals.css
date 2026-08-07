@@ -13879,6 +13879,173 @@ body {
   }
 }
 
+/* Calendar board layout guardrails */
+.dashboard-calendar-page .calendar-board-shell {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.64);
+  padding: 8px;
+  box-shadow: none;
+}
+
+.dashboard-calendar-page .dashboard-calendar-week-row,
+.dashboard-calendar-page .dashboard-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.dashboard-calendar-page .dashboard-calendar-grid {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.dashboard-calendar-page .dashboard-calendar-week-row .dashboard-week-label {
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  padding: 6px 0 7px;
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  line-height: 18px;
+}
+
+.dashboard-calendar-page .calendar-cell,
+.dashboard-calendar-page .calendar-empty-cell {
+  min-width: 0;
+}
+
+.dashboard-calendar-page .calendar-cell {
+  display: grid;
+  grid-template-rows: 22px minmax(0, 1fr);
+  align-content: start;
+  overflow: hidden;
+}
+
+.dashboard-calendar-page .calendar-cell-head {
+  min-width: 0;
+  min-height: 22px;
+  gap: 6px;
+}
+
+.dashboard-calendar-page .calendar-cell-head > div {
+  min-width: 0;
+}
+
+.dashboard-calendar-page .calendar-risk-tag {
+  max-width: 98px;
+  flex: 0 1 auto;
+  margin-inline-end: 0;
+  overflow: hidden;
+  padding-inline: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-calendar-page .calendar-cell-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dashboard-calendar-page .calendar-count,
+.dashboard-calendar-page .calendar-rate-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-calendar-page .calendar-empty-cell {
+  visibility: hidden;
+}
+
+@media (min-width: 961px) {
+  .dashboard-calendar-page .dashboard-calendar-grid {
+    grid-auto-rows: clamp(118px, calc((100vh - 352px) / 6), 136px);
+  }
+
+  .dashboard-calendar-page .calendar-cell,
+  .dashboard-calendar-page .calendar-empty-cell {
+    height: 100%;
+    min-height: 0;
+    border-radius: 14px;
+  }
+
+  .dashboard-calendar-page .calendar-cell {
+    padding: 10px 12px;
+  }
+
+  .dashboard-calendar-page .calendar-cell-body {
+    display: grid !important;
+    align-content: start;
+    gap: 4px;
+    margin-top: 8px !important;
+    font-size: 12px;
+    line-height: 17px;
+  }
+
+  .dashboard-calendar-page .calendar-cell-body .calendar-count {
+    font-size: 12px;
+    line-height: 17px;
+  }
+
+  .dashboard-calendar-page .calendar-rate-track {
+    height: 4px;
+    margin-top: 2px;
+  }
+
+  .dashboard-calendar-page .calendar-rate-label {
+    font-size: 11px;
+    line-height: 15px;
+  }
+}
+
+@media (max-width: 960px) {
+  .dashboard-calendar-page .calendar-board-shell {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .dashboard-calendar-page .dashboard-calendar-week-row,
+  .dashboard-calendar-page .dashboard-calendar-grid {
+    gap: 6px;
+  }
+
+  .dashboard-calendar-page .dashboard-calendar-week-row .dashboard-week-label {
+    padding: 3px 0 5px;
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  .dashboard-calendar-page .calendar-cell {
+    grid-template-rows: 18px minmax(0, 1fr);
+  }
+
+  .dashboard-calendar-page .calendar-cell-head {
+    min-height: 18px;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-calendar-page .calendar-board-shell,
+  .dashboard-calendar-page .dashboard-calendar-week-row,
+  .dashboard-calendar-page .dashboard-calendar-grid {
+    gap: 4px;
+  }
+
+  .dashboard-calendar-page .dashboard-calendar-week-row .dashboard-week-label {
+    padding: 2px 0 4px;
+    font-size: 10px;
+    line-height: 14px;
+  }
+}
+
 /* Calendar motion refinements */
 .dashboard-calendar-grid .calendar-cell {
   transition:
@@ -16480,7 +16647,231 @@ body {
 
 /* Conversational work log composer */
 .today-log-modal .worklog-chat-composer {
-  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.today-log-modal .worklog-chat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  min-height: 0;
+  height: 100%;
+}
+
+.today-log-modal .worklog-chat-left {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.today-log-modal .today-log-restore-notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  padding: 8px 10px;
+  color: #1d4ed8;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .today-log-restore-notice .ant-btn {
+  min-height: 36px;
+  border-radius: 10px;
+}
+
+.today-log-modal .today-log-ai-message.is-live {
+  border-color: #ccfbf1;
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.today-log-modal .worklog-ai-status-panel {
+  display: flex;
+  min-width: 0;
+  max-height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  border: 1px solid #ccfbf1;
+  border-radius: 16px;
+  background: #f0fdfa;
+  padding: 14px;
+}
+
+.today-log-modal .worklog-ai-status-panel.is-idle,
+.today-log-modal .worklog-ai-status-panel.is-received {
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+.today-log-modal .worklog-ai-status-panel.is-failed {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.today-log-modal .worklog-ai-status-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.today-log-modal .worklog-ai-status-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.today-log-modal .worklog-ai-status-head strong {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 22px;
+}
+
+.today-log-modal .worklog-ai-status-head span {
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-ai-status-panel.is-idle .worklog-ai-status-head span,
+.today-log-modal .worklog-ai-status-panel.is-received .worklog-ai-status-head span {
+  color: #4b5563;
+}
+
+.today-log-modal .worklog-ai-status-panel.is-failed .worklog-ai-status-head span {
+  color: #c2410c;
+}
+
+.today-log-modal .worklog-ai-status-head svg {
+  flex: 0 0 auto;
+  color: #0f766e;
+}
+
+.today-log-modal .worklog-ai-status-panel.is-failed .worklog-ai-status-head svg {
+  color: #c2410c;
+}
+
+.today-log-modal .worklog-ai-status-steps {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-log-modal .worklog-ai-status-steps li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-ai-status-steps li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #d1d5db;
+}
+
+.today-log-modal .worklog-ai-status-steps li.is-done::before {
+  background: #14b8a6;
+}
+
+.today-log-modal .worklog-ai-status-steps li.is-current {
+  color: #0f766e;
+  font-weight: 650;
+}
+
+.today-log-modal .worklog-ai-status-fallback {
+  border-radius: 12px;
+  background: #fff7ed;
+  padding: 9px 10px;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-ai-status-block {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border-top: 1px solid rgba(15, 118, 110, 0.12);
+  padding-top: 10px;
+}
+
+.today-log-modal .worklog-ai-status-block strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 740;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-ai-status-block p,
+.today-log-modal .worklog-ai-status-block li {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .worklog-ai-status-block ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.today-log-modal .worklog-ai-status-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.today-log-modal .worklog-ai-status-tags span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 4px 9px;
+  color: #0f766e;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .worklog-ai-status-foot {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid rgba(15, 118, 110, 0.12);
+  padding-top: 10px;
+}
+
+.today-log-modal .worklog-ai-status-foot span {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .today-log-modal .worklog-final-summary {
@@ -16717,6 +17108,44 @@ body {
 }
 
 @media (max-width: 760px) {
+  .today-log-modal {
+    top: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .today-log-modal .worklog-chat-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .today-log-modal .worklog-chat-left {
+    grid-template-rows: auto minmax(220px, 1fr) auto auto auto;
+  }
+
+  .today-log-modal .worklog-ai-status-panel {
+    order: -1;
+    max-height: 220px;
+    overflow: auto;
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .today-log-modal .worklog-ai-status-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .today-log-modal .today-log-restore-notice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .today-log-modal .today-log-restore-notice .ant-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
   .today-log-modal .worklog-final-actions {
     display: grid;
     grid-template-columns: 1fr;
