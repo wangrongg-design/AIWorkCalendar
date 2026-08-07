@@ -266,6 +266,88 @@ function extractDraftHours(text: string) {
   return Number.isFinite(value) && value > 0 && value <= 24 ? value : 0;
 }
 
+function inferProjectHintFromText(text: string) {
+  const match = /([^\s，,。；;、]{2,48}(?:项目|系统|平台|需求|方案|模块|工程))/u.exec(text);
+  const raw = match?.[1]?.trim();
+  if (!raw) return null;
+  const withoutTime = raw.replace(/^(上午|中午|下午|晚上|晚间|早上|今天|昨天|明天)/u, "");
+  const actionParts = withoutTime.split(/沟通|交流|会谈|洽谈|讨论|对接|推进|确认|拜访|跟进|处理/u);
+  const candidate = (actionParts[actionParts.length - 1] || withoutTime).replace(/^(与|和|同)/u, "").trim();
+  return candidate.length >= 2 ? candidate : raw;
+}
+
+function hasWorkSignal(text: string) {
+  return /(项目|客户|需求|方案|会议|沟通|交流|对接|确认|推进|讨论|评审|合同|报价|工程|系统|平台|实施|交付|风险|阻塞)/u.test(text);
+}
+
+function isNonWorkSocialSegment(text: string) {
+  return /(吃饭|用餐|午餐|晚餐|聚餐|喝茶|咖啡|茶歇)/u.test(text) && !hasWorkSignal(text);
+}
+
+function splitDraftComposerText(text: string) {
+  const content = text.trim();
+  if (!content) return [];
+  const marked = content
+    .replace(/(上午|中午|下午|晚上|晚间|早上)/gu, "\n$1")
+    .replace(/[。；;]\s*/g, "\n")
+    .replace(/[，,]\s*(?=(上午|中午|下午|晚上|晚间|早上))/gu, "\n")
+    .replace(/^\n+/, "");
+  const segments = marked
+    .split(/\n+/)
+    .map((item) => item.replace(/^[，,、。；;\s]+|[，,、。；;\s]+$/g, "").trim())
+    .filter(Boolean)
+    .filter((item) => !isNonWorkSocialSegment(item));
+  const meaningful = segments.filter((item) => item.replace(/\s+/g, "").length >= 6 && hasWorkSignal(item));
+  return meaningful.length >= 2 ? meaningful : [content];
+}
+
+function createDraftComposerItemFromText({
+  content,
+  date,
+  projects,
+  projectId,
+  index
+}: {
+  content: string;
+  date: Dayjs | string | Date;
+  projects?: Project[];
+  projectId?: string | null;
+  index: number;
+}): WorkLogDraftComposerItem {
+  const safeDate = dayjs(date).isValid() ? dayjs(date) : dayjs();
+  const dateKey = safeDate.format("YYYY-MM-DD");
+  const kind = dateKey > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY";
+  const matchedProjectId = projectId === null ? undefined : projectId || projectIdFromText(projects, content);
+  const matchedProject = matchedProjectId ? projects?.find((project) => project.id === matchedProjectId) : undefined;
+  const projectHint = projectId === null ? null : matchedProject?.name ?? inferProjectHintFromText(content);
+  const hours = extractDraftHours(content);
+  return {
+    localId: nextDraftLocalId(),
+    date: dateKey,
+    kind,
+    title: quickFillTitleFromText(content) || `工作项 ${index + 1}`,
+    content,
+    hours,
+    startTime: null,
+    endTime: null,
+    projectHint,
+    confidence: matchedProject ? 0.86 : 0.78,
+    missingFields: [],
+    achievements: [],
+    risks: /风险|阻塞|卡住|延期|无法推进|等反馈|待反馈/u.test(content) ? [content] : [],
+    blockers: /阻塞|卡住|无法推进/u.test(content) ? [content] : [],
+    nextActions: /待|需要|继续|下一步|计划/u.test(content) ? [content] : [],
+    sourceNote: "由对话内容整理",
+    status: "generated",
+    projectId: matchedProjectId,
+    projectName: matchedProject?.name,
+    projectConfirmed: Boolean(matchedProjectId || projectId === null),
+    selected: true,
+    expanded: false,
+    source: "AI"
+  };
+}
+
 export function createDraftComposerPreviewFromText({
   text,
   date,
@@ -277,42 +359,11 @@ export function createDraftComposerPreviewFromText({
   projects?: Project[];
   projectId?: string | null;
 }): WorkLogDraftComposerState {
-  const safeDate = dayjs(date).isValid() ? dayjs(date) : dayjs();
-  const dateKey = safeDate.format("YYYY-MM-DD");
-  const kind = dateKey > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY";
   const content = text.trim();
-  const matchedProjectId = projectId === null ? undefined : projectId || projectIdFromText(projects, content);
-  const matchedProject = matchedProjectId ? projects?.find((project) => project.id === matchedProjectId) : undefined;
-  const hours = extractDraftHours(content);
+  const segments = splitDraftComposerText(content).slice(0, 6);
   return {
-    assistantMessage: "内容已整理为提交摘要。",
-    items: [
-      {
-        localId: nextDraftLocalId(),
-        date: dateKey,
-        kind,
-        title: quickFillTitleFromText(content),
-        content,
-        hours,
-        startTime: null,
-        endTime: null,
-        projectHint: matchedProject ? matchedProject.name : null,
-        confidence: matchedProject ? 0.86 : 0.78,
-        missingFields: [],
-        achievements: [],
-        risks: /风险|阻塞|卡住|延期|无法推进|等反馈|待反馈/u.test(content) ? [content] : [],
-        blockers: /阻塞|卡住|无法推进/u.test(content) ? [content] : [],
-        nextActions: /待|需要|继续|下一步|计划/u.test(content) ? [content] : [],
-        sourceNote: "由对话内容整理",
-        status: "generated",
-        projectId: matchedProjectId,
-        projectName: matchedProject?.name,
-        projectConfirmed: Boolean(matchedProjectId || projectId === null),
-        selected: true,
-        expanded: false,
-        source: "AI"
-      }
-    ],
+    assistantMessage: segments.length > 1 ? `已按 ${segments.length} 条工作整理为提交摘要。` : "内容已整理为提交摘要。",
+    items: segments.map((segment, index) => createDraftComposerItemFromText({ content: segment, date, projects, projectId, index })),
     attachedToFirst: false,
     attachmentTargetIndex: 0
   };
@@ -503,12 +554,12 @@ export function workLogQualityCheck(text: string) {
   const source = text.trim();
   const compact = source.replace(/\s+/g, "");
   const meaningfulLength = compact.replace(/[^\p{L}\p{N}]/gu, "").length;
-  const vagueOnly = /^(开会|会议|沟通|对接|跟进|处理|处理问题|写代码|开发|测试|学习|整理资料|日常工作|工作|优化|修复|排查)[。.!！?？]*$/u.test(compact);
-  const hasAction = /(完成|推进|沟通|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(source);
+  const vagueOnly = /^(开会|会议|沟通|交流|对接|跟进|处理|处理问题|写代码|开发|测试|学习|整理资料|日常工作|工作|优化|修复|排查)[。.!！?？]*$/u.test(compact);
+  const hasAction = /(完成|推进|沟通|交流|会谈|洽谈|讨论|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(source);
   const hasObject =
     /(项目|客户|需求|方案|接口|页面|数据|报告|合同|会议|文档|工单|订单|版本|模块|流程|问题|风险|阻塞|排期|进度|功能|系统|平台|后台|前端|后端|测试|上线|交付|物料|资料|清单|记录|日报|计划|范围|错误|缺陷|证书|登录|权限)/u.test(source) ||
     /[A-Za-z0-9_-]{3,}/.test(source);
-  const hasResultOrContext = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|上午|下午|今天|明天|本周|下周|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(source);
+  const hasResultOrContext = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|上午|中午|下午|晚上|今天|明天|本周|下周|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(source);
 
   if (meaningfulLength < 8 || vagueOnly) {
     return { ok: false as const, message: "内容太简略，请写清做了什么和对象/结果" };
@@ -583,10 +634,15 @@ export function clarificationQuestionForWorkLog(text: string) {
   if (/^(沟通|对接|跟进|处理|写代码|开发|测试|日常工作|工作)$/u.test(compact)) {
     return "请补充对应项目、客户或需求，以及当前进展、结果或阻塞。";
   }
-  if (/沟通|对接|跟进/u.test(text)) {
+  if (/沟通|交流|对接|跟进/u.test(text)) {
     return "请补充本次沟通确认的结果，或说明当前阻塞。";
   }
   return "请补充工作对象和结果，例如项目、客户、需求、进展或风险。";
+}
+
+export function isWorkLogSubmitCommand(text: string) {
+  const compact = text.replace(/\s+/g, "");
+  return /^(直接)?提交(日报|记录|这条|本条|就行|即可|吧|行)?[。.!！?？]*$/u.test(compact);
 }
 
 function draftReady(item: WorkLogDraftComposerItem) {
@@ -688,7 +744,7 @@ export function WorkLogDraftComposer({
   const summaryItems = selected.length ? selected : persistedItems.length ? persistedItems : items;
   const expandedIndexes = new Set(items.map((item, index) => (item.expanded ? index : -1)).filter((index) => index >= 0));
   const hasExpandedItems = expandedIndexes.size > 0;
-  const hasSmartSuggestions = smartSuggestions.length > 0 || Boolean(suggestionsLoading || suggestionsUnavailable);
+  const hasSmartSuggestions = smartSuggestions.length > 0 || Boolean(suggestionsUnavailable);
   const hasFailedAttachments = pendingUploadFiles.some((file) => file.status === "error");
   const recognizedProjects = Array.from(
     new Set(
@@ -703,25 +759,31 @@ export function WorkLogDraftComposer({
   ).slice(0, 3);
   const analysisSummaryItems = (suggestionAnalysis?.draftItems?.length ? suggestionAnalysis.draftItems : summaryItems).slice(0, 3);
   const hasSplitSuggestion = suggestionAnalysis?.status === "need_split_confirmation" || smartSuggestions.some((suggestion) => suggestion.type === "split");
-  const missingInfoText =
-    suggestionAnalysis && !suggestionAnalysis.canSubmit
+  const hasRequiredMissingFields = selectedEntries.some((entry) => entry.item.missingFields.some((field) => !optionalDraftFieldNames.has(field)));
+  const missingInfoText = hasRequiredMissingFields
+    ? "摘要中仍有必填内容待确认。"
+    : suggestionAnalysis && !suggestionAnalysis.canSubmit && !hasItems
       ? suggestionAnalysis.assistantMessage
-      : selectedEntries.some((entry) => entry.item.missingFields.some((field) => !optionalDraftFieldNames.has(field)))
-        ? "摘要中仍有必填内容待确认。"
-        : "";
-  const statusTone = suggestionsUnavailable ? "failed" : aiPending || suggestionsLoading ? "working" : suggestionAnalysis || hasItems ? "ready" : workingText ? "received" : "idle";
+      : "";
+  const isAnalyzing = aiPending || suggestionsLoading;
+  const statusTone = suggestionsUnavailable ? "failed" : hasItems ? "ready" : isAnalyzing ? "working" : suggestionAnalysis ? "ready" : workingText ? "received" : "idle";
   const statusLabel =
     statusTone === "failed"
       ? "智能建议暂不可用"
-      : statusTone === "working"
-        ? suggestionsSlow
-          ? "正在整理，可继续补充"
-          : "正在整理"
+      : hasItems && isAnalyzing
+        ? "摘要可提交，智能建议更新中"
+        : statusTone === "working"
+          ? suggestionsSlow
+            ? "正在分析，可继续补充"
+            : "正在分析"
         : statusTone === "ready"
-          ? "已生成整理结果"
+          ? canSubmitAny
+            ? "摘要可提交"
+            : "已生成整理结果"
           : statusTone === "received"
             ? "已读取你的描述"
             : "等待输入";
+  const generateButtonLabel = hasItems ? "补充到摘要" : "整理摘要";
   const expandSelectedItems = () => {
     const targetEntries = selectedEntries.length ? selectedEntries : items.map((item, index) => ({ item, index }));
     targetEntries.forEach(({ index, item }) => {
@@ -762,20 +824,6 @@ export function WorkLogDraftComposer({
             {message.content}
           </div>
         ))}
-        {aiInput.trim() ? (
-          <div className="today-log-ai-message is-assistant is-live">
-            已收到，正在整理，可继续补充。
-          </div>
-        ) : null}
-        {aiPending ? (
-          <div className="quickfill-draft-waiting" role="status" aria-live="polite">
-            <span className="quickfill-draft-spinner" />
-            <div>
-              <strong>正在整理内容</strong>
-              <p>正在检查内容完整性、拆分建议和项目线索。</p>
-            </div>
-          </div>
-        ) : null}
         {aiError ? (
           <div className="today-log-error-message">
             <Alert
@@ -1128,7 +1176,7 @@ export function WorkLogDraftComposer({
             </Tooltip>
           ) : null}
           <Button className="today-log-generate-button" type="primary" icon={<WandSparkles size={16} />} loading={aiPending} disabled={!canGenerate} onClick={() => onGenerateDraft()}>
-            继续整理
+            {generateButtonLabel}
           </Button>
           <span className="today-log-shortcut-hint">Enter 继续，Shift + Enter 换行</span>
         </div>
@@ -1144,10 +1192,10 @@ export function WorkLogDraftComposer({
           </div>
           <ul className="worklog-ai-status-steps">
             <li className={workingText ? "is-done" : ""}>已读取你的描述</li>
-            <li className={aiPending || suggestionsLoading || recognizedProjects.length ? "is-done" : ""}>正在匹配相关项目</li>
-            <li className={aiPending || suggestionsLoading || hasSplitSuggestion || hasItems ? "is-done" : ""}>正在检查是否需要拆分</li>
-            <li className={aiPending || suggestionsLoading || smartSuggestions.length ? "is-done" : ""}>正在生成智能建议</li>
-            <li className="is-current">你可以继续补充内容</li>
+            <li className={recognizedProjects.length ? "is-done" : isAnalyzing ? "is-current" : ""}>匹配相关项目</li>
+            <li className={hasSplitSuggestion || hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>拆分或合并工作项</li>
+            <li className={hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>生成提交摘要</li>
+            <li className={canSubmitAny ? "is-done" : "is-current"}>{canSubmitAny ? "请在左侧确认提交" : "你可以继续补充内容"}</li>
           </ul>
           {suggestionsUnavailable ? <div className="worklog-ai-status-fallback">智能建议暂不可用，日报内容不会丢失。</div> : null}
           {hasSmartSuggestions ? (
@@ -1156,7 +1204,6 @@ export function WorkLogDraftComposer({
                 <strong>智能建议</strong>
               </div>
               <div className="today-log-smart-suggestion-list">
-                {suggestionsLoading ? <span className="today-log-suggestion-status">正在整理，可继续补充。</span> : null}
                 {suggestionsUnavailable ? <span className="today-log-suggestion-status">请补充这项工作的结果或下一步。</span> : null}
                 {smartSuggestions.slice(0, 5).map((suggestion, index) => (
                   <Button key={`${suggestion.action}-${suggestion.projectId ?? suggestion.value ?? index}`} disabled={inputLocked} onClick={() => onSmartSuggestionClick?.(suggestion)}>
@@ -1178,7 +1225,7 @@ export function WorkLogDraftComposer({
           </div>
           <div className="worklog-ai-status-block">
             <strong>拆分建议</strong>
-            <p>{hasSplitSuggestion ? "建议拆成多条日报，请按提示确认。" : hasItems && itemCount > 1 ? `已整理为 ${itemCount} 条记录。` : "当前可按一条日报整理。"}</p>
+            <p>{hasItems && itemCount > 1 ? `已整理为 ${itemCount} 条记录。` : hasSplitSuggestion ? "建议拆成多条日报，请按提示确认。" : "当前可按一条日报整理。"}</p>
           </div>
           <div className="worklog-ai-status-block">
             <strong>初步摘要</strong>

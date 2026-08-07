@@ -2970,10 +2970,10 @@ function workLogSuggestions(user, body) {
 function localSuggestionQuality(text) {
   const compact = text.replace(/\s+/g, "");
   const meaningfulLength = compact.replace(/[^\p{L}\p{N}]/gu, "").length;
-  const vagueOnly = /^(开会|会议|沟通|对接|跟进|跟进项目|处理|处理问题|写代码|开发|测试|日常工作|工作)[。.!！?？]*$/u.test(compact);
-  const hasAction = /(完成|推进|沟通|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(text);
-  const hasObject = /(项目|客户|需求|方案|接口|页面|数据|报告|合同|会议|文档|工单|版本|模块|流程|问题|风险|阻塞|排期|进度|功能|系统|平台|后台|前端|后端|测试|上线|交付|资料|清单|范围|缺陷|权限)/u.test(text);
-  const hasResult = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(text);
+  const vagueOnly = /^(开会|会议|沟通|交流|对接|跟进|跟进项目|处理|处理问题|写代码|开发|测试|日常工作|工作)[。.!！?？]*$/u.test(compact);
+  const hasAction = /(完成|推进|沟通|交流|会谈|洽谈|讨论|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(text);
+  const hasObject = /(项目|客户|需求|方案|接口|页面|数据|报告|合同|会议|文档|工单|版本|模块|流程|问题|风险|阻塞|排期|进度|功能|系统|平台|工程|后台|前端|后端|测试|上线|交付|资料|清单|范围|缺陷|权限)/u.test(text);
+  const hasResult = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|上午|中午|下午|晚上|今天|明天|本周|下周|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(text);
   if (meaningfulLength < 8 || vagueOnly) {
     return { ok: false, score: Math.min(35, meaningfulLength * 4), question: "请补充具体工作对象，以及本次工作的结果或下一步。" };
   }
@@ -3001,6 +3001,8 @@ function localClarificationSuggestions(text, project) {
 function localSuggestionSplitCount(text) {
   const explicit = extractExplicitDraftSections(text).length;
   if (explicit >= 2) return explicit;
+  const softClauses = splitDraftClauses(text, true);
+  if (softClauses.length >= 2 && shouldSplitDraftSoftly(text)) return softClauses.length;
   const dayPartCount = [/(上午)/u, /(下午)/u, /(晚上|晚间)/u].filter((pattern) => pattern.test(text)).length;
   if (dayPartCount >= 2) return dayPartCount;
   return text
@@ -3104,6 +3106,8 @@ function shouldSplitDraftSoftly(text) {
 }
 
 function hasDraftClauseContent(text) {
+  if (isDraftSubmitCommand(text)) return false;
+  if (isNonWorkSocialClause(text)) return false;
   const cleaned = text
     .replace(timeRangePattern(), " ")
     .replace(/(\d+(?:\.\d+)?)\s*(?:小时|个?工时|h|H)/g, " ")
@@ -3112,6 +3116,19 @@ function hasDraftClauseContent(text) {
     .replace(/\s+/g, " ")
     .trim();
   return cleaned.length > 0;
+}
+
+function hasWorkSuggestionSignal(text) {
+  return /(项目|客户|需求|方案|会议|沟通|交流|会谈|洽谈|讨论|对接|确认|推进|评审|合同|报价|工程|系统|平台|实施|交付|风险|阻塞)/u.test(text);
+}
+
+function isNonWorkSocialClause(text) {
+  return /(吃饭|用餐|午餐|晚餐|聚餐|喝茶|咖啡|茶歇)/u.test(text) && !hasWorkSuggestionSignal(text);
+}
+
+function isDraftSubmitCommand(text) {
+  const compact = text.replace(/\s+/g, "");
+  return /^(直接)?提交(日报|记录|这条|本条|就行|即可|吧|行)?[。.!！?？]*$/u.test(compact);
 }
 
 function buildDraftItem(text, currentDate, today, timing, missingContent = false) {

@@ -17107,6 +17107,18 @@ body {
   min-width: 84px;
 }
 
+.today-log-modal .worklog-chat-inputbar {
+  flex: 0 0 auto;
+  max-height: 176px;
+}
+
+.today-log-modal textarea.today-log-quick-input {
+  min-height: 52px !important;
+  max-height: 124px !important;
+  overflow-y: auto !important;
+  resize: none;
+}
+
 @media (max-width: 760px) {
   .today-log-modal {
     top: 0 !important;

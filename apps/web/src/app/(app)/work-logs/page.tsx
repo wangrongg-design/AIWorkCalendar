@@ -16,10 +16,12 @@ import {
   createDraftComposerPreviewFromText,
   createEmptyDraftComposerItem,
   draftComposerItemFromAi,
+  isWorkLogSubmitCommand,
   projectIdFromDraftHint,
   selectedDraftComposerEntries,
   validateDraftComposerState,
   workLogQualityCheck,
+  workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
   workLogComposerIntroText,
   workLogComposerModalSubtitle,
@@ -793,44 +795,94 @@ export default function WorkLogsPage() {
       return;
     }
     if (!text) return;
+    const previousText = lastAiInput || [...aiMessages].reverse().find((item) => item.role === "user")?.content.trim() || "";
+    if (isWorkLogSubmitCommand(text)) {
+      setAiInput("");
+      const submitHint = draftPreview?.items.length
+        ? "已整理出提交摘要，请确认无误后点击“提交日报”。"
+        : previousText && workLogQualityCheck(previousText).ok
+          ? "已按上一条内容整理提交摘要，请确认无误后点击“提交日报”。"
+          : "请先补充工作内容，再生成提交摘要。";
+      if (!draftPreview?.items.length && previousText && workLogQualityCheck(previousText).ok) {
+        setDraftPreview(createDraftComposerPreviewFromText({ text: previousText, date: entryDate, projects: projects.data, projectId }));
+      }
+      setAiMessages((messages) => {
+        const lastMessage = messages[messages.length - 1];
+        return lastMessage?.role === "assistant" && lastMessage.content === submitHint ? messages : [...messages, { role: "assistant", content: submitHint }];
+      });
+      return;
+    }
     const lastUserMessage = [...aiMessages].reverse().find((item) => item.role === "user");
     const nextMessages = lastUserMessage?.content.trim() === text ? aiMessages : [...aiMessages, { role: "user" as const, content: text }];
-    const workingMessages = [...nextMessages, { role: "assistant" as const, content: "已收到，正在整理，可继续补充。" }];
-    setLastAiInput(text);
+    const analysisText = draftPreview?.items.length && previousText && text !== previousText && !text.includes(previousText) ? `${previousText}；${text}` : text;
+    const quality = workLogQualityCheck(analysisText);
+    const localPreview =
+      intent === "force_single" || quality.ok || workLogShouldDraftForMultipleItems(analysisText)
+        ? createDraftComposerPreviewFromText({ text: analysisText, date: entryDate, projects: projects.data, projectId })
+        : null;
+    const localAssistantMessage = localPreview
+      ? localPreview.items.length > 1
+        ? `已先整理为 ${localPreview.items.length} 条提交摘要，请确认后提交。`
+        : "已先整理为提交摘要，请确认后提交。"
+      : "";
+    setLastAiInput(analysisText);
     setAiInput("");
     if (intent === "split") {
-      setAiMessages(workingMessages);
+      if (localPreview) {
+        setDraftPreview(localPreview);
+      }
+      setAiMessages(nextMessages);
       draftLog.mutate(nextMessages);
       return;
     }
-    setAiMessages(workingMessages);
+    if (localPreview) {
+      setDraftPreview(localPreview);
+      setAiMessages([...nextMessages, { role: "assistant", content: localAssistantMessage }]);
+    } else {
+      setAiMessages(nextMessages);
+      setDraftPreview(null);
+    }
     try {
       const analysis = await requestWorkLogSuggestion({
-        text,
+        text: analysisText,
         messages: nextMessages,
         status: intent,
         mode: "submit"
       });
-      const nextPreview = analysis.canSubmit ? previewFromSuggestionAnalysis(analysis, projectId) : null;
-      setDraftPreview(nextPreview);
+      const nextPreview = analysis.draftItems.length ? previewFromSuggestionAnalysis(analysis, projectId) : null;
+      if (nextPreview && (analysis.canSubmit || !localPreview)) {
+        setDraftPreview(nextPreview);
+      }
+      const assistantContent =
+        localPreview && localPreview.items.length > 1 && analysis.status === "need_split_confirmation"
+          ? `已按 ${localPreview.items.length} 条工作整理为提交摘要，请确认后提交。`
+          : analysis.assistantMessage ||
+            (nextPreview || localPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。");
       setAiMessages([
-        ...workingMessages,
+        ...nextMessages,
         {
           role: "assistant",
-          content: analysis.assistantMessage || (nextPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。")
+          content:
+            !analysis.canSubmit && (nextPreview || localPreview) && !(localPreview && localPreview.items.length > 1 && analysis.status === "need_split_confirmation")
+              ? `${assistantContent} 已先保留当前摘要，可继续补充，也可确认后提交。`
+              : assistantContent
         }
       ]);
       return;
     } catch {
-      const quality = workLogQualityCheck(text);
+      if (localPreview) {
+        setDraftPreview(localPreview);
+        setAiMessages([...nextMessages, { role: "assistant", content: "智能建议暂时不可用，已按当前内容整理提交摘要，请确认后提交。" }]);
+        return;
+      }
       if (intent !== "force_single" && !quality.ok) {
-        setAiMessages([...workingMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+        setAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(analysisText) }]);
         setDraftPreview(null);
         return;
       }
-      setDraftPreview(createDraftComposerPreviewFromText({ text, date: entryDate, projects: projects.data, projectId }));
+      setDraftPreview(createDraftComposerPreviewFromText({ text: analysisText, date: entryDate, projects: projects.data, projectId }));
       setAiMessages([
-        ...workingMessages,
+        ...nextMessages,
         {
           role: "assistant",
           content: "智能建议暂时不可用，已根据当前内容整理提交摘要，请确认后提交。"
@@ -1431,13 +1483,13 @@ export default function WorkLogsPage() {
           <WorkLogDraftComposer
             aiMessages={aiMessages}
             aiInput={aiInput}
-            aiPending={draftLog.isPending || suggestionSubmitting}
+            aiPending={draftLog.isPending}
             aiError={draftLog.error instanceof Error ? draftLog.error : null}
             onAiInputChange={setAiInput}
             onGenerateDraft={sendAiMessage}
             onContinuePrompt={continueEditingDraftPrompt}
             smartSuggestions={suggestionAnalysis?.suggestions ?? []}
-            suggestionsLoading={suggestionsLoading}
+            suggestionsLoading={suggestionsLoading || suggestionSubmitting}
             suggestionsSlow={suggestionsSlow}
             suggestionsUnavailable={suggestionsUnavailable}
             suggestionAnalysis={suggestionAnalysis}

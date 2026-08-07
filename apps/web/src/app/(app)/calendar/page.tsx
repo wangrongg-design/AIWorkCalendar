@@ -17,11 +17,13 @@ import {
   createDraftComposerPreviewFromText,
   createEmptyDraftComposerItem,
   draftComposerItemFromAi,
+  isWorkLogSubmitCommand,
   projectIdFromDraftItem,
   projectIdFromText,
   selectedDraftComposerEntries,
   validateDraftComposerState,
   workLogQualityCheck,
+  workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
   workLogComposerIntroText,
   workLogComposerModalSubtitle,
@@ -1370,44 +1372,94 @@ export default function CalendarPage() {
       return;
     }
     if (!text) return;
+    const previousText = lastQuickFillAiInput || [...quickFillAiMessages].reverse().find((item) => item.role === "user")?.content.trim() || "";
+    if (isWorkLogSubmitCommand(text)) {
+      setQuickFillAiInput("");
+      const submitHint = draftPreview?.items.length
+        ? "已整理出提交摘要，请确认无误后点击“提交日报”。"
+        : previousText && workLogQualityCheck(previousText).ok
+          ? "已按上一条内容整理提交摘要，请确认无误后点击“提交日报”。"
+          : "请先补充工作内容，再生成提交摘要。";
+      if (!draftPreview?.items.length && previousText && workLogQualityCheck(previousText).ok) {
+        setDraftPreview(createDraftComposerPreviewFromText({ text: previousText, date: quickFillDate, projects: projects.data, projectId }));
+      }
+      setQuickFillAiMessages((messages) => {
+        const lastMessage = messages[messages.length - 1];
+        return lastMessage?.role === "assistant" && lastMessage.content === submitHint ? messages : [...messages, { role: "assistant", content: submitHint }];
+      });
+      return;
+    }
     const lastUserMessage = [...quickFillAiMessages].reverse().find((item) => item.role === "user");
     const nextMessages = lastUserMessage?.content.trim() === text ? quickFillAiMessages : [...quickFillAiMessages, { role: "user" as const, content: text }];
-    const workingMessages: AiDraftMessage[] = [...nextMessages, { role: "assistant", content: "已收到，正在整理，可继续补充。" }];
-    setLastQuickFillAiInput(text);
+    const analysisText = draftPreview?.items.length && previousText && text !== previousText && !text.includes(previousText) ? `${previousText}；${text}` : text;
+    const quality = workLogQualityCheck(analysisText);
+    const localPreview =
+      intent === "force_single" || quality.ok || workLogShouldDraftForMultipleItems(analysisText)
+        ? createDraftComposerPreviewFromText({ text: analysisText, date: quickFillDate, projects: projects.data, projectId })
+        : null;
+    const localAssistantMessage = localPreview
+      ? localPreview.items.length > 1
+        ? `已先整理为 ${localPreview.items.length} 条提交摘要，请确认后提交。`
+        : "已先整理为提交摘要，请确认后提交。"
+      : "";
+    setLastQuickFillAiInput(analysisText);
     setQuickFillAiInput("");
     if (intent === "split") {
-      setQuickFillAiMessages(workingMessages);
+      if (localPreview) {
+        setDraftPreview(localPreview);
+      }
+      setQuickFillAiMessages(nextMessages);
       draftWorkLog.mutate(nextMessages);
       return;
     }
-    setQuickFillAiMessages(workingMessages);
+    if (localPreview) {
+      setDraftPreview(localPreview);
+      setQuickFillAiMessages([...nextMessages, { role: "assistant", content: localAssistantMessage }]);
+    } else {
+      setQuickFillAiMessages(nextMessages);
+      setDraftPreview(null);
+    }
     try {
       const analysis = await requestWorkLogSuggestion({
-        text,
+        text: analysisText,
         messages: nextMessages,
         status: intent,
         mode: "submit"
       });
-      const nextPreview = analysis.canSubmit ? previewFromSuggestionAnalysis(analysis, projectId) : null;
-      setDraftPreview(nextPreview);
+      const nextPreview = analysis.draftItems.length ? previewFromSuggestionAnalysis(analysis, projectId) : null;
+      if (nextPreview && (analysis.canSubmit || !localPreview)) {
+        setDraftPreview(nextPreview);
+      }
+      const assistantContent =
+        localPreview && localPreview.items.length > 1 && analysis.status === "need_split_confirmation"
+          ? `已按 ${localPreview.items.length} 条工作整理为提交摘要，请确认后提交。`
+          : analysis.assistantMessage ||
+            (nextPreview || localPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。");
       setQuickFillAiMessages([
-        ...workingMessages,
+        ...nextMessages,
         {
           role: "assistant",
-          content: analysis.assistantMessage || (nextPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。")
+          content:
+            !analysis.canSubmit && (nextPreview || localPreview) && !(localPreview && localPreview.items.length > 1 && analysis.status === "need_split_confirmation")
+              ? `${assistantContent} 已先保留当前摘要，可继续补充，也可确认后提交。`
+              : assistantContent
         }
       ]);
       return;
     } catch {
-      const quality = workLogQualityCheck(text);
+      if (localPreview) {
+        setDraftPreview(localPreview);
+        setQuickFillAiMessages([...nextMessages, { role: "assistant", content: "智能建议暂时不可用，已按当前内容整理提交摘要，请确认后提交。" }]);
+        return;
+      }
       if (intent !== "force_single" && !quality.ok) {
-        setQuickFillAiMessages([...workingMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+        setQuickFillAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(analysisText) }]);
         setDraftPreview(null);
         return;
       }
-      setDraftPreview(createDraftComposerPreviewFromText({ text, date: quickFillDate, projects: projects.data, projectId }));
+      setDraftPreview(createDraftComposerPreviewFromText({ text: analysisText, date: quickFillDate, projects: projects.data, projectId }));
       setQuickFillAiMessages([
-        ...workingMessages,
+        ...nextMessages,
         {
           role: "assistant",
           content: "智能建议暂时不可用，已根据当前内容整理提交摘要，请确认后提交。"
@@ -2005,13 +2057,13 @@ export default function CalendarPage() {
           <WorkLogDraftComposer
             aiMessages={quickFillAiMessages}
             aiInput={quickFillAiInput}
-            aiPending={draftWorkLog.isPending || suggestionSubmitting}
+            aiPending={draftWorkLog.isPending}
             aiError={draftWorkLog.error instanceof Error ? draftWorkLog.error : null}
             onAiInputChange={setQuickFillAiInput}
             onGenerateDraft={sendQuickFillAiMessage}
             onContinuePrompt={continueEditingQuickFillPrompt}
             smartSuggestions={suggestionAnalysis?.suggestions ?? []}
-            suggestionsLoading={suggestionsLoading}
+            suggestionsLoading={suggestionsLoading || suggestionSubmitting}
             suggestionsSlow={suggestionsSlow}
             suggestionsUnavailable={suggestionsUnavailable}
             suggestionAnalysis={suggestionAnalysis}
