@@ -18,6 +18,8 @@ import {
   draftComposerItemFromAi,
   isWorkLogSubmitCommand,
   projectIdFromDraftHint,
+  projectIdFromText,
+  quickFillTitleFromText,
   selectedDraftComposerEntries,
   validateDraftComposerState,
   workLogQualityCheck,
@@ -579,7 +581,7 @@ export default function WorkLogsPage() {
   const submitLog = useMutation({
     mutationFn: (id: string) => apiFetch<WorkLog>(`/work-logs/${id}/submit`, { method: "POST" }),
     onSuccess: () => {
-      message.success("已提交，将进入分析队列");
+      message.success("已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
     }
@@ -761,6 +763,62 @@ export default function WorkLogsPage() {
     }
   });
 
+  const directLogSubmit = useMutation({
+    mutationFn: async () => {
+      const text = aiInput.trim();
+      if (text.length < 2) {
+        throw new Error("请先填写工作内容。");
+      }
+      if (text.length > 4000) {
+        throw new Error("内容超过 4000 字，请精简后提交。");
+      }
+      const projectId = projectIdFromText(projects.data, text);
+      const result = await createLogRecord(
+        {
+          date: entryDate,
+          title: quickFillTitleFromText(text),
+          content: text,
+          hours: null,
+          projectId,
+          kind: workLogKindForDate(entryDate)
+        },
+        pendingAttachments.length > 0,
+        true
+      );
+      return { ...result, projectMatched: Boolean(projectId) };
+    },
+    onSuccess: ({ workLog, attachmentUpload, projectMatched }) => {
+      clearCurrentAutosave(entryDateKey);
+      setAiInput("");
+      setLastAiInput("");
+      setAiMessages([]);
+      setDraftPreview(null);
+      resetSuggestionState();
+      form.resetFields();
+      message.success("日报已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
+      if (!projectMatched) {
+        message.info("未识别到关联项目，已按未关联项目保存，可稍后补充。");
+      }
+      if (attachmentUpload?.failedCount) {
+        setAttachmentRetryTargetId(workLog.id);
+        setAutoSaveStatus("日报已提交，附件可重新上传。");
+        message.warning(`附件上传失败，请重新上传，或先在填报记录中补充附件。${attachmentUpload.error?.message ?? ""}`);
+      } else {
+        setAttachmentRetryTargetId(null);
+        setPendingAttachments([]);
+        setAutoSaveStatus("");
+        setRestoredFillDraft(false);
+        setModalOpen(false);
+      }
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "日报提交失败，请检查后重试。");
+    }
+  });
+
   const retryFailedAttachments = useMutation({
     mutationFn: async () => {
       const targetId = attachmentRetryTargetId ?? editing?.id;
@@ -866,7 +924,7 @@ export default function WorkLogsPage() {
           role: "assistant",
           content:
             !analysis.canSubmit && (nextPreview || localPreview) && !(localPreview && localPreview.items.length > 1 && analysis.status === "need_split_confirmation")
-              ? `${assistantContent} 已先保留当前摘要，可继续补充，也可确认后提交。`
+              ? `${assistantContent} 已保留当前摘要，请确认后提交。`
               : assistantContent
         }
       ]);
@@ -984,19 +1042,6 @@ export default function WorkLogsPage() {
     openCreate(parsedDate);
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
-
-  useEffect(() => {
-    if (!modalOpen || editing) return;
-    const text = aiInput.trim();
-    if (!text) {
-      resetSuggestionState();
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      requestWorkLogSuggestion({ text, messages: aiMessages, status: "typing", mode: "silent" }).catch(() => undefined);
-    }, 1000);
-    return () => window.clearTimeout(timer);
-  }, [aiInput, aiMessages, editing, modalOpen, requestWorkLogSuggestion]);
 
   useEffect(() => {
     if (!modalOpen || editing) return;
@@ -1248,7 +1293,7 @@ export default function WorkLogsPage() {
           <Typography.Title level={3} className="page-title">
             填报记录
           </Typography.Title>
-          <Typography.Text className="page-subtitle">填写日报和计划，提交后系统会自动进入分析队列。</Typography.Text>
+          <Typography.Text className="page-subtitle">填写日报和计划，提交后可查看摘要、风险和项目线索。</Typography.Text>
         </div>
       </div>
 
@@ -1382,8 +1427,8 @@ export default function WorkLogsPage() {
               ]
             : null
         }
-        width={editing ? 760 : 920}
-        className={editing ? undefined : `today-log-modal ${draftPreview?.items.length ? "has-drafts" : "is-empty"}`}
+        width={editing ? 760 : "min(760px, calc(100vw - 32px))"}
+        className={editing ? undefined : "today-log-modal is-direct"}
       >
         {editing ? (
           <Form
@@ -1504,8 +1549,8 @@ export default function WorkLogsPage() {
             onAttachmentTargetChange={(value) => setDraftPreview((current) => (current ? { ...current, attachmentTargetIndex: value } : current))}
             onSaveDrafts={() => persistDraftPreview(false)}
             onSubmitDrafts={() => persistDraftPreview(true)}
-            saving={persistDraftLog.isPending && persistDraftLog.variables?.submit === false}
-            submitting={persistDraftLog.isPending && persistDraftLog.variables?.submit === true}
+            saving={false}
+            submitting={directLogSubmit.isPending}
             projectOptions={projectOptions}
             projectNameById={projectNameById}
             projectsLoading={projects.isFetching}
@@ -1519,6 +1564,9 @@ export default function WorkLogsPage() {
             onRetryFailedAttachments={() => retryFailedAttachments.mutate()}
             attachmentRetrying={retryFailedAttachments.isPending}
             onPasteImages={handlePasteImages}
+            directSubmitMode
+            directSubmitLabel={workLogKindForDate(entryDate) === "PLAN" ? "提交计划" : "提交日报"}
+            onDirectSubmit={() => directLogSubmit.mutate()}
           />
         )}
       </Modal>

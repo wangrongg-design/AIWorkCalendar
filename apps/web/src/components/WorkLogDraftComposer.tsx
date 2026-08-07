@@ -109,12 +109,15 @@ type WorkLogDraftComposerProps = {
   onRetryFailedAttachments?: () => void;
   attachmentRetrying?: boolean;
   onPasteImages: (event: ClipboardEvent<HTMLElement>) => void;
+  directSubmitMode?: boolean;
+  directSubmitLabel?: string;
+  onDirectSubmit?: () => void;
 };
 
 export type WorkLogDraftComposerIntent = "analyze" | "split" | "force_single";
 
-export const workLogComposerModalSubtitle = "请描述工作内容，确认摘要后再提交。";
-export const workLogComposerPlaceholder = "请描述今日工作内容，例如：完成项目接口联调，并同步研发评估。";
+export const workLogComposerModalSubtitle = "用一段话记录今天的工作，提交后系统会自动生成摘要、风险和项目线索。";
+export const workLogComposerPlaceholder = "例如：上午完成项目接口联调，下午处理客户反馈，发现支付回调异常，明天继续排查。";
 
 const legacyWorkLogComposerIntroText = "请描述今日工作内容。系统会判断信息是否完整，并在提交前生成确认摘要。";
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -671,7 +674,7 @@ function uploadFileSizeLabel(value?: number) {
 }
 
 function uploadFileStatusLabel(file: UploadFile) {
-  if (file.status === "error") return String(file.response || "上传失败");
+  if (file.status === "error") return String(file.response || "附件上传失败，请重新上传。");
   if (file.status === "uploading") return "上传中";
   return "待随日报提交";
 }
@@ -712,7 +715,10 @@ export function WorkLogDraftComposer({
   onRemoveAttachment,
   onRetryFailedAttachments,
   attachmentRetrying,
-  onPasteImages
+  onPasteImages,
+  directSubmitMode,
+  directSubmitLabel = "提交日报",
+  onDirectSubmit
 }: WorkLogDraftComposerProps) {
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const selected = selectedItems(draftPreview);
@@ -772,16 +778,16 @@ export function WorkLogDraftComposer({
   const statusTone = showSuggestionFailure ? "failed" : hasItems ? "ready" : isAnalyzing ? "working" : suggestionAnalysis ? "ready" : workingText ? "received" : "idle";
   const statusLabel =
     statusTone === "failed"
-      ? "智能建议暂不可用"
+      ? "暂未生成建议"
       : hasItems && isAnalyzing
-        ? "摘要可提交，智能建议更新中"
+        ? "摘要已生成"
         : statusTone === "working"
           ? suggestionsSlow
-            ? "正在分析，可继续补充"
-            : "正在分析"
+            ? "正在整理"
+            : "正在整理"
         : statusTone === "ready"
           ? canSubmitAny
-            ? "摘要可提交"
+            ? "摘要已生成"
             : "已生成整理结果"
           : statusTone === "received"
             ? "已读取你的描述"
@@ -808,6 +814,85 @@ export function WorkLogDraftComposer({
     }
     onPasteImages(event);
   };
+
+  if (directSubmitMode) {
+    const canDirectSubmit = aiInput.trim().length >= 2 && !inputLocked && !inputLimitExceeded;
+    return (
+      <div className="today-log-composer worklog-direct-composer">
+        {restoredNotice ? (
+          <div className="today-log-restore-notice">
+            <span>已恢复上次未提交内容</span>
+            {onResetRestoredDraft ? (
+              <Button size="small" onClick={onResetRestoredDraft}>
+                重新填写
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <section className="worklog-direct-panel" aria-label="填写工作内容">
+          <div className="worklog-direct-head">
+            <div>
+              <strong>工作内容</strong>
+              <span>可以写完成事项、沟通对象、结果、风险或下一步。</span>
+            </div>
+            <span className={`today-log-input-meter${inputLimitExceeded ? " is-error" : ""}`}>{inputLength}/{draftInputMaxLength}</span>
+          </div>
+
+          <Input.TextArea
+            className="today-log-quick-input worklog-direct-input"
+            value={aiInput}
+            autoFocus
+            autoSize={{ minRows: 8, maxRows: 12 }}
+            placeholder={workLogComposerPlaceholder}
+            disabled={inputLocked}
+            onPaste={handleAttachmentPaste}
+            onChange={(event) => onAiInputChange(event.target.value)}
+          />
+
+          <div className="worklog-direct-attachment">
+            <div>
+              <strong>上传附件（可选）</strong>
+              <span>可上传截图、文档或沟通记录，帮助补充工作背景。</span>
+            </div>
+            {canAttach ? (
+              <Upload multiple showUploadList={false} beforeUpload={beforeUploadAttachment}>
+                <Button icon={<UploadCloud size={16} />}>添加附件</Button>
+              </Upload>
+            ) : null}
+          </div>
+
+          {pendingUploadFiles.length ? (
+            <div className="today-log-attachment-list worklog-direct-attachment-list">
+              {pendingUploadFiles.map((file) => (
+                <div key={file.uid} className={`today-log-attachment-row is-${file.status}`}>
+                  <div>
+                    <strong>{file.name}</strong>
+                    <span>{uploadFileStatusLabel(file)} · {uploadFileSizeLabel(file.size)}</span>
+                  </div>
+                  <Button type="text" danger icon={<Trash2 size={15} />} disabled={inputLocked || file.status === "uploading"} onClick={() => onRemoveAttachment(file)} />
+                </div>
+              ))}
+              {hasFailedAttachments && onRetryFailedAttachments ? (
+                <Button className="worklog-direct-retry" loading={attachmentRetrying} onClick={onRetryFailedAttachments}>
+                  重新上传失败附件
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="worklog-direct-footer">
+            <span>{autoSaveStatus || "内容会自动暂存，提交后清空。"}</span>
+            <Button type="primary" size="large" icon={<CheckCircle2 size={17} />} loading={submitting} disabled={!canDirectSubmit} onClick={onDirectSubmit}>
+              {directSubmitLabel}
+            </Button>
+          </div>
+        </section>
+
+        <p className="worklog-direct-result-note">提交后可在填报记录中查看摘要、风险和项目线索。未识别到关联项目时，将按未关联项目保存，可稍后补充。</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`today-log-composer worklog-chat-composer ${hasItems ? "has-drafts" : "is-empty"}`}>
@@ -1196,10 +1281,10 @@ export function WorkLogDraftComposer({
         </div>
       </section>
         </div>
-        <aside className={`worklog-ai-status-panel is-${statusTone}`} aria-label="AI 整理状态">
+        <aside className={`worklog-ai-status-panel is-${statusTone}`} aria-label="整理状态">
           <div className="worklog-ai-status-head">
             <div>
-              <strong>AI 整理状态</strong>
+              <strong>整理状态</strong>
               <span>{statusLabel}</span>
             </div>
             <WandSparkles size={18} />
@@ -1208,14 +1293,14 @@ export function WorkLogDraftComposer({
             <ul className="worklog-ai-status-steps">
               <li className={workingText ? "is-done" : ""}>{workingText ? "已读取你的描述" : "等待输入描述"}</li>
               <li className={recognizedProjects.length ? "is-done" : isAnalyzing ? "is-current" : ""}>匹配相关项目</li>
-              <li className={hasSplitSuggestion || hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>拆分或合并工作项</li>
+              <li className={hasSplitSuggestion || hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>整理工作项</li>
               <li className={hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>生成提交摘要</li>
               <li className={finalStatusStepClass}>{finalStatusStepLabel}</li>
             </ul>
           ) : (
             <p className="worklog-ai-idle-summary">输入后自动识别项目、拆分工作项，并生成提交摘要。</p>
           )}
-          {showSuggestionFailure ? <div className="worklog-ai-status-fallback">智能建议暂不可用，日报内容不会丢失。</div> : null}
+          {showSuggestionFailure ? <div className="worklog-ai-status-fallback">暂未生成建议，日报内容不会丢失。</div> : null}
           {hasSmartSuggestions ? (
             <section className="today-log-smart-suggestions" aria-label="智能建议">
               <div className="today-log-smart-suggestions-head">

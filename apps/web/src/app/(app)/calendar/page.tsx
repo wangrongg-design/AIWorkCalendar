@@ -20,6 +20,7 @@ import {
   isWorkLogSubmitCommand,
   projectIdFromDraftItem,
   projectIdFromText,
+  quickFillTitleFromText,
   selectedDraftComposerEntries,
   validateDraftComposerState,
   workLogQualityCheck,
@@ -642,19 +643,6 @@ export default function CalendarPage() {
     setSuggestionSubmitting(false);
   };
 
-  useEffect(() => {
-    if (!quickFillOpen) return;
-    const text = quickFillAiInput.trim();
-    if (!text) {
-      resetQuickFillSuggestionState();
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      requestWorkLogSuggestion({ text, messages: quickFillAiMessages, status: "typing", mode: "silent" }).catch(() => undefined);
-    }, 1000);
-    return () => window.clearTimeout(timer);
-  }, [quickFillAiInput, quickFillAiMessages, quickFillOpen, requestWorkLogSuggestion]);
-
   const draftWorkLog = useMutation({
     mutationFn: async (messages: AiDraftMessage[]) => {
       const currentDate = quickFillDate.format("YYYY-MM-DD");
@@ -750,7 +738,7 @@ export default function CalendarPage() {
         {
           role: "assistant",
           content: preview.submit
-            ? `已提交到 ${firstWorkLog?.date ?? quickFillDate.format("YYYY-MM-DD")} 工作记录，稍后会进入分析队列。`
+            ? `已提交到 ${firstWorkLog?.date ?? quickFillDate.format("YYYY-MM-DD")} 工作记录。摘要、风险和项目线索生成后，可在填报记录中查看。`
             : `已保存 ${preview.persistedCount} 条草稿，可以在填报记录中继续处理。`
         }
       ]);
@@ -781,6 +769,62 @@ export default function CalendarPage() {
           : current
       );
       message.error(error instanceof Error ? error.message : "保存工作记录失败，请检查后重试。");
+    }
+  });
+
+  const directQuickFillSubmit = useMutation({
+    mutationFn: async () => {
+      const text = quickFillAiInput.trim();
+      if (text.length < 2) {
+        throw new Error("请先填写工作内容。");
+      }
+      if (text.length > 4000) {
+        throw new Error("内容超过 4000 字，请精简后提交。");
+      }
+      const projectId = projectIdFromText(projects.data, text);
+      const result = await createWorkLogRecord(
+        {
+          date: quickFillDate,
+          title: quickFillTitleFromText(text),
+          content: text,
+          hours: null,
+          projectId,
+          kind: workLogKindForDate(quickFillDate)
+        },
+        pendingAttachments.length > 0,
+        true
+      );
+      return { ...result, projectMatched: Boolean(projectId) };
+    },
+    onSuccess: ({ workLog, attachmentUpload, projectMatched }) => {
+      clearQuickFillAutosave(quickFillDateKey);
+      setQuickFillAiInput("");
+      setLastQuickFillAiInput("");
+      setQuickFillAiMessages([]);
+      setDraftPreview(null);
+      resetQuickFillSuggestionState();
+      message.success("日报已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
+      if (!projectMatched) {
+        message.info("未识别到关联项目，已按未关联项目保存，可稍后补充。");
+      }
+      if (attachmentUpload?.failedCount) {
+        setAttachmentRetryTargetId(workLog.id);
+        setAutoSaveStatus("日报已提交，附件可重新上传。");
+        message.warning(`附件上传失败，请重新上传，或先在填报记录中补充附件。${attachmentUpload.error?.message ?? ""}`);
+      } else {
+        setAttachmentRetryTargetId(null);
+        setPendingAttachments([]);
+        setAutoSaveStatus("");
+        setRestoredFillDraft(false);
+        setQuickFillOpen(false);
+      }
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-day"] });
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "日报提交失败，请检查后重试。");
     }
   });
 
@@ -1441,7 +1485,7 @@ export default function CalendarPage() {
           role: "assistant",
           content:
             !analysis.canSubmit && (nextPreview || localPreview) && !(localPreview && localPreview.items.length > 1 && analysis.status === "need_split_confirmation")
-              ? `${assistantContent} 已先保留当前摘要，可继续补充，也可确认后提交。`
+              ? `${assistantContent} 已保留当前摘要，请确认后提交。`
               : assistantContent
         }
       ]);
@@ -2015,7 +2059,7 @@ export default function CalendarPage() {
             </div>
             {calendarChat.isPending ? (
               <div className="ai-copilot-waiting" role="status" aria-live="polite">
-                正在调用模型分析当前页面上下文，正式环境可能需要几秒，请稍候。
+                正在整理当前页面信息，请稍候。
               </div>
             ) : null}
             <div className="ai-copilot-prompt-bar">
@@ -2047,9 +2091,9 @@ export default function CalendarPage() {
           setPendingAttachments([]);
         }}
         footer={null}
-        width="min(1040px, calc(100vw - 32px))"
+        width="min(760px, calc(100vw - 32px))"
         zIndex={1600}
-        className={`today-log-modal ${draftPreview?.items.length ? "has-drafts" : "is-empty"}`}
+        className="today-log-modal is-direct"
         styles={{ body: { padding: "0 26px 24px", background: "#f5f5f7" }, header: { borderBottom: 0, padding: "24px 26px 12px", background: "#f5f5f7" } }}
       >
         <div className="today-log-modal-shell" data-worklog-chat-panel>
@@ -2084,8 +2128,8 @@ export default function CalendarPage() {
             onSplitItem={splitDraftPreviewItem}
             onRegenerateDraft={regenerateQuickFillDraft}
             onViewSubmittedItem={() => router.push("/work-logs")}
-            saving={persistDraftWorkLog.isPending && persistDraftWorkLog.variables?.submit === false}
-            submitting={persistDraftWorkLog.isPending && persistDraftWorkLog.variables?.submit === true}
+            saving={false}
+            submitting={directQuickFillSubmit.isPending}
             projectOptions={projectOptions}
             projectNameById={projectNameById}
             projectsLoading={projects.isFetching}
@@ -2099,6 +2143,9 @@ export default function CalendarPage() {
             onRetryFailedAttachments={() => retryFailedAttachments.mutate()}
             attachmentRetrying={retryFailedAttachments.isPending}
             onPasteImages={handlePasteImages}
+            directSubmitMode
+            directSubmitLabel={workLogKindForDate(quickFillDate) === "PLAN" ? "提交计划" : "提交日报"}
+            onDirectSubmit={() => directQuickFillSubmit.mutate()}
           />
         </div>
       </Modal>

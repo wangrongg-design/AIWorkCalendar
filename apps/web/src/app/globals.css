@@ -16645,6 +16645,198 @@ body {
   }
 }
 
+/* Direct work log submit composer */
+.today-log-modal.is-direct .ant-modal-content {
+  height: auto;
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+}
+
+.today-log-modal.is-direct .ant-modal-body {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.today-log-modal.is-direct .today-log-modal-shell {
+  height: auto;
+}
+
+.today-log-modal .worklog-direct-composer {
+  display: grid;
+  gap: 14px;
+}
+
+.today-log-modal .worklog-direct-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.today-log-modal .worklog-direct-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.today-log-modal .worklog-direct-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.today-log-modal .worklog-direct-head strong {
+  color: #111827;
+  font-size: 17px;
+  font-weight: 760;
+  line-height: 24px;
+}
+
+.today-log-modal .worklog-direct-head span:not(.today-log-input-meter) {
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.today-log-modal textarea.worklog-direct-input {
+  min-height: 208px !important;
+  max-height: 320px !important;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 16px;
+  color: #111827;
+  font-size: 15px;
+  line-height: 24px;
+  resize: none;
+}
+
+.today-log-modal textarea.worklog-direct-input::placeholder {
+  color: #4b5563;
+}
+
+.today-log-modal textarea.worklog-direct-input:focus {
+  border-color: #0b57d0;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.12);
+}
+
+.today-log-modal .worklog-direct-attachment {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  padding: 12px;
+}
+
+.today-log-modal .worklog-direct-attachment > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.today-log-modal .worklog-direct-attachment strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-direct-attachment span {
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-direct-attachment .ant-btn {
+  min-height: 38px;
+  border-radius: 10px;
+  font-weight: 650;
+}
+
+.today-log-modal .worklog-direct-attachment-list {
+  gap: 8px;
+}
+
+.today-log-modal .worklog-direct-retry {
+  justify-self: start;
+  min-height: 38px;
+  border-radius: 10px;
+  font-weight: 650;
+}
+
+.today-log-modal .worklog-direct-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.today-log-modal .worklog-direct-footer > span {
+  min-width: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-direct-footer .ant-btn {
+  min-width: 132px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 720;
+}
+
+.today-log-modal .worklog-direct-result-note {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 21px;
+}
+
+@media (max-width: 760px) {
+  .today-log-modal.is-direct {
+    top: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .today-log-modal.is-direct .ant-modal-content {
+    min-height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .today-log-modal .worklog-direct-panel {
+    padding: 14px;
+  }
+
+  .today-log-modal .worklog-direct-head,
+  .today-log-modal .worklog-direct-attachment,
+  .today-log-modal .worklog-direct-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .today-log-modal textarea.worklog-direct-input {
+    min-height: 220px !important;
+  }
+
+  .today-log-modal .worklog-direct-footer .ant-btn {
+    width: 100%;
+  }
+}
+
 /* Conversational work log composer */
 .today-log-modal .worklog-chat-composer {
   grid-template-rows: minmax(0, 1fr);
