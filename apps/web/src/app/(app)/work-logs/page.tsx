@@ -7,24 +7,27 @@ import type { RcFile, UploadFile } from "antd/es/upload/interface";
 import dayjs from "dayjs";
 import { Download, Edit2, MessageSquare, Paperclip, RotateCw, Send, Trash2, UploadCloud, WandSparkles } from "lucide-react";
 import type { ClipboardEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   WorkLogDraftComposer,
   clarificationQuestionForWorkLog,
   composeDraftComposerContent,
+  createDraftComposerPreviewFromSuggestion,
   createDraftComposerPreviewFromText,
   createEmptyDraftComposerItem,
   draftComposerItemFromAi,
-  estimateDraftItemCount,
   projectIdFromDraftHint,
   selectedDraftComposerEntries,
   validateDraftComposerState,
   workLogQualityCheck,
-  workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
+  workLogComposerIntroText,
+  workLogComposerModalSubtitle,
   type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
-  type WorkLogDraftComposerState
+  type WorkLogDraftComposerState,
+  type WorkLogSmartSuggestion,
+  type WorkLogSuggestionAnalysis
 } from "@/components/WorkLogDraftComposer";
 import { WorkLogDetailTitle, WorkLogDetailView } from "@/components/WorkLogDetailView";
 import { apiDownload, apiFetch } from "@/lib/api";
@@ -59,18 +62,22 @@ type AiChatMessage = {
 type PendingAttachment = {
   uid: string;
   file: File;
+  status: "ready" | "uploading" | "failed";
+  errorMessage?: string;
 };
 
 type AttachmentUploadResult = {
   uploadedCount: number;
   failedCount: number;
+  uploadedUids: string[];
+  failedUids: string[];
   error?: Error;
 };
 
 type DraftPreviewItem = WorkLogDraftComposerItem;
 type DraftPreview = WorkLogDraftComposerState;
 
-const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
 
 function formatFileSize(value: number) {
   if (value >= 1024 * 1024) {
@@ -118,6 +125,26 @@ function fileToBase64(file: File) {
     reader.onerror = () => reject(new Error("附件读取失败"));
     reader.readAsDataURL(file);
   });
+}
+
+function attachmentUploadErrorMessage(error: unknown, file?: File) {
+  if (file && file.size > ATTACHMENT_MAX_BYTES) {
+    return "文件过大，请上传 20MB 以内的文件。";
+  }
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  if (/20MB|file size|文件过大|too large|payload too large|413/i.test(raw)) {
+    return "文件过大，请上传 20MB 以内的文件。";
+  }
+  if (/mime|type|类型|unsupported/i.test(raw)) {
+    return "暂不支持该文件类型。";
+  }
+  if (/network|fetch|failed to fetch|timeout|网络/i.test(raw)) {
+    return "网络异常，日报内容不会丢失。";
+  }
+  if (/附件内容无效|base64|invalid/i.test(raw)) {
+    return "附件内容无效，请重新选择文件。";
+  }
+  return raw || "附件上传失败，请重试。";
 }
 
 function toPayload(values: WorkLogForm) {
@@ -190,11 +217,17 @@ export default function WorkLogsPage() {
   const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
     {
       role: "assistant",
-      content: "直接写今天做了什么，我会判断是否需要补充；内容足够后，会先给你提交摘要。"
+      content: workLogComposerIntroText
     }
   ]);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [attachmentRetryTargetId, setAttachmentRetryTargetId] = useState<string | null>(null);
+  const [suggestionAnalysis, setSuggestionAnalysis] = useState<WorkLogSuggestionAnalysis | null>(null);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionSubmitting, setSuggestionSubmitting] = useState(false);
+  const [suggestionsUnavailable, setSuggestionsUnavailable] = useState(false);
+  const suggestionRequestSeq = useRef(0);
   const canManageWorkLogs = hasAnyRole(user, ["SUPER_ADMIN", "COMPANY_ADMIN"]);
   const canModifyWorkLog = (record: WorkLog) => Boolean(record.userId === user?.id || canManageWorkLogs);
 
@@ -256,7 +289,18 @@ export default function WorkLogsPage() {
         uid: item.uid,
         name: item.file.name,
         size: item.file.size,
-        status: "done"
+        status: item.status === "uploading" ? "uploading" : item.status === "failed" ? "error" : "done",
+        response: item.errorMessage
+      })),
+    [pendingAttachments]
+  );
+
+  const suggestionAttachmentMetadata = useMemo(
+    () =>
+      pendingAttachments.map((item) => ({
+        fileName: item.file.name,
+        mimeType: item.file.type || "application/octet-stream",
+        status: item.status
       })),
     [pendingAttachments]
   );
@@ -264,7 +308,11 @@ export default function WorkLogsPage() {
   const uploadPendingAttachments = async (workLogId: string): Promise<AttachmentUploadResult> => {
     const files = [...pendingAttachments];
     let uploadedCount = 0;
+    const uploadedUids: string[] = [];
+    const failedUids: string[] = [];
+    let lastError: Error | undefined;
     for (const item of files) {
+      setPendingAttachments((current) => current.map((attachment) => (attachment.uid === item.uid ? { ...attachment, status: "uploading", errorMessage: undefined } : attachment)));
       try {
         const contentBase64 = await fileToBase64(item.file);
         await apiFetch<WorkLogAttachment>(`/work-logs/${workLogId}/attachments`, {
@@ -277,18 +325,20 @@ export default function WorkLogsPage() {
           })
         });
         uploadedCount += 1;
+        uploadedUids.push(item.uid);
       } catch (error) {
-        return {
-          uploadedCount,
-          failedCount: files.length - uploadedCount,
-          error: error instanceof Error ? error : new Error("附件上传失败")
-        };
+        const messageText = attachmentUploadErrorMessage(error, item.file);
+        failedUids.push(item.uid);
+        lastError = new Error(messageText);
+        setPendingAttachments((current) =>
+          current.map((attachment) => (attachment.uid === item.uid ? { ...attachment, status: "failed", errorMessage: messageText } : attachment))
+        );
       }
     }
-    if (files.length) {
-      setPendingAttachments([]);
+    if (uploadedUids.length) {
+      setPendingAttachments((current) => current.filter((item) => !uploadedUids.includes(item.uid)));
     }
-    return { uploadedCount, failedCount: 0 };
+    return { uploadedCount, failedCount: failedUids.length, uploadedUids, failedUids, error: lastError };
   };
 
   const communicationDraftPayload = (values: CommunicationDraftForm, submit: boolean) => ({
@@ -303,13 +353,14 @@ export default function WorkLogsPage() {
   const addPendingFiles = (files: File[], source: "upload" | "paste") => {
     const accepted = files.reduce<PendingAttachment[]>((result, file, index) => {
       if (file.size > ATTACHMENT_MAX_BYTES) {
-        message.error("单个附件不能超过 8MB，请压缩后重新上传。");
+        message.error("文件过大，请上传 20MB 以内的文件。");
         return result;
       }
       const uploadFile = file as RcFile;
       result.push({
         uid: uploadFile.uid || `${source}-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
-        file
+        file,
+        status: "ready"
       });
       return result;
     }, []);
@@ -334,6 +385,75 @@ export default function WorkLogsPage() {
     }
     event.preventDefault();
     addPendingFiles(files, "paste");
+  };
+
+  const requestWorkLogSuggestion = useCallback(
+    async ({
+      text,
+      messages,
+      status,
+      mode = "silent"
+    }: {
+      text: string;
+      messages: AiChatMessage[];
+      status?: string;
+      mode?: "silent" | "submit";
+    }) => {
+      const requestId = ++suggestionRequestSeq.current;
+      if (mode === "submit") {
+        setSuggestionSubmitting(true);
+      } else {
+        setSuggestionsLoading(true);
+      }
+      try {
+        const result = await apiFetch<WorkLogSuggestionAnalysis>("/ai/work-log-suggestions", {
+          method: "POST",
+          body: JSON.stringify({
+            userInput: text,
+            currentDate: entryDate.format("YYYY-MM-DD"),
+            conversationStatus: status ?? suggestionAnalysis?.status ?? "idle",
+            messages: messages.slice(-8),
+            attachments: suggestionAttachmentMetadata
+          })
+        });
+        if (requestId === suggestionRequestSeq.current) {
+          setSuggestionAnalysis(result);
+          setSuggestionsUnavailable(false);
+        }
+        return result;
+      } catch (error) {
+        if (requestId === suggestionRequestSeq.current) {
+          setSuggestionsUnavailable(true);
+          setSuggestionAnalysis(null);
+        }
+        throw error;
+      } finally {
+        if (requestId === suggestionRequestSeq.current) {
+          if (mode === "submit") {
+            setSuggestionSubmitting(false);
+          } else {
+            setSuggestionsLoading(false);
+          }
+        }
+      }
+    },
+    [entryDate, suggestionAnalysis?.status, suggestionAttachmentMetadata]
+  );
+
+  const previewFromSuggestionAnalysis = (analysis: WorkLogSuggestionAnalysis, projectId?: string | null) => {
+    const nextAnalysis =
+      typeof projectId === "undefined"
+        ? analysis
+        : {
+            ...analysis,
+            draftItems: analysis.draftItems.map((item, index) => (index === 0 ? { ...item, projectId } : item))
+          };
+    return createDraftComposerPreviewFromSuggestion({
+      analysis: nextAnalysis,
+      date: entryDate,
+      projects: projects.data,
+      attachedToFirst: pendingAttachments.length > 0 && nextAnalysis.draftItems.length > 1
+    });
   };
 
   const downloadAttachment = async (workLogId: string, attachment: WorkLogAttachment) => {
@@ -365,10 +485,13 @@ export default function WorkLogsPage() {
     onSuccess: (result) => {
       message.success("已更新填报");
       if (result.attachmentUpload?.failedCount) {
-        message.warning(`填报内容已保存，但 ${result.attachmentUpload.failedCount} 个附件上传失败。${result.attachmentUpload.error?.message ?? "请稍后重新上传。"}`);
+        message.warning(`填报内容已保存，但 ${result.attachmentUpload.failedCount} 个附件上传失败。${result.attachmentUpload.error?.message ?? "请重试附件上传。"}`);
+        setAttachmentRetryTargetId(result.workLog.id);
+      } else {
+        setAttachmentRetryTargetId(null);
+        setModalOpen(false);
+        setEditing(null);
       }
-      setModalOpen(false);
-      setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
     },
     onError: (error) => {
@@ -410,6 +533,7 @@ export default function WorkLogsPage() {
         setModalOpen(false);
         setEditing(null);
         setPendingAttachments([]);
+        setAttachmentRetryTargetId(null);
       }
       setDetailRecord((current) => (current?.id === id ? null : current));
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
@@ -510,13 +634,19 @@ export default function WorkLogsPage() {
       const requestedTargetIndex = Number.isInteger(preview.attachmentTargetIndex) ? preview.attachmentTargetIndex : selectedEntries[0].index;
       const uploadTargetIndex = selectedEntries.some((entry) => entry.index === requestedTargetIndex) ? requestedTargetIndex : selectedEntries[0].index;
       let attachmentUpload: AttachmentUploadResult | null = null;
+      let uploadTargetWorkLogId: string | null = null;
+      const persistedItems: Array<{ localId: string; workLog: WorkLog; index: number }> = [];
       for (const { item, index } of selectedEntries) {
         const result = await createLogRecord(draftPreviewItemToForm(item), hasAttachments && index === uploadTargetIndex, submit);
+        persistedItems.push({ localId: item.localId, workLog: result.workLog, index });
+        if (hasAttachments && index === uploadTargetIndex) {
+          uploadTargetWorkLogId = result.workLog.id;
+        }
         if (result.attachmentUpload) {
           attachmentUpload = result.attachmentUpload;
         }
       }
-      return { ...preview, persistedCount: selectedEntries.length, hasAttachments, uploadTargetIndex, submit, attachmentUpload };
+      return { ...preview, persistedCount: selectedEntries.length, persistedItems, hasAttachments, uploadTargetIndex, uploadTargetWorkLogId, submit, attachmentUpload };
     },
     onSuccess: (preview) => {
       message.success(preview.submit ? `已提交 ${preview.persistedCount} 条工作记录。` : `已保存 ${preview.persistedCount} 条草稿。`);
@@ -527,10 +657,38 @@ export default function WorkLogsPage() {
       } else if (preview.hasAttachments && preview.persistedCount > 1) {
         message.info(`附件已关联到第 ${preview.uploadTargetIndex + 1} 条已确认草稿。`);
       }
-      setDraftPreview(null);
-      setModalOpen(false);
-      setPendingAttachments([]);
-      form.resetFields();
+      const persistedByLocalId = new Map(preview.persistedItems.map((item) => [item.localId, item.workLog]));
+      if (preview.attachmentUpload?.failedCount) {
+        setAttachmentRetryTargetId(preview.uploadTargetWorkLogId);
+        setDraftPreview((current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) => {
+                  const workLog = persistedByLocalId.get(item.localId);
+                  return workLog
+                    ? {
+                        ...item,
+                        workLogId: workLog.id,
+                        status: preview.submit ? ("submitted" as const) : ("saved" as const),
+                        submittedAt: preview.submit ? (workLog.submittedAt ?? new Date().toISOString()) : item.submittedAt,
+                        selected: false,
+                        errorMessage: undefined
+                      }
+                    : item;
+                })
+              }
+            : current
+        );
+      } else {
+        setAttachmentRetryTargetId(null);
+        setDraftPreview(null);
+        setModalOpen(false);
+        setPendingAttachments([]);
+        setSuggestionAnalysis(null);
+        setSuggestionsUnavailable(false);
+        form.resetFields();
+      }
       queryClient.invalidateQueries({ queryKey: ["work-logs"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
@@ -540,7 +698,36 @@ export default function WorkLogsPage() {
     }
   });
 
-  const sendAiMessage = (textOverride?: string, intent: WorkLogDraftComposerIntent = "analyze", projectId?: string | null) => {
+  const retryFailedAttachments = useMutation({
+    mutationFn: async () => {
+      const targetId = attachmentRetryTargetId ?? editing?.id;
+      if (!targetId) {
+        throw new Error("请先保存日报内容，再重试附件上传。");
+      }
+      return uploadPendingAttachments(targetId);
+    },
+    onSuccess: (result) => {
+      if (result.failedCount) {
+        message.warning(`仍有 ${result.failedCount} 个附件上传失败。${result.error?.message ?? "请检查网络后重试。"}`);
+        return;
+      }
+      message.success("失败附件已上传。");
+      setAttachmentRetryTargetId(null);
+      queryClient.invalidateQueries({ queryKey: ["work-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-today"] });
+      if (!editing) {
+        setDraftPreview(null);
+        setModalOpen(false);
+        form.resetFields();
+      }
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : "附件上传失败，请重试。");
+    }
+  });
+
+  const sendAiMessage = async (textOverride?: string, intent: WorkLogDraftComposerIntent = "analyze", projectId?: string | null) => {
     const text = (textOverride ?? aiInput).trim();
     if (!text && intent === "split" && aiMessages.some((item) => item.role === "user")) {
       draftLog.mutate(aiMessages);
@@ -556,36 +743,83 @@ export default function WorkLogsPage() {
       draftLog.mutate(nextMessages);
       return;
     }
-    if (intent !== "force_single" && workLogShouldDraftForMultipleItems(text)) {
-      const count = estimateDraftItemCount(text);
+    try {
+      const analysis = await requestWorkLogSuggestion({
+        text,
+        messages: nextMessages,
+        status: intent,
+        mode: "submit"
+      });
+      const nextPreview = analysis.canSubmit ? previewFromSuggestionAnalysis(analysis, projectId) : null;
+      setDraftPreview(nextPreview);
       setAiMessages([
         ...nextMessages,
         {
           role: "assistant",
-          content: `我识别到 ${count} 条工作，建议拆成 ${count} 条日报。`
+          content: analysis.assistantMessage || (nextPreview ? "内容已整理为提交摘要，请确认后提交。" : "请补充这项工作的结果或下一步。")
         }
       ]);
-      setDraftPreview(null);
       return;
-    }
-    const quality = workLogQualityCheck(text);
-    if (intent !== "force_single" && !quality.ok) {
-      setAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
-      setDraftPreview(null);
-      return;
-    }
-    setDraftPreview(createDraftComposerPreviewFromText({ text, date: entryDate, projects: projects.data, projectId }));
-    setAiMessages([
-      ...nextMessages,
-      {
-        role: "assistant",
-        content: intent === "force_single" ? "已按 1 条记录整理，请确认摘要后提交。" : "内容足够，我整理成最终摘要，请确认后提交。"
+    } catch {
+      const quality = workLogQualityCheck(text);
+      if (intent !== "force_single" && !quality.ok) {
+        setAiMessages([...nextMessages, { role: "assistant", content: clarificationQuestionForWorkLog(text) }]);
+        setDraftPreview(null);
+        return;
       }
-    ]);
+      setDraftPreview(createDraftComposerPreviewFromText({ text, date: entryDate, projects: projects.data, projectId }));
+      setAiMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: "智能建议暂时不可用，已根据当前内容整理提交摘要，请确认后提交。"
+        }
+      ]);
+    }
   };
 
   const continueEditingDraftPrompt = () => {
     setAiInput((current) => current || lastAiInput);
+  };
+
+  const latestUserInput = () => aiInput.trim() || lastAiInput || [...aiMessages].reverse().find((item) => item.role === "user")?.content.trim() || "";
+
+  const handleSmartSuggestionClick = (suggestion: WorkLogSmartSuggestion) => {
+    const text = latestUserInput();
+    if (suggestion.action === "select_project") {
+      const projectId = suggestion.projectId ?? null;
+      if (draftPreview?.items.length) {
+        const targetIndex = draftPreview.items.findIndex((item) => item.selected && item.status !== "submitted" && item.status !== "ignored");
+        updateDraftPreviewItem(targetIndex >= 0 ? targetIndex : 0, {
+          projectId: projectId ?? undefined,
+          projectConfirmed: true
+        });
+        return;
+      }
+      if (suggestionAnalysis?.draftItems.length) {
+        const preview = previewFromSuggestionAnalysis(suggestionAnalysis, projectId);
+        if (preview) {
+          setDraftPreview(preview);
+          setAiMessages((messages) => [...messages, { role: "assistant", content: "已更新项目归属，请确认摘要后提交。" }]);
+          return;
+        }
+      }
+      if (text) {
+        void sendAiMessage(text, "force_single", projectId);
+      }
+      return;
+    }
+    if (suggestion.action === "confirm_split") {
+      void sendAiMessage(text, "split");
+      return;
+    }
+    if (suggestion.action === "confirm_single") {
+      void sendAiMessage(text, "force_single");
+      return;
+    }
+    const value = (suggestion.value || suggestion.label).trim();
+    const nextText = text ? `${text}；${value}` : value;
+    void sendAiMessage(nextText, "analyze");
   };
 
   const openCreate = (dateValue = dayjs()) => {
@@ -594,6 +828,9 @@ export default function WorkLogsPage() {
     setEditing(null);
     setEntryDate(dateValue);
     setPendingAttachments([]);
+    setAttachmentRetryTargetId(null);
+    setSuggestionAnalysis(null);
+    setSuggestionsUnavailable(false);
     form.resetFields();
     form.setFieldsValue({
       date: dateValue,
@@ -625,9 +862,26 @@ export default function WorkLogsPage() {
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
+  useEffect(() => {
+    if (!modalOpen || editing) return;
+    const text = aiInput.trim();
+    if (!text) {
+      setSuggestionAnalysis(null);
+      setSuggestionsUnavailable(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      requestWorkLogSuggestion({ text, messages: aiMessages, status: "typing", mode: "silent" }).catch(() => undefined);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [aiInput, aiMessages, editing, modalOpen, requestWorkLogSuggestion]);
+
   const openEdit = (record: WorkLog) => {
     setEditing(record);
     setPendingAttachments([]);
+    setAttachmentRetryTargetId(null);
+    setSuggestionAnalysis(null);
+    setSuggestionsUnavailable(false);
     form.setFieldsValue({
       date: dayjs(record.date),
       title: record.title,
@@ -831,7 +1085,7 @@ export default function WorkLogsPage() {
       <div className="surface-panel worklog-entry-panel">
         <div className="worklog-entry-copy">
           <div className="section-title">填写今日记录</div>
-          <div className="section-subtitle">先自然描述工作，系统会追问缺失信息，并在提交前展示摘要。</div>
+          <div className="section-subtitle">请描述今日工作内容，系统会追问缺失信息，并在提交前展示摘要。</div>
         </div>
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
           填写今日记录
@@ -928,7 +1182,7 @@ export default function WorkLogsPage() {
           ) : (
             <div className="today-log-modal-title">
               <strong>{entryKindTitle}</strong>
-              <span>{workLogDraftDateLabel(entryDate)}，先自然描述工作，确认摘要后再提交。</span>
+              <span>{workLogDraftDateLabel(entryDate)}，{workLogComposerModalSubtitle}</span>
             </div>
           )
         }
@@ -937,6 +1191,9 @@ export default function WorkLogsPage() {
           setModalOpen(false);
           setDraftPreview(null);
           setPendingAttachments([]);
+          setAttachmentRetryTargetId(null);
+          setSuggestionAnalysis(null);
+          setSuggestionsUnavailable(false);
           setEditing(null);
         }}
         footer={
@@ -1040,8 +1297,15 @@ export default function WorkLogsPage() {
                     <UploadCloud size={28} />
                   </p>
                   <p className="ant-upload-text">添加照片或文件</p>
-                  <p className="ant-upload-hint">单个附件最大 8MB，支持直接粘贴聊天截图。</p>
+                  <p className="ant-upload-hint">单个附件最大 20MB，支持直接粘贴聊天截图。</p>
                 </Upload.Dragger>
+                {pendingAttachments.some((item) => item.status === "failed") ? (
+                  <div className="mt-3">
+                    <Button loading={retryFailedAttachments.isPending} onClick={() => retryFailedAttachments.mutate()}>
+                      重试失败附件
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </Form.Item>
           </Form>
@@ -1049,11 +1313,15 @@ export default function WorkLogsPage() {
           <WorkLogDraftComposer
             aiMessages={aiMessages}
             aiInput={aiInput}
-            aiPending={draftLog.isPending}
+            aiPending={draftLog.isPending || suggestionSubmitting}
             aiError={draftLog.error instanceof Error ? draftLog.error : null}
             onAiInputChange={setAiInput}
             onGenerateDraft={sendAiMessage}
             onContinuePrompt={continueEditingDraftPrompt}
+            smartSuggestions={suggestionAnalysis?.suggestions ?? []}
+            suggestionsLoading={suggestionsLoading}
+            suggestionsUnavailable={suggestionsUnavailable}
+            onSmartSuggestionClick={handleSmartSuggestionClick}
             draftPreview={draftPreview}
             onUpdateItem={updateDraftPreviewItem}
             onDeleteItem={deleteDraftPreviewItem}
@@ -1073,6 +1341,8 @@ export default function WorkLogsPage() {
               setPendingAttachments((items) => items.filter((item) => item.uid !== file.uid));
               return true;
             }}
+            onRetryFailedAttachments={() => retryFailedAttachments.mutate()}
+            attachmentRetrying={retryFailedAttachments.isPending}
             onPasteImages={handlePasteImages}
           />
         )}

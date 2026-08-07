@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { WorkLogStatus } from "@prisma/client";
+import { ProjectStatus, WorkLogStatus } from "@prisma/client";
 import { AccessService } from "../../common/access/access.service";
 import { PrismaService } from "../../common/prisma.service";
 import { CurrentUser } from "../../common/types/current-user";
@@ -7,6 +7,7 @@ import { AiQueueService } from "./ai-queue.service";
 import { CalendarChatDto } from "./dto/calendar-chat.dto";
 import { ProjectChatDto } from "./dto/project-chat.dto";
 import { WorkLogDraftDto } from "./dto/work-log-draft.dto";
+import { WorkLogSuggestionDto } from "./dto/work-log-suggestion.dto";
 import { OpenAiService } from "./openai.service";
 
 function monthRange(month: string) {
@@ -276,6 +277,68 @@ export class AiService {
         userId: user.id,
         operation: "work_log_draft",
         targetType: "work_log"
+      }
+    );
+  }
+
+  async suggestWorkLog(user: CurrentUser, dto: WorkLogSuggestionDto) {
+    const today = dateKey(new Date());
+    const [account, tenant, projects, recentLogs] = await Promise.all([
+      this.prisma.user.findFirst({
+        where: { id: user.id, tenantId: user.tenantId, deletedAt: null },
+        include: { department: true, roles: { include: { role: true } } }
+      }),
+      this.prisma.tenant.findFirst({
+        where: { id: user.tenantId },
+        select: { name: true }
+      }),
+      this.prisma.project.findMany({
+        where: { tenantId: user.tenantId, deletedAt: null, status: ProjectStatus.ACTIVE },
+        select: { id: true, name: true, code: true },
+        orderBy: [{ updatedAt: "desc" }],
+        take: 80
+      }),
+      this.prisma.workLog.findMany({
+        where: { tenantId: user.tenantId, userId: user.id, deletedAt: null },
+        include: { project: true },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 8
+      })
+    ]);
+    return this.openAi.suggestWorkLog(
+      {
+        userInput: dto.userInput,
+        currentDate: dto.currentDate ?? today,
+        today,
+        conversationStatus: dto.conversationStatus ?? null,
+        userContext: {
+          roleNames: account?.roles.map((item) => item.role.code) ?? user.roles,
+          companyName: tenant?.name ?? null,
+          departmentName: account?.department?.name ?? null
+        },
+        projects: projects.map((project) => ({ id: project.id, name: project.name, code: project.code })),
+        recentLogs: recentLogs.map((log) => ({
+          date: dateKey(log.date),
+          title: log.title,
+          content: log.content,
+          projectName: log.project?.name ?? null
+        })),
+        messages: (dto.messages ?? []).slice(-8).map((message) => ({
+          role: message.role,
+          content: message.content
+        })),
+        attachments: (dto.attachments ?? []).slice(0, 8).map((attachment) => ({
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType ?? null,
+          status: attachment.status ?? null
+        }))
+      },
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        operation: "work_log_suggestions",
+        targetType: "work_log",
+        containsAttachments: Boolean(dto.attachments?.length)
       }
     );
   }

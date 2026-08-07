@@ -123,7 +123,7 @@ export class CreateWorkLogAttachmentDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
-  @Max(8 * 1024 * 1024)
+  @Max(20 * 1024 * 1024)
   fileSize: number;
 
   @IsString()

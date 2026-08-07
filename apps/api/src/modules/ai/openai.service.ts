@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { AuditService } from "../../common/audit/audit.service";
 import { PrismaService } from "../../common/prisma.service";
 import { AiRedactionService, AiRedactionStats } from "./ai-redaction.service";
-import { CALENDAR_CHAT_SYSTEM_PROMPT, REPORT_GENERATION_SYSTEM_PROMPT, WORK_LOG_ANALYSIS_SYSTEM_PROMPT, WORK_LOG_DRAFT_SYSTEM_PROMPT } from "./prompts";
+import { CALENDAR_CHAT_SYSTEM_PROMPT, REPORT_GENERATION_SYSTEM_PROMPT, WORK_LOG_ANALYSIS_SYSTEM_PROMPT, WORK_LOG_DRAFT_SYSTEM_PROMPT, WORK_LOG_SUGGESTION_SYSTEM_PROMPT } from "./prompts";
 import {
   reportJsonSchema,
   ReportResult,
@@ -11,7 +11,9 @@ import {
   WorkLogAnalysisResult,
   workLogDraftJsonSchema,
   WorkLogDraftItem,
-  WorkLogDraftResult
+  WorkLogDraftResult,
+  workLogSuggestionJsonSchema,
+  WorkLogSuggestionResult
 } from "./schemas/analysis.schema";
 
 type AiProvider = "mock" | "openai" | "deepseek";
@@ -19,7 +21,7 @@ type AiProvider = "mock" | "openai" | "deepseek";
 type AiCallContext = {
   tenantId: string;
   userId?: string | null;
-  operation: "work_log_analysis" | "report_generation" | "calendar_chat" | "project_chat" | "work_log_draft";
+  operation: "work_log_analysis" | "report_generation" | "calendar_chat" | "project_chat" | "work_log_draft" | "work_log_suggestions";
   targetType?: string;
   targetId?: string | null;
   containsAttachments?: boolean;
@@ -78,6 +80,38 @@ type DraftWorkLogInput = {
   messages: Array<{
     role: "user" | "assistant";
     content: string;
+  }>;
+};
+
+type WorkLogSuggestionInput = {
+  userInput: string;
+  currentDate: string;
+  today: string;
+  conversationStatus?: string | null;
+  userContext: {
+    roleNames: string[];
+    companyName?: string | null;
+    departmentName?: string | null;
+  };
+  projects: Array<{
+    id: string;
+    name: string;
+    code?: string | null;
+  }>;
+  recentLogs: Array<{
+    date: string;
+    title: string;
+    content: string;
+    projectName?: string | null;
+  }>;
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
+  attachments: Array<{
+    fileName: string;
+    mimeType?: string | null;
+    status?: string | null;
   }>;
 };
 
@@ -213,6 +247,32 @@ export class OpenAiService {
       providerForLog = "mock";
       this.logger.warn(`AI work log draft failed; falling back to local draft: ${this.errorMessage(error)}`);
       result = this.localWorkLogDraft(input);
+    }
+    await this.logAiCall(context, providerForLog, safe.stats);
+    return safe.restore(result);
+  }
+
+  async suggestWorkLog(input: WorkLogSuggestionInput, context?: AiCallContext): Promise<WorkLogSuggestionResult> {
+    const safe = this.redaction.buildSafeAiPayload(this.compactWorkLogSuggestionInput(input));
+    const activeProvider = this.activeProvider();
+    let result: WorkLogSuggestionResult;
+    let providerForLog = activeProvider;
+    try {
+      if (this.provider === "deepseek" && this.deepSeekClient) {
+        result = this.normalizeWorkLogSuggestion(await this.suggestWorkLogWithDeepSeek(safe.payload), input);
+      } else if (this.provider === "openai" && this.openAiClient) {
+        result = this.normalizeWorkLogSuggestion(await this.suggestWorkLogWithOpenAi(safe.payload), input);
+      } else {
+        if (this.provider !== "mock") {
+          this.logger.warn(`${this.provider} provider is selected but API key is missing. Falling back to mock AI.`);
+        }
+        providerForLog = "mock";
+        result = this.localWorkLogSuggestion(input);
+      }
+    } catch (error) {
+      providerForLog = "mock";
+      this.logger.warn(`AI work log suggestions failed; falling back to local suggestions: ${this.errorMessage(error)}`);
+      result = this.localWorkLogSuggestion(input);
     }
     await this.logAiCall(context, providerForLog, safe.stats);
     return safe.restore(result);
@@ -423,6 +483,37 @@ export class OpenAiService {
     return this.parseStructuredOutput<WorkLogDraftResult>(response);
   }
 
+  private async suggestWorkLogWithOpenAi(input: WorkLogSuggestionInput): Promise<WorkLogSuggestionResult> {
+    if (!this.openAiClient) {
+      return this.localWorkLogSuggestion(input);
+    }
+    const response = await this.openAiClient.responses.create(
+      {
+        model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+        input: [
+          {
+            role: "system",
+            content: WORK_LOG_SUGGESTION_SYSTEM_PROMPT
+          },
+          {
+            role: "user",
+            content: JSON.stringify(input)
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "work_log_suggestions",
+            strict: true,
+            schema: workLogSuggestionJsonSchema as Record<string, unknown>
+          }
+        }
+      },
+      this.aiDraftRequestOptions()
+    );
+    return this.parseStructuredOutput<WorkLogSuggestionResult>(response);
+  }
+
   private async analyzeWorkLogWithDeepSeek(input: WorkLogAnalysisInput): Promise<WorkLogAnalysisResult> {
     if (!this.deepSeekClient) {
       return this.localWorkLogAnalysis(input);
@@ -513,6 +604,31 @@ export class OpenAiService {
     return this.parseJsonText<WorkLogDraftResult>(completion.choices[0]?.message?.content);
   }
 
+  private async suggestWorkLogWithDeepSeek(input: WorkLogSuggestionInput): Promise<WorkLogSuggestionResult> {
+    if (!this.deepSeekClient) {
+      return this.localWorkLogSuggestion(input);
+    }
+    const completion = await this.deepSeekClient.chat.completions.create(
+      {
+        model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+        messages: [
+          {
+            role: "system",
+            content: this.deepSeekJsonPrompt("work_log_suggestions", WORK_LOG_SUGGESTION_SYSTEM_PROMPT, workLogSuggestionJsonSchema)
+          },
+          {
+            role: "user",
+            content: JSON.stringify(input)
+          }
+        ],
+        response_format: { type: "json_object" },
+        stream: false
+      },
+      this.aiDraftRequestOptions()
+    );
+    return this.parseJsonText<WorkLogSuggestionResult>(completion.choices[0]?.message?.content);
+  }
+
   private compactCalendarChatInput(input: CalendarChatInput): CalendarChatInput {
     return {
       ...input,
@@ -520,6 +636,23 @@ export class OpenAiService {
         ...log,
         content: log.content.length > 800 ? `${log.content.slice(0, 800)}...` : log.content
       }))
+    };
+  }
+
+  private compactWorkLogSuggestionInput(input: WorkLogSuggestionInput): WorkLogSuggestionInput {
+    return {
+      ...input,
+      userInput: input.userInput.slice(0, 4000),
+      projects: input.projects.slice(0, 80),
+      recentLogs: input.recentLogs.slice(0, 8).map((log) => ({
+        ...log,
+        content: log.content.length > 240 ? `${log.content.slice(0, 240)}...` : log.content
+      })),
+      messages: input.messages.slice(-8).map((message) => ({
+        ...message,
+        content: message.content.slice(0, 1200)
+      })),
+      attachments: input.attachments.slice(0, 8)
     };
   }
 
@@ -676,6 +809,148 @@ export class OpenAiService {
           : `${first.kind === "PLAN" ? "已整理为计划" : "已整理为日报"}：${first.date}，${first.hours} 小时。`,
       items
     };
+  }
+
+  private localWorkLogSuggestion(input: WorkLogSuggestionInput): WorkLogSuggestionResult {
+    const text = input.userInput.trim();
+    if (!text) {
+      return {
+        status: "idle",
+        assistantMessage: "请先输入工作内容。",
+        qualityScore: 0,
+        canSubmit: false,
+        suggestions: [],
+        draftItems: []
+      };
+    }
+    const quality = this.localSuggestionQuality(text);
+    const splitCount = this.localSuggestionSplitCount(text);
+    const project = this.localSuggestionProject(input.projects, text);
+    if (splitCount >= 2) {
+      return {
+        status: "need_split_confirmation",
+        assistantMessage: `已识别到 ${splitCount} 条工作，建议拆分为 ${splitCount} 条日报。`,
+        qualityScore: Math.max(quality.score, 72),
+        canSubmit: false,
+        suggestions: [
+          { type: "split", label: `拆分为 ${splitCount} 条日报`, value: String(splitCount), action: "confirm_split", projectId: null },
+          { type: "split", label: "合并为 1 条日报", value: "1", action: "confirm_single", projectId: null },
+          { type: "quick_reply", label: "补充每项工作的结果", value: "每项工作分别补充结果和下一步", action: "append_reply", projectId: null }
+        ],
+        draftItems: this.inferDraftItems(text, input.currentDate, input.today).slice(0, 5).map((item) => ({
+          title: item.title,
+          content: item.content,
+          projectId: project?.id ?? null,
+          projectHint: item.projectHint,
+          risk: "",
+          nextPlan: "",
+          hours: item.hours || null
+        }))
+      };
+    }
+    if (!quality.ok) {
+      return {
+        status: "need_clarification",
+        assistantMessage: quality.question,
+        qualityScore: quality.score,
+        canSubmit: false,
+        suggestions: this.localClarificationSuggestions(text, project),
+        draftItems: []
+      };
+    }
+    const draft = this.inferDraftItems(text, input.currentDate, input.today)[0];
+    const suggestions: WorkLogSuggestionResult["suggestions"] = [
+      ...(project ? [{ type: "project" as const, label: `关联到「${project.name}」`, value: project.name, action: "select_project" as const, projectId: project.id }] : []),
+      { type: "none_project", label: "不关联项目", value: null, action: "select_project", projectId: null },
+      { type: "quick_reply", label: "补充下一步计划", value: "下一步继续推进并同步进展", action: "add_next_plan", projectId: null }
+    ];
+    return {
+      status: "ready_to_submit",
+      assistantMessage: "内容已整理为提交摘要，请确认后提交。",
+      qualityScore: Math.max(quality.score, 82),
+      canSubmit: true,
+      suggestions: suggestions.slice(0, 5),
+      draftItems: [
+        {
+          title: draft.title,
+          content: draft.content,
+          projectId: project?.id ?? null,
+          projectHint: project?.name ?? draft.projectHint,
+          risk: /风险|阻塞|延期|卡住|无法推进/.test(text) ? "存在需要关注的风险或阻塞" : "",
+          nextPlan: /下一步|继续|计划|待/.test(text) ? text : "",
+          hours: draft.hours || null
+        }
+      ]
+    };
+  }
+
+  private localSuggestionQuality(text: string) {
+    const compact = text.replace(/\s+/g, "");
+    const meaningfulLength = compact.replace(/[^\p{L}\p{N}]/gu, "").length;
+    const vagueOnly = /^(开会|会议|沟通|对接|跟进|跟进项目|处理|处理问题|写代码|开发|测试|日常工作|工作)[。.!！?？]*$/u.test(compact);
+    const hasAction = /(完成|推进|沟通|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(text);
+    const hasObject = /(项目|客户|需求|方案|接口|页面|数据|报告|合同|会议|文档|工单|版本|模块|流程|问题|风险|阻塞|排期|进度|功能|系统|平台|后台|前端|后端|测试|上线|交付|资料|清单|范围|缺陷|权限)/u.test(text);
+    const hasResult = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(text);
+    if (meaningfulLength < 8 || vagueOnly) {
+      return { ok: false, score: Math.min(35, meaningfulLength * 4), question: "请补充具体工作对象，以及本次工作的结果或下一步。" };
+    }
+    if (!hasAction) {
+      return { ok: false, score: 45, question: "请补充本次工作的具体动作，例如确认、修复、输出或提交。" };
+    }
+    if (!hasObject) {
+      return { ok: false, score: 52, question: "请补充对应项目、客户、需求或问题。" };
+    }
+    if (!hasResult) {
+      return { ok: false, score: 62, question: "请补充本次工作的结果、进展或风险。" };
+    }
+    return { ok: true, score: 86, question: "" };
+  }
+
+  private localClarificationSuggestions(text: string, project: { id: string; name: string } | null) {
+    const suggestions: WorkLogSuggestionResult["suggestions"] = [
+      { type: "quick_reply", label: "补充为“已确认下一步”", value: "已确认下一步，并同步相关负责人", action: "append_reply", projectId: null },
+      { type: "quick_reply", label: "标记为“待对方确认”", value: "待对方确认后继续推进", action: "append_reply", projectId: null }
+    ];
+    if (/阻塞|卡住|延期|无法推进|风险/.test(text)) {
+      suggestions.push({ type: "risk", label: "标记存在阻塞", value: "当前存在阻塞，需要负责人协调", action: "mark_blocker", projectId: null });
+    }
+    if (project) {
+      suggestions.unshift({ type: "project", label: `关联到「${project.name}」`, value: project.name, action: "select_project", projectId: project.id });
+    }
+    suggestions.push({ type: "none_project", label: "不关联项目", value: null, action: "select_project", projectId: null });
+    return suggestions.slice(0, 5);
+  }
+
+  private localSuggestionSplitCount(text: string) {
+    const explicit = this.extractExplicitDraftSections(text).length;
+    if (explicit >= 2) return explicit;
+    const dayPartCount = [/(上午)/u, /(下午)/u, /(晚上|晚间)/u].filter((pattern) => pattern.test(text)).length;
+    if (dayPartCount >= 2) return dayPartCount;
+    const chunks = text
+      .split(/[\n；;]/)
+      .map((item) => item.trim())
+      .filter((item) => item.replace(/\s+/g, "").length >= 8);
+    return chunks.length;
+  }
+
+  private localSuggestionProject(projects: WorkLogSuggestionInput["projects"], text: string) {
+    const normalizedText = this.normalizeSuggestionText(text);
+    const scored = projects
+      .map((project) => {
+        const values = [project.code, project.name, project.code ? `${project.code}${project.name}` : project.name].filter(Boolean).map((value) => this.normalizeSuggestionText(value));
+        const score = values.some((value) => value && normalizedText.includes(value)) ? Math.max(...values.map((value) => value.length)) : 0;
+        return { id: project.id, name: project.code ? `${project.code} · ${project.name}` : project.name, score };
+      })
+      .filter((item) => item.score >= 2)
+      .sort((a, b) => b.score - a.score);
+    return scored[0] ?? null;
+  }
+
+  private normalizeSuggestionText(value?: string | null) {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "");
   }
 
   private inferDraftItems(text: string, currentDate: string, today: string): WorkLogDraftItem[] {
@@ -945,6 +1220,45 @@ export class OpenAiService {
         ? `${assistantMessage} 已识别到 ${expectedCount} 个分项，AI 返回 ${sourceItems.length} 条，系统已把遗漏分项补为待确认草稿，请逐条检查后提交。`
         : assistantMessage,
       items
+    };
+  }
+
+  private normalizeWorkLogSuggestion(result: Partial<WorkLogSuggestionResult>, input: WorkLogSuggestionInput): WorkLogSuggestionResult {
+    const fallback = this.localWorkLogSuggestion(input);
+    const status = (["idle", "need_clarification", "need_split_confirmation", "ready_to_submit"].includes(String(result.status)) ? result.status : fallback.status) as WorkLogSuggestionResult["status"];
+    const suggestions: WorkLogSuggestionResult["suggestions"] = Array.isArray(result.suggestions)
+      ? result.suggestions
+          .filter((item) => item && typeof item.label === "string" && typeof item.action === "string")
+          .map((item) => ({
+            type: (["quick_reply", "project", "split", "risk", "none_project"].includes(String(item.type)) ? item.type : "quick_reply") as WorkLogSuggestionResult["suggestions"][number]["type"],
+            label: String(item.label).slice(0, 60),
+            value: item.value === null || item.value === undefined ? null : String(item.value).slice(0, 240),
+            action: (["append_reply", "select_project", "confirm_split", "confirm_single", "mark_blocker", "add_next_plan"].includes(String(item.action)) ? item.action : "append_reply") as WorkLogSuggestionResult["suggestions"][number]["action"],
+            projectId: item.projectId === null || item.projectId === undefined ? null : String(item.projectId)
+          }))
+          .slice(0, 5)
+      : fallback.suggestions;
+    const draftItems: WorkLogSuggestionResult["draftItems"] = Array.isArray(result.draftItems)
+      ? result.draftItems
+          .filter((item) => item && (item.title || item.content))
+          .map((item) => ({
+            title: String(item.title || "工作记录").slice(0, 80),
+            content: String(item.content || item.title || "工作记录").slice(0, 2000),
+            projectId: item.projectId === null || item.projectId === undefined ? null : String(item.projectId),
+            projectHint: item.projectHint === null || item.projectHint === undefined ? null : String(item.projectHint).slice(0, 80),
+            risk: String(item.risk ?? "").slice(0, 240),
+            nextPlan: String(item.nextPlan ?? "").slice(0, 240),
+            hours: Number.isFinite(Number(item.hours)) ? Math.min(Math.max(Number(item.hours), 0), 24) : null
+          }))
+          .slice(0, 8)
+      : fallback.draftItems;
+    return {
+      status,
+      assistantMessage: result.assistantMessage?.trim() || fallback.assistantMessage,
+      qualityScore: Number.isFinite(Number(result.qualityScore)) ? Math.min(Math.max(Number(result.qualityScore), 0), 100) : fallback.qualityScore,
+      canSubmit: Boolean(result.canSubmit) && status === "ready_to_submit",
+      suggestions,
+      draftItems
     };
   }
 

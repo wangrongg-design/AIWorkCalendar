@@ -315,6 +315,7 @@ const server = http.createServer(async (req, res) => {
     if (route === "POST /ai/chat/calendar") return json(res, calendarChat(requireUser(currentUser), body));
     if (route === "POST /ai/chat/project") return json(res, projectChat(requireUser(currentUser), body));
     if (route === "POST /ai/work-log-draft") return json(res, workLogDraft(requireUser(currentUser), body));
+    if (route === "POST /ai/work-log-suggestions") return json(res, workLogSuggestions(requireUser(currentUser), body));
 
     if (route === "GET /reports/readiness") return json(res, reportReadiness(requireUser(currentUser), Object.fromEntries(url.searchParams.entries())));
     if (route === "POST /reports/generate") return json(res, generateReport(requireUser(currentUser), body));
@@ -2593,8 +2594,11 @@ function createWorkLogAttachment(user, workLogId, body) {
   if (log.userId !== user.id && !hasRole(user, ["COMPANY_ADMIN", "SUPER_ADMIN"])) throw httpError(403, "Cannot modify this work log");
   const buffer = Buffer.from(String(body.contentBase64 ?? ""), "base64");
   const expectedSize = Number(body.fileSize ?? buffer.length);
-  if (!buffer.length || !Number.isFinite(expectedSize) || expectedSize <= 0 || buffer.length > 8 * 1024 * 1024) {
-    throw httpError(400, "Invalid attachment content or file size");
+  if (!buffer.length || !Number.isFinite(expectedSize) || expectedSize <= 0 || buffer.length !== expectedSize) {
+    throw httpError(400, "附件内容无效，请重新选择文件。");
+  }
+  if (buffer.length > 20 * 1024 * 1024) {
+    throw httpError(400, "文件过大，请上传 20MB 以内的文件。");
   }
   const mimeType = body.mimeType || "application/octet-stream";
   const fileName = sanitizeLocalFileName(body.fileName || "attachment");
@@ -2883,6 +2887,146 @@ function workLogDraft(user, body) {
         : `${first.kind === "PLAN" ? "已整理为计划" : "已整理为日报"}：${first.date}，${first.hours} 小时。`,
     items
   };
+}
+
+function workLogSuggestions(user, body) {
+  requireUser(user);
+  const currentDate = body.currentDate ?? todayKey;
+  const text = String(body.userInput ?? "").trim();
+  if (!text) {
+    return {
+      status: "idle",
+      assistantMessage: "请先输入工作内容。",
+      qualityScore: 0,
+      canSubmit: false,
+      suggestions: [],
+      draftItems: []
+    };
+  }
+  const availableProjects = projects.filter((project) => project.tenantId === user.tenantId && !project.deletedAt && project.status === "ACTIVE");
+  const project = localSuggestionProject(availableProjects, text);
+  const splitCount = localSuggestionSplitCount(text);
+  const quality = localSuggestionQuality(text);
+  if (splitCount >= 2) {
+    return {
+      status: "need_split_confirmation",
+      assistantMessage: `已识别到 ${splitCount} 条工作，建议拆分为 ${splitCount} 条日报。`,
+      qualityScore: Math.max(quality.score, 72),
+      canSubmit: false,
+      suggestions: [
+        { type: "split", label: `拆分为 ${splitCount} 条日报`, value: String(splitCount), action: "confirm_split", projectId: null },
+        { type: "split", label: "合并为 1 条日报", value: "1", action: "confirm_single", projectId: null },
+        { type: "quick_reply", label: "补充每项工作的结果", value: "每项工作分别补充结果和下一步", action: "append_reply", projectId: null }
+      ],
+      draftItems: inferDraftItems(text, currentDate, todayKey)
+        .slice(0, 5)
+        .map((item) => ({
+          title: item.title,
+          content: item.content,
+          projectId: project?.id ?? null,
+          projectHint: project?.name ?? item.projectHint ?? null,
+          risk: "",
+          nextPlan: "",
+          hours: item.hours || null
+        }))
+    };
+  }
+  if (!quality.ok) {
+    return {
+      status: "need_clarification",
+      assistantMessage: quality.question,
+      qualityScore: quality.score,
+      canSubmit: false,
+      suggestions: localClarificationSuggestions(text, project),
+      draftItems: []
+    };
+  }
+  const draft = inferDraftItems(text, currentDate, todayKey)[0];
+  const suggestions = [
+    ...(project ? [{ type: "project", label: `关联到「${project.name}」`, value: project.name, action: "select_project", projectId: project.id }] : []),
+    { type: "none_project", label: "不关联项目", value: null, action: "select_project", projectId: null },
+    { type: "quick_reply", label: "补充下一步计划", value: "下一步继续推进并同步进展", action: "add_next_plan", projectId: null }
+  ];
+  return {
+    status: "ready_to_submit",
+    assistantMessage: "内容已整理为提交摘要，请确认后提交。",
+    qualityScore: Math.max(quality.score, 82),
+    canSubmit: true,
+    suggestions: suggestions.slice(0, 5),
+    draftItems: [
+      {
+        title: draft.title,
+        content: draft.content,
+        projectId: project?.id ?? null,
+        projectHint: project?.name ?? draft.projectHint ?? null,
+        risk: /风险|阻塞|延期|卡住|无法推进/.test(text) ? "存在需要关注的风险或阻塞" : "",
+        nextPlan: /下一步|继续|计划|待/.test(text) ? text : "",
+        hours: draft.hours || null
+      }
+    ]
+  };
+}
+
+function localSuggestionQuality(text) {
+  const compact = text.replace(/\s+/g, "");
+  const meaningfulLength = compact.replace(/[^\p{L}\p{N}]/gu, "").length;
+  const vagueOnly = /^(开会|会议|沟通|对接|跟进|跟进项目|处理|处理问题|写代码|开发|测试|日常工作|工作)[。.!！?？]*$/u.test(compact);
+  const hasAction = /(完成|推进|沟通|对接|确认|整理|输出|提交|修复|排查|分析|设计|开发|测试|联调|评审|部署|上线|拜访|跟进|协调|制定|更新|复盘|调研|培训|支持|处理|优化|编写|汇总)/u.test(text);
+  const hasObject = /(项目|客户|需求|方案|接口|页面|数据|报告|合同|会议|文档|工单|版本|模块|流程|问题|风险|阻塞|排期|进度|功能|系统|平台|后台|前端|后端|测试|上线|交付|资料|清单|范围|缺陷|权限)/u.test(text);
+  const hasResult = /(完成|确认|输出|提交|修复|解决|发现|同步|通过|上线|交付|整理|风险|阻塞|待|需要|已经|继续|计划|\d+(?:\.\d+)?\s*(?:小时|工时|h|H))/u.test(text);
+  if (meaningfulLength < 8 || vagueOnly) {
+    return { ok: false, score: Math.min(35, meaningfulLength * 4), question: "请补充具体工作对象，以及本次工作的结果或下一步。" };
+  }
+  if (!hasAction) return { ok: false, score: 45, question: "请补充本次工作的具体动作，例如确认、修复、输出或提交。" };
+  if (!hasObject) return { ok: false, score: 52, question: "请补充对应项目、客户、需求或问题。" };
+  if (!hasResult) return { ok: false, score: 62, question: "请补充本次工作的结果、进展或风险。" };
+  return { ok: true, score: 86, question: "" };
+}
+
+function localClarificationSuggestions(text, project) {
+  const suggestions = [
+    { type: "quick_reply", label: "补充为“已确认下一步”", value: "已确认下一步，并同步相关负责人", action: "append_reply", projectId: null },
+    { type: "quick_reply", label: "标记为“待对方确认”", value: "待对方确认后继续推进", action: "append_reply", projectId: null }
+  ];
+  if (/阻塞|卡住|延期|无法推进|风险/.test(text)) {
+    suggestions.push({ type: "risk", label: "标记存在阻塞", value: "当前存在阻塞，需要负责人协调", action: "mark_blocker", projectId: null });
+  }
+  if (project) {
+    suggestions.unshift({ type: "project", label: `关联到「${project.name}」`, value: project.name, action: "select_project", projectId: project.id });
+  }
+  suggestions.push({ type: "none_project", label: "不关联项目", value: null, action: "select_project", projectId: null });
+  return suggestions.slice(0, 5);
+}
+
+function localSuggestionSplitCount(text) {
+  const explicit = extractExplicitDraftSections(text).length;
+  if (explicit >= 2) return explicit;
+  const dayPartCount = [/(上午)/u, /(下午)/u, /(晚上|晚间)/u].filter((pattern) => pattern.test(text)).length;
+  if (dayPartCount >= 2) return dayPartCount;
+  return text
+    .split(/[\n；;]/)
+    .map((item) => item.trim())
+    .filter((item) => item.replace(/\s+/g, "").length >= 8).length;
+}
+
+function localSuggestionProject(projectList, text) {
+  const normalizedText = normalizeSuggestionText(text);
+  const scored = projectList
+    .map((project) => {
+      const values = [project.code, project.name, project.code ? `${project.code}${project.name}` : project.name].filter(Boolean).map(normalizeSuggestionText);
+      const score = values.some((value) => value && normalizedText.includes(value)) ? Math.max(...values.map((value) => value.length)) : 0;
+      return { id: project.id, name: project.code ? `${project.code} · ${project.name}` : project.name, score };
+    })
+    .filter((item) => item.score >= 2)
+    .sort((a, b) => b.score - a.score);
+  return scored[0] ?? null;
+}
+
+function normalizeSuggestionText(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function inferDraftItems(text, currentDate, today) {

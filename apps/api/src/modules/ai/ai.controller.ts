@@ -6,6 +6,7 @@ import { AiService } from "./ai.service";
 import { CalendarChatDto } from "./dto/calendar-chat.dto";
 import { ProjectChatDto } from "./dto/project-chat.dto";
 import { WorkLogDraftDto } from "./dto/work-log-draft.dto";
+import { WorkLogSuggestionDto } from "./dto/work-log-suggestion.dto";
 
 @ApiBearerAuth()
 @ApiTags("AI")
@@ -36,5 +37,10 @@ export class AiController {
   @Post("work-log-draft")
   draftWorkLog(@CurrentUserParam() user: CurrentUser, @Body() dto: WorkLogDraftDto) {
     return this.aiService.draftWorkLog(user, dto);
+  }
+
+  @Post("work-log-suggestions")
+  suggestWorkLog(@CurrentUserParam() user: CurrentUser, @Body() dto: WorkLogSuggestionDto) {
+    return this.aiService.suggestWorkLog(user, dto);
   }
 }

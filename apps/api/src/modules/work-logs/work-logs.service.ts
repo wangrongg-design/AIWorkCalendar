@@ -10,7 +10,7 @@ import { CurrentUser } from "../../common/types/current-user";
 import { AiQueueService } from "../ai/ai-queue.service";
 import { CreateWorkLogAttachmentDto, CreateWorkLogDto, UpdateWorkLogDto, WorkLogQueryDto } from "./dto/work-log.dto";
 
-const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
 const ATTACHMENT_TEXT_LIMIT = 12_000;
 const attachmentPublicSelect = {
   id: true,
@@ -337,8 +337,11 @@ export class WorkLogsService {
     const existing = await this.getForMutation(user, id);
 
     const buffer = Buffer.from(dto.contentBase64, "base64");
-    if (!buffer.length || buffer.length !== dto.fileSize || buffer.length > ATTACHMENT_MAX_BYTES) {
-      throw new BadRequestException("Invalid attachment content or file size");
+    if (!buffer.length || buffer.length !== dto.fileSize) {
+      throw new BadRequestException("附件内容无效，请重新选择文件。");
+    }
+    if (buffer.length > ATTACHMENT_MAX_BYTES) {
+      throw new BadRequestException("文件过大，请上传 20MB 以内的文件。");
     }
 
     const fileName = sanitizeFileName(dto.fileName);

@@ -39,6 +39,35 @@ export type WorkLogDraftResult = WorkLogDraftItem & {
   items: WorkLogDraftItem[];
 };
 
+export type WorkLogSuggestionAction = "append_reply" | "select_project" | "confirm_split" | "confirm_single" | "mark_blocker" | "add_next_plan";
+
+export type WorkLogSuggestion = {
+  type: "quick_reply" | "project" | "split" | "risk" | "none_project";
+  label: string;
+  value: string | null;
+  action: WorkLogSuggestionAction;
+  projectId: string | null;
+};
+
+export type WorkLogSuggestionDraftItem = {
+  title: string;
+  content: string;
+  projectId: string | null;
+  projectHint: string | null;
+  risk: string;
+  nextPlan: string;
+  hours: number | null;
+};
+
+export type WorkLogSuggestionResult = {
+  status: "idle" | "need_clarification" | "need_split_confirmation" | "ready_to_submit";
+  assistantMessage: string;
+  qualityScore: number;
+  canSubmit: boolean;
+  suggestions: WorkLogSuggestion[];
+  draftItems: WorkLogSuggestionDraftItem[];
+};
+
 export const workLogAnalysisJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -143,6 +172,52 @@ export const workLogDraftJsonSchema = {
           projectHint: { anyOf: [{ type: "string" }, { type: "null" }] },
           confidence: { type: "number", minimum: 0, maximum: 1 },
           missingFields: { type: "array", items: { type: "string" } }
+        }
+      }
+    }
+  }
+} as const;
+
+export const workLogSuggestionJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["status", "assistantMessage", "qualityScore", "canSubmit", "suggestions", "draftItems"],
+  properties: {
+    status: { type: "string", enum: ["idle", "need_clarification", "need_split_confirmation", "ready_to_submit"] },
+    assistantMessage: { type: "string" },
+    qualityScore: { type: "number", minimum: 0, maximum: 100 },
+    canSubmit: { type: "boolean" },
+    suggestions: {
+      type: "array",
+      maxItems: 5,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "label", "value", "action", "projectId"],
+        properties: {
+          type: { type: "string", enum: ["quick_reply", "project", "split", "risk", "none_project"] },
+          label: { type: "string" },
+          value: { anyOf: [{ type: "string" }, { type: "null" }] },
+          action: { type: "string", enum: ["append_reply", "select_project", "confirm_split", "confirm_single", "mark_blocker", "add_next_plan"] },
+          projectId: { anyOf: [{ type: "string" }, { type: "null" }] }
+        }
+      }
+    },
+    draftItems: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "content", "projectId", "projectHint", "risk", "nextPlan", "hours"],
+        properties: {
+          title: { type: "string" },
+          content: { type: "string" },
+          projectId: { anyOf: [{ type: "string" }, { type: "null" }] },
+          projectHint: { anyOf: [{ type: "string" }, { type: "null" }] },
+          risk: { type: "string" },
+          nextPlan: { type: "string" },
+          hours: { anyOf: [{ type: "number", minimum: 0, maximum: 24 }, { type: "null" }] }
         }
       }
     }

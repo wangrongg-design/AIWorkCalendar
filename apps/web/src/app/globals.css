@@ -16618,6 +16618,15 @@ body {
   gap: 8px;
 }
 
+.today-log-modal .today-log-suggestion-status {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  color: #0f766e;
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .today-log-modal .today-log-smart-suggestion-list .ant-btn {
   min-height: 36px;
   border-color: #99f6e4;
@@ -16633,6 +16642,70 @@ body {
   border-color: #14b8a6;
   background: #ecfeff;
   color: #0f766e;
+}
+
+.today-log-modal .today-log-attachment-list {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.today-log-modal .today-log-attachment-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 8px 10px;
+}
+
+.today-log-modal .today-log-attachment-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.today-log-modal .today-log-attachment-row strong {
+  min-width: 0;
+  color: #111827;
+  font-size: 13px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-log-modal .today-log-attachment-row span {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .today-log-attachment-row.is-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.today-log-modal .today-log-attachment-row.is-error span {
+  color: #b91c1c;
+}
+
+.today-log-modal .today-log-attachment-row.is-uploading {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.today-log-modal .today-log-attachment-empty {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .today-log-modal .today-log-quick-actions {

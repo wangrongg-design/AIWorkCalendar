@@ -41,6 +41,31 @@ export type WorkLogDraftComposerState = {
   attachmentTargetIndex: number;
 };
 
+export type WorkLogSmartSuggestion = {
+  type: "quick_reply" | "project" | "split" | "risk" | "none_project";
+  label: string;
+  value: string | null;
+  action: "append_reply" | "select_project" | "confirm_split" | "confirm_single" | "mark_blocker" | "add_next_plan";
+  projectId: string | null;
+};
+
+export type WorkLogSuggestionAnalysis = {
+  status: "idle" | "need_clarification" | "need_split_confirmation" | "ready_to_submit";
+  assistantMessage: string;
+  qualityScore: number;
+  canSubmit: boolean;
+  suggestions: WorkLogSmartSuggestion[];
+  draftItems: Array<{
+    title: string;
+    content: string;
+    projectId: string | null;
+    projectHint: string | null;
+    risk: string;
+    nextPlan: string;
+    hours: number | null;
+  }>;
+};
+
 type WorkLogDraftComposerProps = {
   aiMessages: DraftComposerMessage[];
   aiInput: string;
@@ -49,6 +74,10 @@ type WorkLogDraftComposerProps = {
   onAiInputChange: (value: string) => void;
   onGenerateDraft: (textOverride?: string, intent?: WorkLogDraftComposerIntent, projectId?: string | null) => void;
   onContinuePrompt: () => void;
+  smartSuggestions?: WorkLogSmartSuggestion[];
+  suggestionsLoading?: boolean;
+  suggestionsUnavailable?: boolean;
+  onSmartSuggestionClick?: (suggestion: WorkLogSmartSuggestion) => void;
   draftPreview: WorkLogDraftComposerState | null;
   onUpdateItem: (index: number, patch: Partial<WorkLogDraftComposerItem>) => void;
   onDeleteItem: (index: number) => void;
@@ -71,10 +100,16 @@ type WorkLogDraftComposerProps = {
   pendingUploadFiles: UploadFile[];
   beforeUploadAttachment: UploadProps["beforeUpload"];
   onRemoveAttachment: NonNullable<UploadProps["onRemove"]>;
+  onRetryFailedAttachments?: () => void;
+  attachmentRetrying?: boolean;
   onPasteImages: (event: ClipboardEvent<HTMLElement>) => void;
 };
 
 export type WorkLogDraftComposerIntent = "analyze" | "split" | "force_single";
+
+export const workLogComposerIntroText = "请描述今日工作内容。系统会判断信息是否完整，并在提交前生成确认摘要。";
+export const workLogComposerModalSubtitle = "请描述工作内容，确认摘要后再提交。";
+export const workLogComposerPlaceholder = "请描述今日工作内容，例如：完成项目接口联调，并同步研发评估。";
 
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const draftInputMaxLength = 4000;
@@ -152,29 +187,6 @@ function projectMatchScore(project: Project, source: string) {
         : 0;
     return Math.max(best, score);
   }, 0);
-}
-
-function projectOptionMatchScore(label: string, source: string) {
-  const normalizedLabel = normalizeProjectMatchValue(label);
-  const normalizedSource = normalizeProjectMatchValue(source);
-  if (normalizedLabel.length < 2 || normalizedSource.length < 2) return 0;
-  if (normalizedSource.includes(normalizedLabel)) return 100 + Math.min(normalizedLabel.length, 24);
-  const labelCore = normalizedLabel.replace(/项目|信息化|系统|平台|建设|中心|管理|工程|服务/g, "");
-  const sourceCore = normalizedSource.replace(/项目|信息化|系统|平台|建设|中心|管理|工程|服务/g, "");
-  if (labelCore.length >= 2 && sourceCore.includes(labelCore)) return 92 + Math.min(labelCore.length, 18);
-  const sourceChars = new Set(Array.from(sourceCore));
-  const labelChars = Array.from(new Set(Array.from(labelCore)));
-  const overlap = labelChars.filter((char) => sourceChars.has(char)).length;
-  if (overlap < 2) return 0;
-  return Math.round((overlap / Math.max(2, Math.min(labelChars.length, 8))) * 86);
-}
-
-function projectSuggestionsFromOptions(options: Array<{ value: string; label: string }>, text: string) {
-  return options
-    .map((option) => ({ ...option, score: projectOptionMatchScore(option.label, text) }))
-    .filter((option) => option.score >= 45)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
 }
 
 export function projectIdFromText(projects: Project[] | undefined, text?: string | null) {
@@ -267,7 +279,7 @@ export function createDraftComposerPreviewFromText({
   const matchedProject = matchedProjectId ? projects?.find((project) => project.id === matchedProjectId) : undefined;
   const hours = extractDraftHours(content);
   return {
-    assistantMessage: "内容足够，已整理成提交摘要。",
+    assistantMessage: "内容已整理为提交摘要。",
     items: [
       {
         localId: nextDraftLocalId(),
@@ -296,6 +308,62 @@ export function createDraftComposerPreviewFromText({
       }
     ],
     attachedToFirst: false,
+    attachmentTargetIndex: 0
+  };
+}
+
+export function createDraftComposerPreviewFromSuggestion({
+  analysis,
+  date,
+  projects,
+  attachedToFirst
+}: {
+  analysis: WorkLogSuggestionAnalysis;
+  date: Dayjs | string | Date;
+  projects?: Project[];
+  attachedToFirst?: boolean;
+}): WorkLogDraftComposerState | null {
+  if (!analysis.draftItems.length) return null;
+  const safeDate = dayjs(date).isValid() ? dayjs(date) : dayjs();
+  const dateKey = safeDate.format("YYYY-MM-DD");
+  const kind = dateKey > dayjs().format("YYYY-MM-DD") ? "PLAN" : "DAILY";
+  return {
+    assistantMessage: analysis.assistantMessage || "内容已整理为提交摘要。",
+    items: analysis.draftItems.slice(0, 8).map((item, index) => {
+      const project = item.projectId ? projects?.find((candidate) => candidate.id === item.projectId) : undefined;
+      const content = item.content?.trim() || item.title?.trim() || "请补充工作内容。";
+      const title = item.title?.trim() || quickFillTitleFromText(content) || `工作项 ${index + 1}`;
+      const hours = Number(item.hours);
+      const missingFields = new Set<string>();
+      if (!title.trim()) missingFields.add("title");
+      if (!content.trim()) missingFields.add("content");
+      return {
+        localId: nextDraftLocalId(),
+        date: dateKey,
+        kind,
+        title,
+        content,
+        hours: Number.isFinite(hours) && hours > 0 ? hours : 0,
+        startTime: null,
+        endTime: null,
+        projectId: item.projectId ?? undefined,
+        projectName: project ? (project.code ? `${project.code} · ${project.name}` : project.name) : undefined,
+        projectHint: project ? project.name : item.projectHint,
+        confidence: Math.max(0.4, Math.min(1, analysis.qualityScore / 100 || 0.78)),
+        missingFields: Array.from(missingFields),
+        achievements: [],
+        risks: item.risk?.trim() ? [item.risk.trim()] : [],
+        blockers: /阻塞|卡住|无法推进/u.test(item.risk ?? "") ? [item.risk.trim()] : [],
+        nextActions: item.nextPlan?.trim() ? [item.nextPlan.trim()] : [],
+        sourceNote: "由智能建议整理",
+        status: "generated",
+        projectConfirmed: Boolean(item.projectId),
+        selected: true,
+        expanded: false,
+        source: "AI"
+      };
+    }),
+    attachedToFirst: Boolean(attachedToFirst),
     attachmentTargetIndex: 0
   };
 }
@@ -446,7 +514,7 @@ export function workLogQualityCheck(text: string) {
     return { ok: false as const, message: "请补充工作对象，例如项目、客户、需求或问题" };
   }
   if (!hasResultOrContext) {
-    return { ok: false as const, message: "请补充这项工作的结果、进展或风险" };
+    return { ok: false as const, message: "请补充工作结果、进展或风险" };
   }
   return { ok: true as const };
 }
@@ -504,22 +572,15 @@ export function estimateDraftItemCount(text: string) {
 export function clarificationQuestionForWorkLog(text: string) {
   const compact = text.replace(/\s+/g, "");
   if (/^(开会|会议)$/u.test(compact)) {
-    return "这次会议围绕什么工作？最后确认了什么？";
+    return "请补充会议主题，以及本次会议确认的结论或后续事项。";
   }
   if (/^(沟通|对接|跟进|处理|写代码|开发|测试|日常工作|工作)$/u.test(compact)) {
-    return "这项工作对应哪个项目或客户？最后有什么进展、结果或阻塞？";
+    return "请补充对应项目、客户或需求，以及当前进展、结果或阻塞。";
   }
   if (/沟通|对接|跟进/u.test(text)) {
-    return "这次沟通确认了什么，或还有什么阻塞？";
+    return "请补充本次沟通确认的结果，或说明当前阻塞。";
   }
   return "请补充工作对象和结果，例如项目、客户、需求、进展或风险。";
-}
-
-function composeSuggestedText(base: string, suggestion: string) {
-  const normalized = base.trim();
-  if (!normalized) return suggestion;
-  if (/补充说明|我补充一句/u.test(suggestion)) return normalized;
-  return `${normalized}，${suggestion}`;
 }
 
 function draftReady(item: WorkLogDraftComposerItem) {
@@ -541,6 +602,18 @@ function hasSubmittableDraft(preview: WorkLogDraftComposerState | null) {
   return Boolean(preview?.items.some(draftReady));
 }
 
+function uploadFileSizeLabel(value?: number) {
+  if (!value) return "未知大小";
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)}MB`;
+  return `${Math.max(1, Math.round(value / 1024))}KB`;
+}
+
+function uploadFileStatusLabel(file: UploadFile) {
+  if (file.status === "error") return String(file.response || "上传失败");
+  if (file.status === "uploading") return "上传中";
+  return "待随日报提交";
+}
+
 export function WorkLogDraftComposer({
   aiMessages,
   aiInput,
@@ -549,6 +622,10 @@ export function WorkLogDraftComposer({
   onAiInputChange,
   onGenerateDraft,
   onContinuePrompt,
+  smartSuggestions = [],
+  suggestionsLoading,
+  suggestionsUnavailable,
+  onSmartSuggestionClick,
   draftPreview,
   onUpdateItem,
   onDeleteItem,
@@ -565,6 +642,8 @@ export function WorkLogDraftComposer({
   pendingUploadFiles,
   beforeUploadAttachment,
   onRemoveAttachment,
+  onRetryFailedAttachments,
+  attachmentRetrying,
   onPasteImages
 }: WorkLogDraftComposerProps) {
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
@@ -586,15 +665,10 @@ export function WorkLogDraftComposer({
   const inputLimitExceeded = inputLength > draftInputMaxLength;
   const latestUserText = [...aiMessages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   const workingText = aiInput.trim() || latestUserText;
-  const detectedInputItemCount = estimateDraftItemCount(workingText);
   const inputBusy = aiPending;
   const canGenerate = aiInput.trim().length > 0 && !inputBusy && !inputLimitExceeded;
-  const workingTextQuality = workLogQualityCheck(workingText);
-  const shouldDraftForMultipleItems = workLogShouldDraftForMultipleItems(workingText);
-  const directSubmitHint = shouldDraftForMultipleItems ? `识别到 ${detectedInputItemCount} 项工作` : workingTextQuality.message;
-  const showQualityHint = !hasItems && workingText.length > 0 && (shouldDraftForMultipleItems || !workingTextQuality.ok);
   const hasConversation = aiMessages.some((item) => item.role === "user");
-  const canAttach = hasItems && !aiPending;
+  const canAttach = !aiPending;
   const showAttachments = canAttach && (attachmentsOpen || pendingAttachmentCount > 0);
   const canSubmitAny = hasSubmittableDraft(draftPreview);
   const selectedEntries = selectedDraftComposerEntries(draftPreview);
@@ -602,21 +676,8 @@ export function WorkLogDraftComposer({
   const summaryItems = selected.length ? selected : persistedItems.length ? persistedItems : items;
   const expandedIndexes = new Set(items.map((item, index) => (item.expanded ? index : -1)).filter((index) => index >= 0));
   const hasExpandedItems = expandedIndexes.size > 0;
-  const firstEditableEntry = selectedEntries.find((entry) => entry.item.status !== "submitted" && entry.item.status !== "ignored") ?? selectedEntries[0];
-  const firstEditableText = firstEditableEntry ? [firstEditableEntry.item.title, firstEditableEntry.item.content, firstEditableEntry.item.projectHint].filter(Boolean).join(" ") : workingText;
-  const projectSuggestions = projectSuggestionsFromOptions(projectOptions, firstEditableText).filter((option) => !firstEditableEntry?.item.projectId || firstEditableEntry.item.projectId !== option.value);
-  const resultSuggestions = (() => {
-    if (!workingText || hasItems) return [];
-    if (shouldDraftForMultipleItems) return [];
-    if (/风险|阻塞|卡住|延期|无法推进|等反馈|待反馈/u.test(workingText)) {
-      return ["发现阻塞", "待客户反馈", "需要负责人确认"];
-    }
-    if (/沟通|对接|会议|确认/u.test(workingText)) {
-      return ["已确认范围", "已确认下一步", "待客户反馈", "补充说明"];
-    }
-    return workingTextQuality.ok ? [] : ["确认项目范围", "待对方反馈", "发现阻塞", "我补充一句"];
-  })();
-  const hasSmartSuggestions = Boolean((!hasItems && workingText && (shouldDraftForMultipleItems || resultSuggestions.length || projectSuggestions.length)) || (hasItems && firstEditableEntry && projectSuggestions.length));
+  const hasSmartSuggestions = smartSuggestions.length > 0 || Boolean(suggestionsLoading || suggestionsUnavailable);
+  const hasFailedAttachments = pendingUploadFiles.some((file) => file.status === "error");
   const expandSelectedItems = () => {
     const targetEntries = selectedEntries.length ? selectedEntries : items.map((item, index) => ({ item, index }));
     targetEntries.forEach(({ index, item }) => {
@@ -624,26 +685,6 @@ export function WorkLogDraftComposer({
         onUpdateItem(index, { expanded: true, status: item.status === "generated" ? "editing" : item.status });
       }
     });
-  };
-  const applyProjectSuggestion = (projectId: string | null) => {
-    if (firstEditableEntry) {
-      onUpdateItem(firstEditableEntry.index, {
-        projectId: projectId ?? undefined,
-        projectConfirmed: true,
-        status: firstEditableEntry.item.status === "generated" ? "editing" : firstEditableEntry.item.status
-      });
-      return;
-    }
-    if (workingText) {
-      onGenerateDraft(workingText, "force_single", projectId);
-    }
-  };
-  const requestDraftFromConversation = (intent: WorkLogDraftComposerIntent) => {
-    if (workingText) {
-      onGenerateDraft(workingText, intent);
-      return;
-    }
-    onRegenerateDraft?.();
   };
   const handleAttachmentPaste = (event: ClipboardEvent<HTMLElement>) => {
     if (!canAttach) {
@@ -657,7 +698,7 @@ export function WorkLogDraftComposer({
       <section className="worklog-chat-thread" aria-label="智能填报对话">
         {!hasConversation && !hasItems ? (
           <div className="today-log-ai-message is-assistant">
-            直接写今天做了什么，我会判断是否需要补充；内容足够后，先给你提交摘要。
+            {workLogComposerIntroText}
           </div>
         ) : null}
         {aiMessages.map((message, index) => (
@@ -670,7 +711,7 @@ export function WorkLogDraftComposer({
             <span className="quickfill-draft-spinner" />
             <div>
               <strong>正在整理内容</strong>
-              <p>正在判断是否需要补充、是否需要拆分，以及可能关联的项目。</p>
+              <p>正在检查内容完整性、拆分建议和项目线索。</p>
             </div>
           </div>
         ) : null}
@@ -691,35 +732,13 @@ export function WorkLogDraftComposer({
 
         {hasItems ? (
           <div className="worklog-draft-message">
-            {pendingAttachmentCount > 0 ? (
-              <div className="quickfill-attachment-target">
-                <span>附件归属</span>
-                {draftPreview && selectedCount > 1 ? (
-                  <Select
-                    value={selectedIndexes.has(attachmentTargetIndex) ? attachmentTargetIndex : selected[0] ? items.indexOf(selected[0]) : undefined}
-                    listHeight={280}
-                    getPopupContainer={() => document.body}
-                    options={items.map((draft, index) => ({
-                      value: index,
-                      disabled: !draft.selected || draft.status === "ignored",
-                      label: `第 ${index + 1} 条 · ${draft.title || "未命名草稿"}`
-                    }))}
-                    onChange={onAttachmentTargetChange}
-                  />
-                ) : (
-                  <strong>{selected[0]?.title ? `关联到：${selected[0].title}` : "选择草稿后关联附件"}</strong>
-                )}
-                <em>附件只会上传到一条记录，避免多条记录重复绑定。</em>
-              </div>
-            ) : null}
-
             <div className="worklog-final-summary" aria-live="polite">
               <div className="worklog-final-summary-head">
                 <div>
                   <strong>
                     {selectedCount ? `将提交 ${selectedSummary}` : persistedItems.length ? `已处理 ${persistedItems.length} 条记录` : `已整理 ${itemCount} 条记录`}
                   </strong>
-                  <span>提交前请确认摘要，项目和工时不确定也可以稍后补充。</span>
+                  <span>提交前请核对摘要。项目和工时可稍后补充。</span>
                 </div>
                 <CheckCircle2 size={20} />
               </div>
@@ -953,21 +972,49 @@ export function WorkLogDraftComposer({
             <div>
               <strong>附件</strong>
               <span>
-                {pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件，提交前确认归属。` : "支持上传或粘贴聊天截图，单个最大 8MB。"}
+                {pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件，提交日报时一并上传。` : "附件为可选补充，不影响日报正文提交。"}
               </span>
             </div>
-            <Button type="text" onClick={() => setAttachmentsOpen(false)}>
-              收起
-            </Button>
+            <Upload multiple showUploadList={false} beforeUpload={beforeUploadAttachment}>
+              <Button icon={<UploadCloud size={15} />}>选择文件</Button>
+            </Upload>
           </div>
-          <div className="paste-upload-zone" tabIndex={0} onPaste={handleAttachmentPaste}>
-            <Upload.Dragger multiple fileList={pendingUploadFiles} beforeUpload={beforeUploadAttachment} onRemove={onRemoveAttachment}>
-              <p className="ant-upload-drag-icon">
-                <UploadCloud size={26} />
-              </p>
-              <p className="ant-upload-text">拖拽文件，或粘贴图片</p>
-              <p className="ant-upload-hint">{hasItems ? "有多条记录时，附件只关联到你选择的一条。" : "先生成或新增记录后，再选择附件归属。"}</p>
-            </Upload.Dragger>
+          {draftPreview && selectedCount > 1 && pendingAttachmentCount > 0 ? (
+            <div className="quickfill-attachment-target">
+              <span>附件默认归属</span>
+              <Select
+                value={selectedIndexes.has(attachmentTargetIndex) ? attachmentTargetIndex : selected[0] ? items.indexOf(selected[0]) : undefined}
+                listHeight={280}
+                getPopupContainer={() => document.body}
+                options={items.map((draft, index) => ({
+                  value: index,
+                  disabled: !draft.selected || draft.status === "ignored",
+                  label: `第 ${index + 1} 条 · ${draft.title || "未命名记录"}`
+                }))}
+                onChange={onAttachmentTargetChange}
+              />
+              <em>不调整时，附件默认随选中的第一条记录提交。</em>
+            </div>
+          ) : null}
+          <div className="today-log-attachment-list" tabIndex={0} onPaste={handleAttachmentPaste}>
+            {pendingUploadFiles.length ? (
+              pendingUploadFiles.map((file) => (
+                <div key={file.uid} className={`today-log-attachment-row is-${file.status ?? "ready"}`}>
+                  <div>
+                    <strong>{file.name}</strong>
+                    <span>{uploadFileSizeLabel(file.size)} · {uploadFileStatusLabel(file)}</span>
+                  </div>
+                  <Button type="text" danger icon={<Trash2 size={15} />} onClick={() => onRemoveAttachment(file)} />
+                </div>
+              ))
+            ) : (
+              <span className="today-log-attachment-empty">可点击上传图标选择文件，也可以在输入框粘贴图片。</span>
+            )}
+            {hasFailedAttachments && onRetryFailedAttachments ? (
+              <Button loading={attachmentRetrying} onClick={onRetryFailedAttachments}>
+                重试失败附件
+              </Button>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -996,32 +1043,11 @@ export function WorkLogDraftComposer({
             <strong>智能建议</strong>
           </div>
           <div className="today-log-smart-suggestion-list">
-            {!hasItems && shouldDraftForMultipleItems ? (
-              <>
-                <Button disabled={aiPending} onClick={() => requestDraftFromConversation("split")}>
-                  拆成 {detectedInputItemCount} 条
-                </Button>
-                <Button disabled={aiPending} onClick={() => requestDraftFromConversation("force_single")}>
-                  合并为 1 条
-                </Button>
-                <Button disabled={aiPending} onClick={() => requestDraftFromConversation("split")}>
-                  重新整理
-                </Button>
-              </>
-            ) : null}
-            {projectSuggestions.map((project) => (
-              <Button key={project.value} disabled={aiPending} onClick={() => applyProjectSuggestion(project.value)}>
-                关联到 {project.label}
-              </Button>
-            ))}
-            {projectSuggestions.length ? (
-              <Button disabled={aiPending} onClick={() => applyProjectSuggestion(null)}>
-                不关联项目
-              </Button>
-            ) : null}
-            {!hasItems && resultSuggestions.map((suggestion) => (
-              <Button key={suggestion} disabled={aiPending} onClick={() => onGenerateDraft(composeSuggestedText(workingText, suggestion), "analyze")}>
-                {suggestion}
+            {suggestionsLoading ? <span className="today-log-suggestion-status">正在分析可用建议…</span> : null}
+            {suggestionsUnavailable ? <span className="today-log-suggestion-status">请补充这项工作的结果或下一步。</span> : null}
+            {smartSuggestions.slice(0, 5).map((suggestion, index) => (
+              <Button key={`${suggestion.action}-${suggestion.projectId ?? suggestion.value ?? index}`} disabled={aiPending} onClick={() => onSmartSuggestionClick?.(suggestion)}>
+                {suggestion.label}
               </Button>
             ))}
           </div>
@@ -1034,7 +1060,7 @@ export function WorkLogDraftComposer({
           value={aiInput}
           autoFocus
           autoSize={{ minRows: 2, maxRows: 8 }}
-          placeholder="自然描述今天做了什么，例如：和供销社确认校园餐项目接口范围，已同步研发评估。"
+          placeholder={workLogComposerPlaceholder}
           disabled={inputBusy}
           onPaste={handleAttachmentPaste}
           onChange={(event) => onAiInputChange(event.target.value)}
@@ -1046,10 +1072,7 @@ export function WorkLogDraftComposer({
           }}
         />
         <div className={`today-log-quick-actions ${hasItems ? "has-drafts" : "is-empty"}`}>
-          <span className={`today-log-input-meter${inputLimitExceeded ? " is-error" : ""}${showQualityHint ? " is-warning" : ""}`}>
-            {showQualityHint ? `${directSubmitHint} · ` : detectedInputItemCount >= 2 ? `疑似 ${detectedInputItemCount} 项 · ` : ""}
-            {inputLength}/{draftInputMaxLength}
-          </span>
+          <span className={`today-log-input-meter${inputLimitExceeded ? " is-error" : ""}`}>{inputLength}/{draftInputMaxLength}</span>
           {canAttach ? (
             <Tooltip title={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}>
               <Button
