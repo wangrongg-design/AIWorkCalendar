@@ -25,8 +25,8 @@ import {
   validateDraftComposerState,
   workLogQualityCheck,
   workLogShouldDraftForMultipleItems,
-  workLogDraftDateLabel,
-  workLogComposerModalSubtitle,
+  workLogComposerSubtitleForDate,
+  workLogEffectiveLength,
   type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
   type WorkLogDraftComposerState,
@@ -775,8 +775,8 @@ export default function CalendarPage() {
   const directQuickFillSubmit = useMutation({
     mutationFn: async () => {
       const text = quickFillAiInput.trim();
-      if (text.length < 2) {
-        throw new Error("请先填写工作内容。");
+      if (workLogEffectiveLength(text) < 10) {
+        throw new Error("请补充具体工作内容。");
       }
       if (text.length > 4000) {
         throw new Error("内容超过 4000 字，请精简后提交。");
@@ -797,20 +797,21 @@ export default function CalendarPage() {
       return { ...result, projectMatched: Boolean(projectId) };
     },
     onSuccess: ({ workLog, attachmentUpload, projectMatched }) => {
+      const isPlan = (workLog.kind ?? workLogKindForDate(quickFillDate)) === "PLAN";
       clearQuickFillAutosave(quickFillDateKey);
       setQuickFillAiInput("");
       setLastQuickFillAiInput("");
       setQuickFillAiMessages([]);
       setDraftPreview(null);
       resetQuickFillSuggestionState();
-      message.success("日报已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
+      message.success(isPlan ? "计划已提交。摘要和项目线索生成后，可在填报记录中查看。" : "日报已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
       if (!projectMatched) {
         message.info("未识别到关联项目，已按未关联项目保存，可稍后补充。");
       }
       if (attachmentUpload?.failedCount) {
         setAttachmentRetryTargetId(workLog.id);
-        setAutoSaveStatus("日报已提交，附件可重新上传。");
-        message.warning(`附件上传失败，请重新上传，或先在填报记录中补充附件。${attachmentUpload.error?.message ?? ""}`);
+        setAutoSaveStatus("内容已自动保存");
+        message.warning(`附件上传失败，请重新上传，或稍后在填报记录中补充附件。${attachmentUpload.error?.message ?? ""}`);
       } else {
         setAttachmentRetryTargetId(null);
         setPendingAttachments([]);
@@ -952,7 +953,7 @@ export default function CalendarPage() {
     if (!hasContent) {
       return;
     }
-    setAutoSaveStatus((current) => (current === "已恢复上次未提交的内容" ? current : "正在自动暂存"));
+    setAutoSaveStatus((current) => (current === "已恢复上次未提交的内容" ? current : "内容会自动暂存，提交后清空。"));
     const timer = window.setTimeout(() => {
       writeWorkLogFillAutosave<AiDraftMessage, DraftPreview, WorkLogSuggestionAnalysis>(currentQuickFillAutosaveKey, {
         date: quickFillDateKey,
@@ -963,7 +964,7 @@ export default function CalendarPage() {
         suggestionAnalysis,
         attachmentMetadata: suggestionAttachmentMetadata
       });
-      setAutoSaveStatus("已自动暂存，防止内容丢失");
+      setAutoSaveStatus("内容已自动保存");
     }, 600);
     return () => window.clearTimeout(timer);
   }, [
@@ -2080,7 +2081,7 @@ export default function CalendarPage() {
         title={
           <div className="today-log-modal-title">
             <strong>{quickFillKindTitle}</strong>
-            <span>{workLogDraftDateLabel(quickFillDate)}，{workLogComposerModalSubtitle}</span>
+            <span>{workLogComposerSubtitleForDate(quickFillDate)}</span>
           </div>
         }
         open={quickFillOpen}

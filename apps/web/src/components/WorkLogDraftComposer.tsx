@@ -116,12 +116,20 @@ type WorkLogDraftComposerProps = {
 
 export type WorkLogDraftComposerIntent = "analyze" | "split" | "force_single";
 
-export const workLogComposerModalSubtitle = "用一段话记录今天的工作，提交后系统会自动生成摘要、风险和项目线索。";
-export const workLogComposerPlaceholder = "例如：上午完成项目接口联调，下午处理客户反馈，发现支付回调异常，明天继续排查。";
+export const workLogComposerModalSubtitle = "用一段话记录今天的工作，提交后可查看摘要、风险和项目线索。";
+export const workLogComposerPlaceholder = "例如：上午完成接口联调，下午和客户确认上线范围，发现回调偶发失败，明天继续排查并同步研发。";
 
-const legacyWorkLogComposerIntroText = "请描述今日工作内容。系统会判断信息是否完整，并在提交前生成确认摘要。";
+const legacyWorkLogComposerIntroTexts = new Set([
+  "请描述工作内容。",
+  "请描述今日工作内容。系统会判断信息是否完整，并在提交前生成确认摘要。"
+]);
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const draftInputMaxLength = 4000;
+const directSubmitMinEffectiveLength = 10;
+
+export function workLogEffectiveLength(value: string) {
+  return value.replace(/[^\p{L}\p{N}]/gu, "").length;
+}
 
 function nextDraftLocalId() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -131,6 +139,15 @@ export function workLogDraftDateLabel(value: Dayjs | string | Date | null | unde
   const date = dayjs(value);
   const safeDate = date.isValid() ? date : dayjs();
   return `${safeDate.format("YYYY-MM-DD")} ${weekdayLabels[safeDate.day()]}`;
+}
+
+export function workLogComposerSubtitleForDate(value: Dayjs | string | Date | null | undefined) {
+  const date = dayjs(value);
+  const safeDate = date.isValid() ? date : dayjs();
+  const isPlan = safeDate.format("YYYY-MM-DD") > dayjs().format("YYYY-MM-DD");
+  return isPlan
+    ? `${workLogDraftDateLabel(safeDate)}，用一段话记录计划安排，提交后可查看摘要和项目线索。`
+    : `${workLogDraftDateLabel(safeDate)}，用一段话记录今天的工作，提交后可查看摘要、风险和项目线索。`;
 }
 
 export function createEmptyDraftComposerItem(dateValue: Dayjs | string | Date = dayjs()): WorkLogDraftComposerItem {
@@ -737,7 +754,7 @@ export function WorkLogDraftComposer({
   const hasItems = itemCount > 0;
   const inputLength = aiInput.length;
   const inputLimitExceeded = inputLength > draftInputMaxLength;
-  const visibleAiMessages = aiMessages.filter((message) => !(message.role === "assistant" && message.content.trim() === legacyWorkLogComposerIntroText));
+  const visibleAiMessages = aiMessages.filter((message) => !(message.role === "assistant" && legacyWorkLogComposerIntroTexts.has(message.content.trim())));
   const latestUserText = [...visibleAiMessages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   const workingText = aiInput.trim() || latestUserText;
   const inputLocked = submitting;
@@ -816,12 +833,17 @@ export function WorkLogDraftComposer({
   };
 
   if (directSubmitMode) {
-    const canDirectSubmit = aiInput.trim().length >= 2 && !inputLocked && !inputLimitExceeded;
+    const directEffectiveLength = workLogEffectiveLength(aiInput);
+    const isDirectPlan = directSubmitLabel.includes("计划");
+    const tooShortForDirectSubmit = directEffectiveLength > 0 && directEffectiveLength < directSubmitMinEffectiveLength;
+    const directValidationText = inputLimitExceeded ? "内容超过 4000 字，请精简后提交。" : tooShortForDirectSubmit ? "请补充具体工作内容。" : "";
+    const canDirectSubmit = directEffectiveLength >= directSubmitMinEffectiveLength && !inputLocked && !inputLimitExceeded;
+    const directAutosaveText = autoSaveStatus || "内容会自动暂存，提交后清空。";
     return (
       <div className="today-log-composer worklog-direct-composer">
         {restoredNotice ? (
           <div className="today-log-restore-notice">
-            <span>已恢复上次未提交内容</span>
+            <span>已恢复上次未提交的内容。</span>
             {onResetRestoredDraft ? (
               <Button size="small" onClick={onResetRestoredDraft}>
                 重新填写
@@ -833,8 +855,8 @@ export function WorkLogDraftComposer({
         <section className="worklog-direct-panel" aria-label="填写工作内容">
           <div className="worklog-direct-head">
             <div>
-              <strong>工作内容</strong>
-              <span>可以写完成事项、沟通对象、结果、风险或下一步。</span>
+              <strong>{isDirectPlan ? "计划做什么？" : "今天做了什么？"}</strong>
+              <span>写完成事项、沟通对象、结果、风险或下一步。</span>
             </div>
             <span className={`today-log-input-meter${inputLimitExceeded ? " is-error" : ""}`}>{inputLength}/{draftInputMaxLength}</span>
           </div>
@@ -852,8 +874,8 @@ export function WorkLogDraftComposer({
 
           <div className="worklog-direct-attachment">
             <div>
-              <strong>上传附件（可选）</strong>
-              <span>可上传截图、文档或沟通记录，帮助补充工作背景。</span>
+              <strong>附件（可选）</strong>
+              <span>可上传截图、文档或沟通记录。</span>
             </div>
             {canAttach ? (
               <Upload multiple showUploadList={false} beforeUpload={beforeUploadAttachment}>
@@ -882,14 +904,16 @@ export function WorkLogDraftComposer({
           ) : null}
 
           <div className="worklog-direct-footer">
-            <span>{autoSaveStatus || "内容会自动暂存，提交后清空。"}</span>
+            <div className="worklog-direct-footer-copy">
+              <span>{directAutosaveText}</span>
+              {directValidationText ? <em className="is-error">{directValidationText}</em> : <em>建议包含：工作对象 · 结果 · 风险/下一步</em>}
+            </div>
             <Button type="primary" size="large" icon={<CheckCircle2 size={17} />} loading={submitting} disabled={!canDirectSubmit} onClick={onDirectSubmit}>
               {directSubmitLabel}
             </Button>
           </div>
         </section>
 
-        <p className="worklog-direct-result-note">提交后可在填报记录中查看摘要、风险和项目线索。未识别到关联项目时，将按未关联项目保存，可稍后补充。</p>
       </div>
     );
   }

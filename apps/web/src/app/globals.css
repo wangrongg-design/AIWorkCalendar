@@ -16781,11 +16781,28 @@ body {
   gap: 14px;
 }
 
-.today-log-modal .worklog-direct-footer > span {
+.today-log-modal .worklog-direct-footer-copy {
+  display: grid;
   min-width: 0;
+  gap: 2px;
+}
+
+.today-log-modal .worklog-direct-footer-copy span {
   color: #6b7280;
   font-size: 13px;
   line-height: 20px;
+}
+
+.today-log-modal .worklog-direct-footer-copy em {
+  color: #4b5563;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.today-log-modal .worklog-direct-footer-copy em.is-error {
+  color: #b91c1c;
 }
 
 .today-log-modal .worklog-direct-footer .ant-btn {
@@ -16793,13 +16810,6 @@ body {
   min-height: 44px;
   border-radius: 12px;
   font-weight: 720;
-}
-
-.today-log-modal .worklog-direct-result-note {
-  margin: 0;
-  color: #4b5563;
-  font-size: 13px;
-  line-height: 21px;
 }
 
 @media (max-width: 760px) {

@@ -24,8 +24,8 @@ import {
   validateDraftComposerState,
   workLogQualityCheck,
   workLogShouldDraftForMultipleItems,
-  workLogDraftDateLabel,
-  workLogComposerModalSubtitle,
+  workLogComposerSubtitleForDate,
+  workLogEffectiveLength,
   type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
   type WorkLogDraftComposerState,
@@ -766,8 +766,8 @@ export default function WorkLogsPage() {
   const directLogSubmit = useMutation({
     mutationFn: async () => {
       const text = aiInput.trim();
-      if (text.length < 2) {
-        throw new Error("请先填写工作内容。");
+      if (workLogEffectiveLength(text) < 10) {
+        throw new Error("请补充具体工作内容。");
       }
       if (text.length > 4000) {
         throw new Error("内容超过 4000 字，请精简后提交。");
@@ -788,6 +788,7 @@ export default function WorkLogsPage() {
       return { ...result, projectMatched: Boolean(projectId) };
     },
     onSuccess: ({ workLog, attachmentUpload, projectMatched }) => {
+      const isPlan = (workLog.kind ?? workLogKindForDate(entryDate)) === "PLAN";
       clearCurrentAutosave(entryDateKey);
       setAiInput("");
       setLastAiInput("");
@@ -795,14 +796,14 @@ export default function WorkLogsPage() {
       setDraftPreview(null);
       resetSuggestionState();
       form.resetFields();
-      message.success("日报已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
+      message.success(isPlan ? "计划已提交。摘要和项目线索生成后，可在填报记录中查看。" : "日报已提交。摘要、风险和项目线索生成后，可在填报记录中查看。");
       if (!projectMatched) {
         message.info("未识别到关联项目，已按未关联项目保存，可稍后补充。");
       }
       if (attachmentUpload?.failedCount) {
         setAttachmentRetryTargetId(workLog.id);
-        setAutoSaveStatus("日报已提交，附件可重新上传。");
-        message.warning(`附件上传失败，请重新上传，或先在填报记录中补充附件。${attachmentUpload.error?.message ?? ""}`);
+        setAutoSaveStatus("内容已自动保存");
+        message.warning(`附件上传失败，请重新上传，或稍后在填报记录中补充附件。${attachmentUpload.error?.message ?? ""}`);
       } else {
         setAttachmentRetryTargetId(null);
         setPendingAttachments([]);
@@ -1058,7 +1059,7 @@ export default function WorkLogsPage() {
         pendingAttachments.length
     );
     if (!hasContent) return;
-    setAutoSaveStatus("正在自动暂存");
+    setAutoSaveStatus("内容会自动暂存，提交后清空。");
     const timer = window.setTimeout(() => {
       writeWorkLogFillAutosave<AiChatMessage, DraftPreview, WorkLogSuggestionAnalysis>(currentAutosaveKey, {
         date: entryDateKey,
@@ -1069,7 +1070,7 @@ export default function WorkLogsPage() {
         suggestionAnalysis,
         attachmentMetadata: suggestionAttachmentMetadata
       });
-      setAutoSaveStatus("已自动暂存，防止内容丢失");
+      setAutoSaveStatus("内容已自动保存");
     }, 600);
     return () => window.clearTimeout(timer);
   }, [
@@ -1299,11 +1300,11 @@ export default function WorkLogsPage() {
 
       <div className="surface-panel worklog-entry-panel">
         <div className="worklog-entry-copy">
-          <div className="section-title">填写今日记录</div>
-          <div className="section-subtitle">请描述今日工作内容，系统会追问缺失信息，并在提交前展示摘要。</div>
+          <div className="section-title">填写今日日报</div>
+          <div className="section-subtitle">用一段话记录今天的工作，提交后可查看摘要、风险和项目线索。</div>
         </div>
         <Button type="primary" className="ai-soft-button" icon={<WandSparkles size={16} />} onClick={() => openCreate()}>
-          填写今日记录
+          填写今日日报
         </Button>
       </div>
 
@@ -1397,7 +1398,7 @@ export default function WorkLogsPage() {
           ) : (
             <div className="today-log-modal-title">
               <strong>{entryKindTitle}</strong>
-              <span>{workLogDraftDateLabel(entryDate)}，{workLogComposerModalSubtitle}</span>
+              <span>{workLogComposerSubtitleForDate(entryDate)}</span>
             </div>
           )
         }
