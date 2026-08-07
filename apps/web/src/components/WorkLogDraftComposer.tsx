@@ -744,7 +744,9 @@ export function WorkLogDraftComposer({
   const summaryItems = selected.length ? selected : persistedItems.length ? persistedItems : items;
   const expandedIndexes = new Set(items.map((item, index) => (item.expanded ? index : -1)).filter((index) => index >= 0));
   const hasExpandedItems = expandedIndexes.size > 0;
-  const hasSmartSuggestions = smartSuggestions.length > 0 || Boolean(suggestionsUnavailable);
+  const hasWorkContext = Boolean(workingText || hasConversation || hasItems || suggestionAnalysis || smartSuggestions.length);
+  const showSuggestionFailure = Boolean(suggestionsUnavailable && hasWorkContext && !hasItems);
+  const hasSmartSuggestions = smartSuggestions.length > 0 || showSuggestionFailure;
   const hasFailedAttachments = pendingUploadFiles.some((file) => file.status === "error");
   const recognizedProjects = Array.from(
     new Set(
@@ -766,7 +768,7 @@ export function WorkLogDraftComposer({
       ? suggestionAnalysis.assistantMessage
       : "";
   const isAnalyzing = aiPending || suggestionsLoading;
-  const statusTone = suggestionsUnavailable ? "failed" : hasItems ? "ready" : isAnalyzing ? "working" : suggestionAnalysis ? "ready" : workingText ? "received" : "idle";
+  const statusTone = showSuggestionFailure ? "failed" : hasItems ? "ready" : isAnalyzing ? "working" : suggestionAnalysis ? "ready" : workingText ? "received" : "idle";
   const statusLabel =
     statusTone === "failed"
       ? "智能建议暂不可用"
@@ -784,6 +786,8 @@ export function WorkLogDraftComposer({
             ? "已读取你的描述"
             : "等待输入";
   const generateButtonLabel = hasItems ? "补充到摘要" : "整理摘要";
+  const finalStatusStepLabel = canSubmitAny ? "请在左侧确认提交" : hasWorkContext || isAnalyzing ? "你可以继续补充内容" : "输入后开始整理";
+  const finalStatusStepClass = canSubmitAny ? "is-done" : hasWorkContext || isAnalyzing ? "is-current" : "";
   const expandSelectedItems = () => {
     const targetEntries = selectedEntries.length ? selectedEntries : items.map((item, index) => ({ item, index }));
     targetEntries.forEach(({ index, item }) => {
@@ -1191,20 +1195,20 @@ export function WorkLogDraftComposer({
             <WandSparkles size={18} />
           </div>
           <ul className="worklog-ai-status-steps">
-            <li className={workingText ? "is-done" : ""}>已读取你的描述</li>
+            <li className={workingText ? "is-done" : ""}>{workingText ? "已读取你的描述" : "等待输入描述"}</li>
             <li className={recognizedProjects.length ? "is-done" : isAnalyzing ? "is-current" : ""}>匹配相关项目</li>
             <li className={hasSplitSuggestion || hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>拆分或合并工作项</li>
             <li className={hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>生成提交摘要</li>
-            <li className={canSubmitAny ? "is-done" : "is-current"}>{canSubmitAny ? "请在左侧确认提交" : "你可以继续补充内容"}</li>
+            <li className={finalStatusStepClass}>{finalStatusStepLabel}</li>
           </ul>
-          {suggestionsUnavailable ? <div className="worklog-ai-status-fallback">智能建议暂不可用，日报内容不会丢失。</div> : null}
+          {showSuggestionFailure ? <div className="worklog-ai-status-fallback">智能建议暂不可用，日报内容不会丢失。</div> : null}
           {hasSmartSuggestions ? (
             <section className="today-log-smart-suggestions" aria-label="智能建议">
               <div className="today-log-smart-suggestions-head">
                 <strong>智能建议</strong>
               </div>
               <div className="today-log-smart-suggestion-list">
-                {suggestionsUnavailable ? <span className="today-log-suggestion-status">请补充这项工作的结果或下一步。</span> : null}
+                {showSuggestionFailure ? <span className="today-log-suggestion-status">请补充这项工作的结果或下一步。</span> : null}
                 {smartSuggestions.slice(0, 5).map((suggestion, index) => (
                   <Button key={`${suggestion.action}-${suggestion.projectId ?? suggestion.value ?? index}`} disabled={inputLocked} onClick={() => onSmartSuggestionClick?.(suggestion)}>
                     {suggestion.label}
@@ -1220,12 +1224,12 @@ export function WorkLogDraftComposer({
                 {recognizedProjects.map((project) => <span key={project}>{project}</span>)}
               </div>
             ) : (
-              <p>暂未识别，可不关联项目。</p>
+              <p>{hasWorkContext ? "暂未识别，可不关联项目。" : "输入后匹配项目，可不关联项目。"}</p>
             )}
           </div>
           <div className="worklog-ai-status-block">
             <strong>拆分建议</strong>
-            <p>{hasItems && itemCount > 1 ? `已整理为 ${itemCount} 条记录。` : hasSplitSuggestion ? "建议拆成多条日报，请按提示确认。" : "当前可按一条日报整理。"}</p>
+            <p>{!hasWorkContext ? "输入后判断是否需要拆分。" : hasItems && itemCount > 1 ? `已整理为 ${itemCount} 条记录。` : hasSplitSuggestion ? "建议拆成多条日报，请按提示确认。" : "当前可按一条日报整理。"}</p>
           </div>
           <div className="worklog-ai-status-block">
             <strong>初步摘要</strong>
@@ -1241,7 +1245,7 @@ export function WorkLogDraftComposer({
           </div>
           <div className="worklog-ai-status-block">
             <strong>缺失信息</strong>
-            <p>{missingInfoText || "暂无必须补充项。项目和工时可稍后补充。"}</p>
+            <p>{missingInfoText || (hasWorkContext ? "暂无必须补充项。项目和工时可稍后补充。" : "暂无。")}</p>
           </div>
           <div className="worklog-ai-status-foot">
             <span>{autoSaveStatus || "内容会自动暂存，提交后清除。"}</span>

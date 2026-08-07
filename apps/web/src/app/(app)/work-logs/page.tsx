@@ -303,13 +303,21 @@ export default function WorkLogsPage() {
     setAutoSaveStatus("");
     setRestoredFillDraft(false);
   };
+  const resetSuggestionState = () => {
+    suggestionRequestSeq.current += 1;
+    suggestionAbortRef.current?.abort();
+    suggestionAbortRef.current = null;
+    setSuggestionAnalysis(null);
+    setSuggestionsUnavailable(false);
+    setSuggestionsSlow(false);
+    setSuggestionsLoading(false);
+    setSuggestionSubmitting(false);
+  };
   const resetFillDraftState = (dateValue = entryDate) => {
     setAiInput("");
     setLastAiInput("");
     setAiMessages([]);
-    setSuggestionAnalysis(null);
-    setSuggestionsUnavailable(false);
-    setSuggestionsSlow(false);
+    resetSuggestionState();
     setDraftPreview({
       assistantMessage: "今日工作记录",
       items: [],
@@ -477,7 +485,7 @@ export default function WorkLogsPage() {
         }
         return result;
       } catch (error) {
-        if (requestId === suggestionRequestSeq.current) {
+        if (requestId === suggestionRequestSeq.current && mode === "submit") {
           setSuggestionsUnavailable(true);
           setSuggestionAnalysis(null);
         }
@@ -946,8 +954,7 @@ export default function WorkLogsPage() {
     setEntryDate(dateValue);
     setPendingAttachments([]);
     setAttachmentRetryTargetId(null);
-    setSuggestionAnalysis(null);
-    setSuggestionsUnavailable(false);
+    resetSuggestionState();
     form.resetFields();
     form.setFieldsValue({
       date: dateValue,
@@ -988,8 +995,7 @@ export default function WorkLogsPage() {
     if (!modalOpen || editing) return;
     const text = aiInput.trim();
     if (!text) {
-      setSuggestionAnalysis(null);
-      setSuggestionsUnavailable(false);
+      resetSuggestionState();
       return;
     }
     const timer = window.setTimeout(() => {
@@ -1362,8 +1368,7 @@ export default function WorkLogsPage() {
           setDraftPreview(null);
           setPendingAttachments([]);
           setAttachmentRetryTargetId(null);
-          setSuggestionAnalysis(null);
-          setSuggestionsUnavailable(false);
+          resetSuggestionState();
           setEditing(null);
         }}
         footer={

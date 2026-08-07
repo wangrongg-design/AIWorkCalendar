@@ -600,7 +600,7 @@ export default function CalendarPage() {
         }
         return result;
       } catch (error) {
-        if (requestId === suggestionRequestSeq.current) {
+        if (requestId === suggestionRequestSeq.current && mode === "submit") {
           setSuggestionsUnavailable(true);
           setSuggestionAnalysis(null);
         }
@@ -637,12 +637,22 @@ export default function CalendarPage() {
     });
   };
 
+  const resetQuickFillSuggestionState = () => {
+    suggestionRequestSeq.current += 1;
+    suggestionAbortRef.current?.abort();
+    suggestionAbortRef.current = null;
+    setSuggestionAnalysis(null);
+    setSuggestionsUnavailable(false);
+    setSuggestionsSlow(false);
+    setSuggestionsLoading(false);
+    setSuggestionSubmitting(false);
+  };
+
   useEffect(() => {
     if (!quickFillOpen) return;
     const text = quickFillAiInput.trim();
     if (!text) {
-      setSuggestionAnalysis(null);
-      setSuggestionsUnavailable(false);
+      resetQuickFillSuggestionState();
       return;
     }
     const timer = window.setTimeout(() => {
@@ -874,9 +884,7 @@ export default function CalendarPage() {
     setQuickFillAiInput("");
     setLastQuickFillAiInput("");
     setQuickFillAiMessages([]);
-    setSuggestionAnalysis(null);
-    setSuggestionsUnavailable(false);
-    setSuggestionsSlow(false);
+    resetQuickFillSuggestionState();
     setDraftPreview({
       assistantMessage: "今日工作记录",
       items: [],
@@ -1308,9 +1316,7 @@ export default function CalendarPage() {
     setQuickFillDate(dateValue);
     setPendingAttachments([]);
     setAttachmentRetryTargetId(null);
-    setSuggestionAnalysis(null);
-    setSuggestionsUnavailable(false);
-    setSuggestionsSlow(false);
+    resetQuickFillSuggestionState();
     setQuickFillAiInput(saved?.aiInput ?? "");
     setLastQuickFillAiInput(saved?.lastInput ?? "");
     setQuickFillAiMessages(saved?.messages ?? []);
@@ -2043,8 +2049,7 @@ export default function CalendarPage() {
         onCancel={() => {
           setQuickFillOpen(false);
           setAttachmentRetryTargetId(null);
-          setSuggestionAnalysis(null);
-          setSuggestionsUnavailable(false);
+          resetQuickFillSuggestionState();
           setPendingAttachments([]);
         }}
         footer={null}
