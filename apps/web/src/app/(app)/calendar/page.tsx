@@ -25,7 +25,6 @@ import {
   workLogQualityCheck,
   workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
-  workLogComposerIntroText,
   workLogComposerModalSubtitle,
   type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
@@ -418,12 +417,7 @@ export default function CalendarPage() {
   const [quickFillOpen, setQuickFillOpen] = useState(false);
   const [quickFillAiInput, setQuickFillAiInput] = useState("");
   const [lastQuickFillAiInput, setLastQuickFillAiInput] = useState("");
-  const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([
-    {
-      role: "assistant",
-      content: workLogComposerIntroText
-    }
-  ]);
+  const [quickFillAiMessages, setQuickFillAiMessages] = useState<AiDraftMessage[]>([]);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentRetryTargetId, setAttachmentRetryTargetId] = useState<string | null>(null);
@@ -1799,9 +1793,9 @@ export default function CalendarPage() {
                 <button
                   type="button"
                   className="mobile-next-action is-primary"
-                  onClick={() => (scope === "self" ? openQuickFill(today) : setSelectedDate(today))}
+                  onClick={() => openQuickFill(today)}
                 >
-                  {scope === "self" ? "填写今日记录" : "查看今日详情"}
+                  填写今日日报
                 </button>
                 <button type="button" className="mobile-next-action" onClick={() => setChatOpen(true)}>
                   打开 AI 工作助手
@@ -2055,7 +2049,7 @@ export default function CalendarPage() {
         footer={null}
         width="min(1040px, calc(100vw - 32px))"
         zIndex={1600}
-        className="today-log-modal"
+        className={`today-log-modal ${draftPreview?.items.length ? "has-drafts" : "is-empty"}`}
         styles={{ body: { padding: "0 26px 24px", background: "#f5f5f7" }, header: { borderBottom: 0, padding: "24px 26px 12px", background: "#f5f5f7" } }}
       >
         <div className="today-log-modal-shell" data-worklog-chat-panel>

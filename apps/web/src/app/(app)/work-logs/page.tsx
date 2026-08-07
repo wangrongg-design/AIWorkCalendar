@@ -23,7 +23,6 @@ import {
   workLogQualityCheck,
   workLogShouldDraftForMultipleItems,
   workLogDraftDateLabel,
-  workLogComposerIntroText,
   workLogComposerModalSubtitle,
   type WorkLogDraftComposerIntent,
   type WorkLogDraftComposerItem,
@@ -217,12 +216,7 @@ export default function WorkLogsPage() {
   const initialOpenHandled = useRef(false);
   const [aiInput, setAiInput] = useState("");
   const [lastAiInput, setLastAiInput] = useState("");
-  const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([
-    {
-      role: "assistant",
-      content: workLogComposerIntroText
-    }
-  ]);
+  const [aiMessages, setAiMessages] = useState<AiChatMessage[]>([]);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentRetryTargetId, setAttachmentRetryTargetId] = useState<string | null>(null);
@@ -1389,7 +1383,7 @@ export default function WorkLogsPage() {
             : null
         }
         width={editing ? 760 : 920}
-        className={editing ? undefined : "today-log-modal"}
+        className={editing ? undefined : `today-log-modal ${draftPreview?.items.length ? "has-drafts" : "is-empty"}`}
       >
         {editing ? (
           <Form

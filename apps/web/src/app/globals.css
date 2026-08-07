@@ -17107,9 +17107,172 @@ body {
   min-width: 84px;
 }
 
+.today-log-modal .worklog-chat-left {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.today-log-modal.is-empty .ant-modal-content {
+  height: auto;
+}
+
+.today-log-modal.is-empty .ant-modal-body {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.today-log-modal.is-empty .today-log-modal-shell,
+.today-log-modal.is-empty .worklog-chat-composer,
+.today-log-modal.is-empty .worklog-chat-layout {
+  height: auto;
+}
+
+.today-log-modal .worklog-chat-thread {
+  flex: 1 1 auto;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-chat-layout {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-ai-status-panel {
+  align-self: start;
+  max-height: none;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-chat-inputbar {
+  order: 1;
+  gap: 14px;
+  max-height: none;
+  border: 2px solid #0b57d0;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 0 0 4px rgba(11, 87, 208, 0.07);
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-chat-thread {
+  order: 2;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .today-log-attachments {
+  order: 3;
+}
+
+.today-log-modal.is-empty .worklog-ai-status-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.58fr);
+  align-items: start;
+  gap: 10px 18px;
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+.today-log-modal.is-empty .worklog-ai-status-head,
+.today-log-modal.is-empty .worklog-ai-idle-summary {
+  grid-column: 1;
+}
+
+.today-log-modal.is-empty .worklog-ai-empty-guide {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  border-top: 0;
+  border-left: 1px solid rgba(15, 118, 110, 0.14);
+  padding: 0 0 0 16px;
+}
+
+.today-log-modal.is-empty .worklog-ai-status-foot {
+  grid-column: 1 / -1;
+}
+
+.today-log-modal .worklog-chat-inputbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  max-height: none;
+  padding: 14px;
+}
+
+.today-log-modal .worklog-input-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.today-log-modal .worklog-input-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.today-log-modal .worklog-input-head strong {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 22px;
+}
+
+.today-log-modal .worklog-input-head span:not(.today-log-input-meter) {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-input-head .today-log-input-meter {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.today-log-modal .worklog-input-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.today-log-modal .today-log-quick-actions,
+.today-log-modal .today-log-quick-actions.has-drafts {
+  width: auto;
+  align-items: flex-end;
+}
+
+.today-log-modal .worklog-ai-empty-guide {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid rgba(15, 118, 110, 0.12);
+  padding-top: 12px;
+}
+
+.today-log-modal .worklog-ai-idle-summary {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-ai-empty-guide strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 740;
+  line-height: 20px;
+}
+
+.today-log-modal .worklog-ai-empty-guide p,
+.today-log-modal .worklog-ai-empty-guide span {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .today-log-modal .worklog-chat-inputbar {
   flex: 0 0 auto;
-  max-height: 176px;
+  max-height: 236px;
 }
 
 .today-log-modal textarea.today-log-quick-input {
@@ -17117,6 +17280,56 @@ body {
   max-height: 124px !important;
   overflow-y: auto !important;
   resize: none;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-input-head strong {
+  font-size: 18px;
+  font-weight: 780;
+  line-height: 26px;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-input-head span:not(.today-log-input-meter) {
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .worklog-input-body {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty textarea.today-log-quick-input {
+  min-height: 118px !important;
+  max-height: 220px !important;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 14px 16px;
+  color: #111827;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty textarea.today-log-quick-input::placeholder {
+  color: #4b5563;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty textarea.today-log-quick-input:focus {
+  border-color: #0b57d0;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.13);
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .today-log-quick-actions {
+  width: 100%;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.today-log-modal .worklog-chat-composer.is-empty .today-log-generate-button {
+  min-width: 168px;
+  min-height: 44px;
 }
 
 @media (max-width: 760px) {
@@ -17137,7 +17350,7 @@ body {
   }
 
   .today-log-modal .worklog-ai-status-panel {
-    order: -1;
+    order: 0;
     max-height: 220px;
     overflow: auto;
     border-radius: 14px;
@@ -17175,6 +17388,94 @@ body {
 
   .today-log-modal .today-log-quick-actions {
     width: 100%;
+  }
+
+  .today-log-modal .worklog-input-head,
+  .today-log-modal .worklog-input-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .today-log-modal .worklog-input-head {
+    display: grid;
+  }
+
+  .today-log-modal .worklog-input-head .today-log-input-meter {
+    text-align: left;
+  }
+
+  .today-log-modal.is-empty .ant-modal-content {
+    min-height: 0;
+    max-height: calc(100dvh - 16px);
+  }
+
+  .today-log-modal.is-empty .worklog-chat-inputbar {
+    margin: 0;
+    border: 2px solid #0b57d0;
+    border-radius: 18px;
+  }
+
+  .today-log-modal.is-empty .worklog-ai-status-panel {
+    order: 0;
+    grid-template-columns: minmax(0, 1fr);
+    max-height: none;
+  }
+
+  .today-log-modal.is-empty .worklog-ai-empty-guide {
+    grid-column: 1;
+    grid-row: auto;
+    border-top: 1px solid rgba(15, 118, 110, 0.14);
+    border-left: 0;
+    padding: 12px 0 0;
+  }
+
+  .today-log-modal .worklog-chat-composer.is-empty .today-log-quick-actions {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .today-log-modal .worklog-chat-composer.is-empty .today-log-generate-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .today-log-modal.has-drafts .ant-modal-content {
+    height: auto;
+    min-height: 100dvh;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .today-log-modal.has-drafts .ant-modal-body {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .today-log-modal.has-drafts .today-log-modal-shell,
+  .today-log-modal.has-drafts .worklog-chat-composer,
+  .today-log-modal.has-drafts .worklog-chat-layout {
+    height: auto;
+    min-height: 0;
+  }
+
+  .today-log-modal.has-drafts .worklog-chat-layout {
+    align-items: start;
+  }
+
+  .today-log-modal.has-drafts .worklog-chat-thread {
+    max-height: none;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .today-log-modal.has-drafts .worklog-chat-inputbar {
+    margin: 0;
+    border: 1px solid #e5e5ea;
+    border-radius: 18px;
+  }
+
+  .today-log-modal.has-drafts .worklog-ai-status-panel {
+    max-height: none;
+    overflow: visible;
   }
 }
 

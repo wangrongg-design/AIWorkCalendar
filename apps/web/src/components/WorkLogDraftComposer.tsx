@@ -113,10 +113,10 @@ type WorkLogDraftComposerProps = {
 
 export type WorkLogDraftComposerIntent = "analyze" | "split" | "force_single";
 
-export const workLogComposerIntroText = "请描述今日工作内容。系统会判断信息是否完整，并在提交前生成确认摘要。";
 export const workLogComposerModalSubtitle = "请描述工作内容，确认摘要后再提交。";
 export const workLogComposerPlaceholder = "请描述今日工作内容，例如：完成项目接口联调，并同步研发评估。";
 
+const legacyWorkLogComposerIntroText = "请描述今日工作内容。系统会判断信息是否完整，并在提交前生成确认摘要。";
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const draftInputMaxLength = 4000;
 
@@ -731,11 +731,12 @@ export function WorkLogDraftComposer({
   const hasItems = itemCount > 0;
   const inputLength = aiInput.length;
   const inputLimitExceeded = inputLength > draftInputMaxLength;
-  const latestUserText = [...aiMessages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
+  const visibleAiMessages = aiMessages.filter((message) => !(message.role === "assistant" && message.content.trim() === legacyWorkLogComposerIntroText));
+  const latestUserText = [...visibleAiMessages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   const workingText = aiInput.trim() || latestUserText;
   const inputLocked = submitting;
   const canGenerate = aiInput.trim().length > 0 && !inputLocked && !inputLimitExceeded;
-  const hasConversation = aiMessages.some((item) => item.role === "user");
+  const hasConversation = visibleAiMessages.some((item) => item.role === "user");
   const canAttach = !inputLocked;
   const showAttachments = canAttach && (attachmentsOpen || pendingAttachmentCount > 0);
   const canSubmitAny = hasSubmittableDraft(draftPreview);
@@ -788,6 +789,11 @@ export function WorkLogDraftComposer({
   const generateButtonLabel = hasItems ? "补充到摘要" : "整理摘要";
   const finalStatusStepLabel = canSubmitAny ? "请在左侧确认提交" : hasWorkContext || isAnalyzing ? "你可以继续补充内容" : "输入后开始整理";
   const finalStatusStepClass = canSubmitAny ? "is-done" : hasWorkContext || isAnalyzing ? "is-current" : "";
+  const showThread = hasConversation || hasItems || Boolean(aiError);
+  const showStatusSteps = hasWorkContext || hasItems || isAnalyzing || showSuggestionFailure;
+  const showAiDetailBlocks = hasWorkContext || isAnalyzing || showSuggestionFailure;
+  const inputTitle = hasItems ? "继续补充内容" : "先写今天完成的工作";
+  const inputDescription = hasItems ? "补充后会重新整理当前摘要。" : "像发消息一样写，项目、工时和结果可以稍后补充。";
   const expandSelectedItems = () => {
     const targetEntries = selectedEntries.length ? selectedEntries : items.map((item, index) => ({ item, index }));
     targetEntries.forEach(({ index, item }) => {
@@ -804,7 +810,7 @@ export function WorkLogDraftComposer({
   };
 
   return (
-    <div className="today-log-composer worklog-chat-composer">
+    <div className={`today-log-composer worklog-chat-composer ${hasItems ? "has-drafts" : "is-empty"}`}>
       <div className="worklog-chat-layout">
         <div className="worklog-chat-left">
           {restoredNotice ? (
@@ -817,31 +823,27 @@ export function WorkLogDraftComposer({
               ) : null}
             </div>
           ) : null}
-      <section className="worklog-chat-thread" aria-label="智能填报对话">
-        {!hasConversation && !hasItems ? (
-          <div className="today-log-ai-message is-assistant">
-            {workLogComposerIntroText}
-          </div>
-        ) : null}
-        {aiMessages.map((message, index) => (
-          <div key={`${message.role}-${index}`} className={`today-log-ai-message is-${message.role}`}>
-            {message.content}
-          </div>
-        ))}
-        {aiError ? (
-          <div className="today-log-error-message">
-            <Alert
-              type="error"
-              showIcon
-              message={aiError.message}
-              action={
-                <Button size="small" onClick={() => (onRegenerateDraft ? onRegenerateDraft() : onGenerateDraft())} disabled={!onRegenerateDraft && !canGenerate}>
-                  重试
-                </Button>
-              }
-            />
-          </div>
-        ) : null}
+          {showThread ? (
+            <section className="worklog-chat-thread" aria-label="智能填报对话">
+              {visibleAiMessages.map((message, index) => (
+                <div key={`${message.role}-${index}`} className={`today-log-ai-message is-${message.role}`}>
+                  {message.content}
+                </div>
+              ))}
+              {aiError ? (
+                <div className="today-log-error-message">
+                  <Alert
+                    type="error"
+                    showIcon
+                    message={aiError.message}
+                    action={
+                      <Button size="small" onClick={() => (onRegenerateDraft ? onRegenerateDraft() : onGenerateDraft())} disabled={!onRegenerateDraft && !canGenerate}>
+                        重试
+                      </Button>
+                    }
+                  />
+                </div>
+              ) : null}
 
         {hasItems ? (
           <div className="worklog-draft-message">
@@ -1078,7 +1080,8 @@ export function WorkLogDraftComposer({
             ) : null}
           </div>
         ) : null}
-      </section>
+            </section>
+          ) : null}
 
       {showAttachments ? (
         <section className="today-log-attachments">
@@ -1134,55 +1137,62 @@ export function WorkLogDraftComposer({
       ) : null}
 
       {hasItems && hasExpandedItems ? (
-      <div className="today-log-footer">
-        <div>
-          <strong>共 {draftPreview?.items.length ?? 0} 条记录</strong>
-          <span>{selectedHoursSummary}</span>
+        <div className="today-log-footer">
+          <div>
+            <strong>共 {draftPreview?.items.length ?? 0} 条记录</strong>
+            <span>{selectedHoursSummary}</span>
+          </div>
+          <div className="today-log-footer-actions">
+            {onAbandonDraft ? <Button onClick={onAbandonDraft}>放弃本次填写</Button> : null}
+            <Button type="primary" loading={submitting} disabled={!canSubmitAny || saving || submitting} onClick={onSubmitDrafts}>
+              提交 {selectedSummary}
+            </Button>
+          </div>
         </div>
-        <div className="today-log-footer-actions">
-          {onAbandonDraft ? <Button onClick={onAbandonDraft}>放弃本次填写</Button> : null}
-          <Button type="primary" loading={submitting} disabled={!canSubmitAny || saving || submitting} onClick={onSubmitDrafts}>
-            提交 {selectedSummary}
-          </Button>
-        </div>
-      </div>
       ) : null}
 
       <section className="today-log-quick-entry worklog-chat-inputbar">
-        <Input.TextArea
-          className="today-log-quick-input"
-          value={aiInput}
-          autoFocus
-          autoSize={{ minRows: 2, maxRows: 8 }}
-          placeholder={workLogComposerPlaceholder}
-          disabled={inputLocked}
-          onPaste={handleAttachmentPaste}
-          onChange={(event) => onAiInputChange(event.target.value)}
-          onPressEnter={(event) => {
-            if (!event.shiftKey && canGenerate) {
-              event.preventDefault();
-              onGenerateDraft();
-            }
-          }}
-        />
-        <div className={`today-log-quick-actions ${hasItems ? "has-drafts" : "is-empty"}`}>
+        <div className="worklog-input-head">
+          <div>
+            <strong>{inputTitle}</strong>
+            <span>{inputDescription}</span>
+          </div>
           <span className={`today-log-input-meter${inputLimitExceeded ? " is-error" : ""}`}>{inputLength}/{draftInputMaxLength}</span>
-          {canAttach ? (
-            <Tooltip title={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}>
-              <Button
-                className="today-log-icon-button"
-                aria-label={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}
-                icon={<UploadCloud size={17} />}
-                onClick={() => setAttachmentsOpen((value) => !value)}
-              >
-                {pendingAttachmentCount > 0 ? pendingAttachmentCount : null}
-              </Button>
-            </Tooltip>
-          ) : null}
-          <Button className="today-log-generate-button" type="primary" icon={<WandSparkles size={16} />} loading={aiPending} disabled={!canGenerate} onClick={() => onGenerateDraft()}>
-            {generateButtonLabel}
-          </Button>
-          <span className="today-log-shortcut-hint">Enter 继续，Shift + Enter 换行</span>
+        </div>
+        <div className="worklog-input-body">
+          <Input.TextArea
+            className="today-log-quick-input"
+            value={aiInput}
+            autoFocus
+            autoSize={{ minRows: 3, maxRows: 6 }}
+            placeholder={workLogComposerPlaceholder}
+            disabled={inputLocked}
+            onPaste={handleAttachmentPaste}
+            onChange={(event) => onAiInputChange(event.target.value)}
+            onPressEnter={(event) => {
+              if (!event.shiftKey && canGenerate) {
+                event.preventDefault();
+                onGenerateDraft();
+              }
+            }}
+          />
+          <div className={`today-log-quick-actions ${hasItems ? "has-drafts" : "is-empty"}`}>
+            {canAttach ? (
+              <Tooltip title={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}>
+                <Button
+                  className="today-log-icon-button"
+                  aria-label={pendingAttachmentCount > 0 ? `已添加 ${pendingAttachmentCount} 个附件` : "添加附件"}
+                  icon={<UploadCloud size={17} />}
+                  onClick={() => setAttachmentsOpen((value) => !value)}
+                >
+                  {pendingAttachmentCount > 0 ? pendingAttachmentCount : null}
+                </Button>
+              </Tooltip>
+            ) : null}
+            <Button className="today-log-generate-button" type="primary" icon={<WandSparkles size={16} />} loading={aiPending} disabled={!canGenerate} onClick={() => onGenerateDraft()}>
+              {generateButtonLabel}
+            </Button>
+          </div>
         </div>
       </section>
         </div>
@@ -1194,13 +1204,17 @@ export function WorkLogDraftComposer({
             </div>
             <WandSparkles size={18} />
           </div>
-          <ul className="worklog-ai-status-steps">
-            <li className={workingText ? "is-done" : ""}>{workingText ? "已读取你的描述" : "等待输入描述"}</li>
-            <li className={recognizedProjects.length ? "is-done" : isAnalyzing ? "is-current" : ""}>匹配相关项目</li>
-            <li className={hasSplitSuggestion || hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>拆分或合并工作项</li>
-            <li className={hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>生成提交摘要</li>
-            <li className={finalStatusStepClass}>{finalStatusStepLabel}</li>
-          </ul>
+          {showStatusSteps ? (
+            <ul className="worklog-ai-status-steps">
+              <li className={workingText ? "is-done" : ""}>{workingText ? "已读取你的描述" : "等待输入描述"}</li>
+              <li className={recognizedProjects.length ? "is-done" : isAnalyzing ? "is-current" : ""}>匹配相关项目</li>
+              <li className={hasSplitSuggestion || hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>拆分或合并工作项</li>
+              <li className={hasItems ? "is-done" : isAnalyzing ? "is-current" : ""}>生成提交摘要</li>
+              <li className={finalStatusStepClass}>{finalStatusStepLabel}</li>
+            </ul>
+          ) : (
+            <p className="worklog-ai-idle-summary">输入后自动识别项目、拆分工作项，并生成提交摘要。</p>
+          )}
           {showSuggestionFailure ? <div className="worklog-ai-status-fallback">智能建议暂不可用，日报内容不会丢失。</div> : null}
           {hasSmartSuggestions ? (
             <section className="today-log-smart-suggestions" aria-label="智能建议">
@@ -1217,36 +1231,46 @@ export function WorkLogDraftComposer({
               </div>
             </section>
           ) : null}
-          <div className="worklog-ai-status-block">
-            <strong>已识别项目</strong>
-            {recognizedProjects.length ? (
-              <div className="worklog-ai-status-tags">
-                {recognizedProjects.map((project) => <span key={project}>{project}</span>)}
+          {showAiDetailBlocks ? (
+            <>
+              <div className="worklog-ai-status-block">
+                <strong>已识别项目</strong>
+                {recognizedProjects.length ? (
+                  <div className="worklog-ai-status-tags">
+                    {recognizedProjects.map((project) => <span key={project}>{project}</span>)}
+                  </div>
+                ) : (
+                  <p>{hasWorkContext ? "暂未识别，可不关联项目。" : "输入后匹配项目，可不关联项目。"}</p>
+                )}
               </div>
-            ) : (
-              <p>{hasWorkContext ? "暂未识别，可不关联项目。" : "输入后匹配项目，可不关联项目。"}</p>
-            )}
-          </div>
-          <div className="worklog-ai-status-block">
-            <strong>拆分建议</strong>
-            <p>{!hasWorkContext ? "输入后判断是否需要拆分。" : hasItems && itemCount > 1 ? `已整理为 ${itemCount} 条记录。` : hasSplitSuggestion ? "建议拆成多条日报，请按提示确认。" : "当前可按一条日报整理。"}</p>
-          </div>
-          <div className="worklog-ai-status-block">
-            <strong>初步摘要</strong>
-            {analysisSummaryItems.length ? (
-              <ul>
-                {analysisSummaryItems.map((item, index) => (
-                  <li key={`${item.title || item.content}-${index}`}>{item.title || item.content}</li>
-                ))}
-              </ul>
-            ) : (
-              <p>输入工作内容后显示摘要。</p>
-            )}
-          </div>
-          <div className="worklog-ai-status-block">
-            <strong>缺失信息</strong>
-            <p>{missingInfoText || (hasWorkContext ? "暂无必须补充项。项目和工时可稍后补充。" : "暂无。")}</p>
-          </div>
+              <div className="worklog-ai-status-block">
+                <strong>拆分建议</strong>
+                <p>{!hasWorkContext ? "输入后判断是否需要拆分。" : hasItems && itemCount > 1 ? `已整理为 ${itemCount} 条记录。` : hasSplitSuggestion ? "建议拆成多条日报，请按提示确认。" : "当前可按一条日报整理。"}</p>
+              </div>
+              <div className="worklog-ai-status-block">
+                <strong>初步摘要</strong>
+                {analysisSummaryItems.length ? (
+                  <ul>
+                    {analysisSummaryItems.map((item, index) => (
+                      <li key={`${item.title || item.content}-${index}`}>{item.title || item.content}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>输入工作内容后显示摘要。</p>
+                )}
+              </div>
+              <div className="worklog-ai-status-block">
+                <strong>缺失信息</strong>
+                <p>{missingInfoText || (hasWorkContext ? "暂无必须补充项。项目和工时可稍后补充。" : "暂无。")}</p>
+              </div>
+            </>
+          ) : (
+            <div className="worklog-ai-empty-guide">
+              <strong>快速写法</strong>
+              <p>对象 + 动作 + 结果，例如：完成项目接口联调，并同步研发评估。</p>
+              <span>项目和工时可稍后补充。</span>
+            </div>
+          )}
           <div className="worklog-ai-status-foot">
             <span>{autoSaveStatus || "内容会自动暂存，提交后清除。"}</span>
             {pendingAttachmentCount ? <span>附件 {pendingAttachmentCount} 个</span> : null}
