@@ -13,12 +13,12 @@ async function bootstrap() {
     exposedHeaders: ["Content-Disposition", "Content-Length", "Content-Type"]
   });
   app.useBodyParser("json", {
-    limit: "16mb",
+    limit: "32mb",
     verify: (req: { rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
       req.rawBody = Buffer.from(buf);
     }
   });
-  app.useBodyParser("urlencoded", { extended: true, limit: "16mb" });
+  app.useBodyParser("urlencoded", { extended: true, limit: "32mb" });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
