@@ -17672,6 +17672,80 @@ body {
 }
 
 /* Official launch site */
+.today-log-modal.is-direct .worklog-direct-composer {
+  display: block;
+  height: auto;
+  max-height: none;
+}
+
+.today-log-modal.is-direct .worklog-direct-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.today-log-modal.is-direct .worklog-direct-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+}
+
+.today-log-modal.is-direct .worklog-direct-head > div {
+  width: auto;
+  min-width: 0;
+}
+
+.today-log-modal.is-direct .worklog-direct-head strong,
+.today-log-modal.is-direct .worklog-direct-head span:not(.today-log-input-meter) {
+  display: block;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  writing-mode: horizontal-tb;
+}
+
+.today-log-modal.is-direct .worklog-direct-head .today-log-input-meter {
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.today-log-modal.is-direct textarea.worklog-direct-input.today-log-quick-input {
+  display: block;
+  width: 100%;
+  min-height: 220px !important;
+  max-height: 360px !important;
+  margin: 0;
+}
+
+.today-log-modal.is-direct .worklog-direct-attachment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.today-log-modal.is-direct .worklog-direct-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (max-width: 760px) {
+  .today-log-modal.is-direct .worklog-direct-head,
+  .today-log-modal.is-direct .worklog-direct-attachment,
+  .today-log-modal.is-direct .worklog-direct-footer {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .today-log-modal.is-direct .worklog-direct-head .today-log-input-meter {
+    text-align: left;
+  }
+}
+
 .launch-home {
   min-height: 100vh;
   overflow-x: hidden;
