@@ -108,7 +108,7 @@ writeFileSync(
 
 const webServerName = serverNameValue(config.nginx?.webServerNames ?? config.nginx?.webServerName, hostFromUrl(config.domains.webUrl));
 const apiServerName = serverNameValue(config.nginx?.apiServerNames ?? config.nginx?.apiServerName, hostFromUrl(config.domains.apiUrl));
-const clientMaxBodySize = config.nginx?.clientMaxBodySize ?? "16m";
+const clientMaxBodySize = config.nginx?.clientMaxBodySize ?? "32m";
 const nginx = `server {
   listen 80;
   server_name ${webServerName};
